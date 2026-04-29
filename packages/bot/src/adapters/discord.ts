@@ -16,6 +16,7 @@ import {
 import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
 import { AssetVerificationService } from '../assetVerification';
 import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
+import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3000";
 const DASHBOARD_URL = process.env.DASHBOARD_URL || `${BACKEND_URL}/dashboard`;
@@ -103,189 +104,210 @@ export class DiscordAdapter {
       this.startStatusUpdates();
     });
 
-    this.client.on("messageCreate", async (message: Message) => {
-      if (message.author.bot) return;
+    this.client.on("messageCreate", withPerformanceProfiling(
+      'messageCreate',
+      'discord',
+      'system',
+      async (message: Message) => {
+        if (message.author.bot) return;
 
-      const userId = message.author.id;
-      const command = message.content.split(' ')[0];
+        const userId = message.author.id;
+        const command = message.content.split(' ')[0];
+        const commandName = extractCommandName(message.content, 'discord');
 
-      // #145: Anti-flood check for all commands
-      if (this.isFlooding(userId)) {
-        await message.reply("⏳ Please wait a moment before sending another command.");
-        return;
-      }
-
-      // #123: Rate limit check
-      const rateLimitResult = this.checkRateLimit(userId, command);
-      if (!rateLimitResult.allowed) {
-        await message.reply(rateLimitResult.message);
-        return;
-      }
-
-      if (message.content === "!start") {
-        await message.reply(
-          "Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant. Type !help to see what I can do!"
-        );
-      }
-
-      if (message.content.startsWith("!help")) {
-        const query = message.content.replace("!help", "").trim();
-        const results = searchFeatures(query);
-        const isSearch = query.length > 0;
-        await message.reply(formatHelpMessage(results, isSearch, "markdown"));
-      }
-
-      if (message.content === "!thread") {
-        if (message.channel.type === ChannelType.GuildText) {
-          try {
-            const thread = await message.startThread({
-              name: `Chen Pilot Session - ${message.author.username}`,
-              autoArchiveDuration: 60,
-            });
-            await thread.send(
-              `👋 Hello ${message.author.username}! I've started this thread to keep our conversation organized. How can I help you with Stellar DeFi today?`
-            );
-          } catch (error) {
-            console.error("Error creating thread:", error);
-            await message.reply(
-              "❌ I couldn't start a thread. Please make sure I have the 'Create Public Threads' permission."
-            );
-          }
-        } else if (message.channel.isThread()) {
-          await message.reply(
-            "🧵 We are already in a thread! I'm ready to assist you here."
-          );
-        } else {
-          await message.reply(
-            "❌ Threads can only be started in text channels."
-          );
+        // #145: Anti-flood check for all commands
+        if (this.isFlooding(userId)) {
+          await message.reply("⏳ Please wait a moment before sending another command.");
+          return;
         }
-      }
 
-      if (message.content === "!sponsor") {
-        await message.reply("⏳ Requesting account sponsorship...");
+        // #123: Rate limit check
+        const rateLimitResult = this.checkRateLimit(userId, command);
+        if (!rateLimitResult.allowed) {
+          await message.reply(rateLimitResult.message);
+          return;
+        }
 
-        try {
-          const response = await fetch(
-            `${BACKEND_URL}/api/account/${userId}/sponsor`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
+        // Wrap each command handler with performance profiling
+        if (message.content === "!start") {
+          await withPerformanceProfiling('!start', 'discord', userId, async () => {
+            await message.reply(
+              "Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant. Type !help to see what I can do!"
+            );
+          })();
+        }
+
+        if (message.content.startsWith("!help")) {
+          await withPerformanceProfiling(commandName, 'discord', userId, async () => {
+            const query = message.content.replace("!help", "").trim();
+            const results = searchFeatures(query);
+            const isSearch = query.length > 0;
+            await message.reply(formatHelpMessage(results, isSearch, "markdown"));
+          })();
+        }
+
+        if (message.content === "!thread") {
+          await withPerformanceProfiling('!thread', 'discord', userId, async () => {
+            if (message.channel.type === ChannelType.GuildText) {
+              try {
+                const thread = await message.startThread({
+                  name: `Chen Pilot Session - ${message.author.username}`,
+                  autoArchiveDuration: 60,
+                });
+                await thread.send(
+                  `👋 Hello ${message.author.username}! I've started this thread to keep our conversation organized. How can I help you with Stellar DeFi today?`
+                );
+              } catch (error) {
+                console.error("Error creating thread:", error);
+                await message.reply(
+                  "❌ I couldn't start a thread. Please make sure I have the 'Create Public Threads' permission."
+                );
+              }
+            } else if (message.channel.isThread()) {
+              await message.reply(
+                "🧵 We are already in a thread! I'm ready to assist you here."
+              );
+            } else {
+              await message.reply(
+                "❌ Threads can only be started in text channels."
+              );
             }
-          );
-          const data = (await response.json()) as {
-            success: boolean;
-            message: string;
-            address?: string;
-          };
+          })();
+        }
 
-          if (data.success) {
+        if (message.content === "!sponsor") {
+          await withPerformanceProfiling('!sponsor', 'discord', userId, async () => {
+            await message.reply("⏳ Requesting account sponsorship...");
+
+            try {
+              const response = await fetch(
+                `${BACKEND_URL}/api/account/${userId}/sponsor`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                }
+              );
+              const data = (await response.json()) as {
+                success: boolean;
+                message: string;
+                address?: string;
+              };
+
+              if (data.success) {
+                await message.reply(
+                  `✅ Account sponsored successfully!\n📬 Address: \`${data.address}\``
+                );
+                await this.logAuditAction({
+                  action: 'SPONSOR_ACCOUNT',
+                  triggeredBy: userId,
+                  details: `Address: ${data.address}`,
+                  success: true,
+                  timestamp: new Date().toISOString(),
+                });
+              } else {
+                await message.reply(`❌ Sponsorship failed: ${data.message}`);
+                await this.logAuditAction({
+                  action: 'SPONSOR_ACCOUNT',
+                  triggeredBy: userId,
+                  details: `Failed: ${data.message}`,
+                  success: false,
+                  timestamp: new Date().toISOString(),
+                });
+              }
+            } catch (error) {
+              console.error("Sponsor command error:", error);
+              await message.reply(
+                "❌ Could not reach the sponsorship service. Please try again later."
+              );
+            }
+          })();
+        }
+
+        if (message.content.startsWith("!trustline")) {
+          await withPerformanceProfiling(commandName, 'discord', userId, async () => {
+            const args = message.content.split(" ").slice(1);
+            if (args.length < 1) {
+              return message.reply(
+                "Usage: !trustline <assetCode> [issuerDomain|issuerAddress]\nExample: !trustline USDC circle.com"
+              );
+            }
+
+            const assetCode = args[0];
+            const assetIssuer = args[1];
+
+            if (!assetIssuer) {
+              return message.reply(
+                `Please provide an issuer domain or address for ${assetCode}.`
+              );
+            }
+
+            try {
+              await message.reply(
+                `🔍 Looking up asset ${assetCode} from ${assetIssuer}...`
+              );
+              const op = await createTrustlineOperation(assetCode, assetIssuer);
+
+              let response = `✅ Found asset ${assetCode}!\n\n`;
+              response += `To add this trustline, you can use the following details in your wallet:\n`;
+              response += `**Asset:** ${assetCode}\n`;
+              response += `**Issuer:** \`${(op as any).asset.issuer}\`\n\n`;
+              response += `*Note: In a future update, I will provide a direct signing link.*`;
+
+              await message.reply(response);
+              await this.logAuditAction({
+                action: 'TRUSTLINE_LOOKUP',
+                triggeredBy: message.author.id,
+                details: `Asset: ${assetCode}, Issuer: ${assetIssuer}`,
+                success: true,
+                timestamp: new Date().toISOString(),
+              });
+            } catch (error) {
+              await message.reply(
+                `❌ Error: ${error instanceof Error ? error.message : String(error)}`
+              );
+            }
+          })();
+        }
+
+        // #146: Dashboard command
+        if (message.content === '!dashboard') {
+          await withPerformanceProfiling('!dashboard', 'discord', userId, async () => {
             await message.reply(
-              `✅ Account sponsored successfully!\n📬 Address: \`${data.address}\``
+              `📊 **Chen Pilot Dashboard**\n\nAccess your admin dashboard here:\n🔗 ${DASHBOARD_URL}\n\n*Note: You must be logged in to view the dashboard.*`
             );
-            await this.logAuditAction({
-              action: 'SPONSOR_ACCOUNT',
-              triggeredBy: userId,
-              details: `Address: ${data.address}`,
-              success: true,
-              timestamp: new Date().toISOString(),
-            });
-          } else {
-            await message.reply(`❌ Sponsorship failed: ${data.message}`);
-            await this.logAuditAction({
-              action: 'SPONSOR_ACCOUNT',
-              triggeredBy: userId,
-              details: `Failed: ${data.message}`,
-              success: false,
-              timestamp: new Date().toISOString(),
-            });
-          }
-        } catch (error) {
-          console.error("Sponsor command error:", error);
-          await message.reply(
-            "❌ Could not reach the sponsorship service. Please try again later."
-          );
+          })();
+        }
+
+        // #148: /validate command for Stellar asset verification
+        if (message.content.startsWith('!validate')) {
+          await withPerformanceProfiling(commandName, 'discord', userId, async () => {
+            const args = message.content.split(' ').slice(1);
+            if (args.length < 2) {
+              return message.reply('Usage: !validate <assetCode> <issuerAddress>\nExample: !validate USDC GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
+            }
+
+            const [assetCode, issuerAddress] = args;
+            await message.reply(`🔍 Verifying asset **${assetCode}** from issuer \`${issuerAddress.slice(0, 8)}...\``);
+
+            try {
+              const result = await this.verificationService.verifyAsset(assetCode, issuerAddress);
+              const statusEmoji = result.status === 'VERIFIED' ? '✅' : result.status === 'MALICIOUS' ? '🚨' : '⚠️';
+
+              let reply = `${statusEmoji} **Asset Verification: ${result.status}**\n\n`;
+              reply += `**Asset:** ${assetCode}\n`;
+              reply += `**Issuer:** \`${issuerAddress}\`\n`;
+              if (result.domain) reply += `**Domain:** ${result.domain}\n`;
+              if (result.details) reply += `**Details:** ${result.details}\n`;
+              reply += `\n**Safe to use:** ${result.isSafe ? 'Yes ✅' : 'No ❌'}`;
+
+              await message.reply(reply);
+            } catch (error) {
+              await message.reply(`❌ Verification error: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          })();
         }
       }
-
-      if (message.content.startsWith("!trustline")) {
-        const args = message.content.split(" ").slice(1);
-        if (args.length < 1) {
-          return message.reply(
-            "Usage: !trustline <assetCode> [issuerDomain|issuerAddress]\nExample: !trustline USDC circle.com"
-          );
-        }
-
-        const assetCode = args[0];
-        const assetIssuer = args[1];
-
-        if (!assetIssuer) {
-          return message.reply(
-            `Please provide an issuer domain or address for ${assetCode}.`
-          );
-        }
-
-        try {
-          await message.reply(
-            `🔍 Looking up asset ${assetCode} from ${assetIssuer}...`
-          );
-          const op = await createTrustlineOperation(assetCode, assetIssuer);
-
-          let response = `✅ Found asset ${assetCode}!\n\n`;
-          response += `To add this trustline, you can use the following details in your wallet:\n`;
-          response += `**Asset:** ${assetCode}\n`;
-          response += `**Issuer:** \`${(op as any).asset.issuer}\`\n\n`;
-          response += `*Note: In a future update, I will provide a direct signing link.*`;
-
-          await message.reply(response);
-          await this.logAuditAction({
-            action: 'TRUSTLINE_LOOKUP',
-            triggeredBy: message.author.id,
-            details: `Asset: ${assetCode}, Issuer: ${assetIssuer}`,
-            success: true,
-            timestamp: new Date().toISOString(),
-          });
-        } catch (error) {
-          await message.reply(
-            `❌ Error: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      }
-
-      // #146: Dashboard command
-      if (message.content === '!dashboard') {
-        await message.reply(
-          `📊 **Chen Pilot Dashboard**\n\nAccess your admin dashboard here:\n🔗 ${DASHBOARD_URL}\n\n*Note: You must be logged in to view the dashboard.*`
-        );
-      }
-
-      // #148: /validate command for Stellar asset verification
-      if (message.content.startsWith('!validate')) {
-        const args = message.content.split(' ').slice(1);
-        if (args.length < 2) {
-          return message.reply('Usage: !validate <assetCode> <issuerAddress>\nExample: !validate USDC GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
-        }
-
-        const [assetCode, issuerAddress] = args;
-        await message.reply(`🔍 Verifying asset **${assetCode}** from issuer \`${issuerAddress.slice(0, 8)}...\``);
-
-        try {
-          const result = await this.verificationService.verifyAsset(assetCode, issuerAddress);
-          const statusEmoji = result.status === 'VERIFIED' ? '✅' : result.status === 'MALICIOUS' ? '🚨' : '⚠️';
-
-          let reply = `${statusEmoji} **Asset Verification: ${result.status}**\n\n`;
-          reply += `**Asset:** ${assetCode}\n`;
-          reply += `**Issuer:** \`${issuerAddress}\`\n`;
-          if (result.domain) reply += `**Domain:** ${result.domain}\n`;
-          if (result.details) reply += `**Details:** ${result.details}\n`;
-          reply += `\n**Safe to use:** ${result.isSafe ? 'Yes ✅' : 'No ❌'}`;
-
-          await message.reply(reply);
-        } catch (error) {
-          await message.reply(`❌ Verification error: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
-    });
+    ));
 
     await this.client.login(token);
     console.log("✅ Discord bot initialized.");

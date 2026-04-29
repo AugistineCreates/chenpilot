@@ -117,6 +117,79 @@ router.use("/audit", auditLogRoutes);
 // Mount admin agent management routes (requires admin role)
 router.use("/admin/agents", adminAgentRoutes);
 
+// #149: Bot command performance metrics endpoint
+router.post("/bot/metrics", async (req: Request, res: Response) => {
+  try {
+    const { command, platform, userId, executionTimeMs, success, error, timestamp } = req.body;
+
+    // Validate required fields
+    if (!command || !platform || !userId || executionTimeMs === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: command, platform, userId, executionTimeMs"
+      });
+    }
+
+    // Map bot command to audit action
+    const commandMap: Record<string, AuditAction> = {
+      '!start': AuditAction.BOT_COMMAND_START,
+      '/start': AuditAction.BOT_COMMAND_START,
+      '!help': AuditAction.BOT_COMMAND_HELP,
+      '/help': AuditAction.BOT_COMMAND_HELP,
+      '!thread': AuditAction.BOT_COMMAND_THREAD,
+      '!sponsor': AuditAction.BOT_COMMAND_SPONSOR,
+      '!trustline': AuditAction.BOT_COMMAND_TRUSTLINE,
+      '/trustline': AuditAction.BOT_COMMAND_TRUSTLINE,
+      '!dashboard': AuditAction.BOT_COMMAND_DASHBOARD,
+      '/dashboard': AuditAction.BOT_COMMAND_DASHBOARD,
+      '!validate': AuditAction.BOT_COMMAND_VALIDATE,
+      '/validate': AuditAction.BOT_COMMAND_VALIDATE,
+      '!balance': AuditAction.BOT_COMMAND_BALANCE,
+      '/balance': AuditAction.BOT_COMMAND_BALANCE,
+      '!swap': AuditAction.BOT_COMMAND_SWAP,
+      '/swap': AuditAction.BOT_COMMAND_SWAP,
+    };
+
+    const auditAction = commandMap[command] || AuditAction.BOT_COMMAND_START;
+
+    // Log to audit log
+    await auditLogService.log({
+      userId,
+      action: auditAction,
+      severity: success ? AuditSeverity.INFO : AuditSeverity.WARNING,
+      resource: `${platform}:${command}`,
+      metadata: {
+        platform,
+        command,
+        executionTimeMs,
+        timestamp,
+      },
+      errorMessage: error,
+      success,
+    });
+
+    // Also log to application logger for visibility
+    logger.info("Bot command performance metrics received", {
+      platform,
+      command,
+      userId,
+      executionTimeMs,
+      success,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Metrics logged successfully"
+    });
+  } catch (error) {
+    logger.error("Error logging bot metrics", { error, body: req.body });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to log metrics"
+    });
+  }
+});
+
 // Public webhook endpoint for Stellar funding notifications
 router.post(
   "/webhook/stellar/funding",
