@@ -50,6 +50,7 @@ function checkNetworkHealth(config) {
         const rpcUrl = config.rpcUrl || DEFAULT_RPC_URLS[config.network];
         const startTime = Date.now();
         try {
+            const signal = config.timeout ? AbortSignal.timeout(config.timeout) : undefined;
             const response = yield fetch(rpcUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -59,6 +60,7 @@ function checkNetworkHealth(config) {
                     method: "getLatestLedger",
                     params: [],
                 }),
+                signal,
             });
             const responseTimeMs = Date.now() - startTime;
             if (!response.ok) {
@@ -111,6 +113,7 @@ function checkLedgerLatency(config) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a, _b;
         const rpcUrl = config.rpcUrl || DEFAULT_RPC_URLS[config.network];
+        const signal = config.timeout ? AbortSignal.timeout(config.timeout) : undefined;
         const response = yield fetch(rpcUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -120,6 +123,7 @@ function checkLedgerLatency(config) {
                 method: "getLatestLedger",
                 params: [],
             }),
+            signal,
         });
         if (!response.ok) {
             throw new Error(`Failed to fetch ledger: ${response.statusText}`);
@@ -158,7 +162,8 @@ function checkLedgerLatency(config) {
 function getProtocolVersion(config) {
     return __awaiter(this, void 0, void 0, function* () {
         const horizonUrl = config.horizonUrl || DEFAULT_HORIZON_URLS[config.network];
-        const response = yield fetch(`${horizonUrl}/`);
+        const signal = config.timeout ? AbortSignal.timeout(config.timeout) : undefined;
+        const response = yield fetch(`${horizonUrl}/`, { signal });
         if (!response.ok) {
             throw new Error(`Failed to fetch protocol version: ${response.statusText}`);
         }

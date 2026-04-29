@@ -1,12 +1,12 @@
-## Agent–Tool–Service Architecture (Mermaid)
+## Chen Pilot System Architecture
 
-This document provides Mermaid diagrams that show how agents, the tool registry, and external services interact inside Chen Pilot.
+The following diagrams illustrate the orchestration between AI agents, the centralized Tool Registry, and external blockchain infrastructure.
 
 > To preview these diagrams, use a Mermaid-compatible Markdown viewer (such as the Mermaid extension in VS Code/Cursor).
 
 ---
 
-## High-Level Flow: From User to External Services
+## Logical Workflow: Request Processing to Execution
 
 ```mermaid
 flowchart TD

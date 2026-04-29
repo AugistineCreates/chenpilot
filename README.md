@@ -1,6 +1,6 @@
-# Chen Pilot - AI Agent for Cross-Chain DeFi Operations
+# Chen Pilot — Autonomous AI Agent for Multi-Chain DeFi
 
-Chen Pilot is an intelligent AI agent that enables seamless interaction with blockchain networks and DeFi protocols through natural language commands. This agent provides a unified interface for managing Bitcoin wallets, Stellar operations, cross-chain swaps, and DeFi lending/borrowing activities.
+Chen Pilot is a sophisticated AI-driven gateway that enables seamless interaction with blockchain networks and DeFi protocols through natural language. It provides a unified, professional interface for managing Bitcoin assets, Stellar operations, cross-chain liquidity swaps, and lending protocols.
 
 ---
 
@@ -177,11 +177,11 @@ git commit --no-verify
 
 The agent uses an intelligent workflow system that:
 
-- **Parses Intent:** Understands natural language commands
-- **Plans Workflow:** Creates step-by-step execution plans
-- **Executes Tools:** Runs appropriate tools in sequence
-- **Manages State:** Tracks operation status and results
-- **Provides Feedback:** Returns structured responses
+- **Intent Parsing:** Leverages LLMs to interpret complex financial requests.
+- **Strategic Planning:** Generates comprehensive, multi-step `ExecutionPlans` via the **AgentPlanner**.
+- **Tool Execution:** Orchestrates specialized tools via the **PlanExecutor**.
+- **State Integrity:** Maintains strict tracking of transaction lifecycles and results.
+- **User Feedback:** Delivers structured, actionable responses with full transparency.
 
 For visual diagrams of how the **agents**, **tool registry**, and **external services** interact, see `ARCHITECTURE_DIAGRAMS.md` (Mermaid).
 
@@ -289,7 +289,7 @@ const lockResult = await lockService.acquireLock(lockKey, userId, {
 if (!lockResult.acquired) {
   return this.createErrorResult(
     "swap",
-    "Another trade is currently in progress for your account. Please wait a moment and try again."
+    "An active trade execution is already in progress for this account. Chen Pilot enforces a single-session lock to ensure transaction integrity and security. Please wait for the current operation to finalize."
   );
 }
 
@@ -336,10 +336,10 @@ This project is licensed under the ISC License.
 
 ## Support
 
-For support and questions:
+For technical support and community inquiries:
 
 - Create an issue in the repository
-- Check the API health endpoints
+- Monitor the API health and status endpoints
 - Review the logs for error details
 
 ---

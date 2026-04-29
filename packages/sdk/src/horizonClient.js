@@ -34,6 +34,7 @@ class HorizonClient {
         var _a, _b;
         this.baseUrl = (_a = options.baseUrl) !== null && _a !== void 0 ? _a : "https://horizon.stellar.org";
         this.fetch = (_b = options.fetchFn) !== null && _b !== void 0 ? _b : globalThis.fetch;
+        this.timeout = options.timeout;
     }
     /**
      * Fetch account offers with cursor-based pagination
@@ -57,7 +58,8 @@ class HorizonClient {
                 params.append("limit", "50");
             }
             const url = `${this.baseUrl}/accounts/${accountId}/offers?${params.toString()}`;
-            const response = yield this.fetch(url);
+            const signal = this.timeout ? AbortSignal.timeout(this.timeout) : undefined;
+            const response = yield this.fetch(url, { signal });
             if (!response.ok) {
                 const errorText = yield response.text();
                 throw new Error(`Failed to fetch account offers: ${response.status} ${errorText}`);
