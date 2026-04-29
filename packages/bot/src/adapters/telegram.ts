@@ -5,6 +5,7 @@ import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
 import { AssetVerificationService } from '../assetVerification';
 import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
 import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
+import { MultisigWizard } from '../multisigWizard';
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || `${process.env.API_BASE_URL || 'http://localhost:2333'}/dashboard`;
 const HORIZON_URL = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
@@ -12,6 +13,9 @@ const DEBOUNCE_MS = 1000; // 1 second debounce between commands
 
 // Commands that involve personal account data and must only be used in DMs
 const DM_ONLY_COMMANDS = ['/balance'];
+
+// Commands that start a wizard
+const WIZARD_COMMANDS = ['/multisig'];
 
 // Commands that require stricter rate limiting
 const SENSITIVE_COMMANDS = ['/trustline', '/validate'];
@@ -30,6 +34,8 @@ export class TelegramAdapter {
   private userChatIds: Map<string, string> = new Map(); // userId -> chatId
   // #145: Track last command timestamp per user
   private lastCommandTime: Map<number, number> = new Map();
+  // #125: Multisig wizard instance
+  private multisigWizard: MultisigWizard;
   // #123: Rate limiters for bot commands
   private defaultRateLimiter: RateLimiter;
   private strictRateLimiter: RateLimiter;
@@ -38,6 +44,8 @@ export class TelegramAdapter {
   constructor(token: string) {
     this.token = token;
     this.verificationService = new AssetVerificationService(HORIZON_URL);
+    // #125: Initialize multisig wizard
+    this.multisigWizard = new MultisigWizard();
     // #123: Initialize rate limiters
     this.defaultRateLimiter = new RateLimiter(DEFAULT_RATE_LIMIT);
     this.strictRateLimiter = new RateLimiter(STRICT_RATE_LIMIT);
@@ -194,12 +202,41 @@ export class TelegramAdapter {
       })();
     });
 
+    // #125: Multisig wizard command
+    this.bot.command('multisig', async (ctx: any) => {
+      const userId = String(ctx.from?.id || 'unknown');
+      if (!isDM(ctx)) {
+        await rejectPublicChannel(ctx);
+        return;
+      }
+
+      const response = this.multisigWizard.startWizard(userId, 'telegram');
+      await ctx.reply(response.message);
+    });
+
+    // #125: Handle wizard input (for active wizard sessions)
+    this.bot.use(async (ctx: any, next: () => Promise<void>) => {
+      const userId = String(ctx.from?.id || 'unknown');
+      const text = ctx.message?.text || '';
+      const command = text.split(' ')[0];
+      
+      const wizardState = this.multisigWizard.getWizardState(userId, 'telegram');
+      if (wizardState && !WIZARD_COMMANDS.includes(command)) {
+        const response = this.multisigWizard.processInput(userId, 'telegram', text);
+        await ctx.reply(response.message);
+        return;
+      }
+      
+      return next();
+    });
+
     // Set bot commands for mobile menu
     await this.bot.telegram.setMyCommands([
       { command: "start", description: "Start the bot" },
       { command: "balance", description: "Check wallet balance" },
       { command: "swap", description: "Swap assets" },
       { command: "trustline", description: "Add trustline" },
+      { command: "multisig", description: "Setup multisig wallet" },
       { command: "help", description: "Show help" },
     ]);
 

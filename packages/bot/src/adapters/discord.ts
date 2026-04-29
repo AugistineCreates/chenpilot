@@ -17,6 +17,7 @@ import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
 import { AssetVerificationService } from '../assetVerification';
 import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
 import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
+import { MultisigWizard } from '../multisigWizard';
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3000";
 const DASHBOARD_URL = process.env.DASHBOARD_URL || `${BACKEND_URL}/dashboard`;
@@ -31,6 +32,9 @@ const SUPPORTED_CURRENCIES = ['USD', 'XLM', 'BTC'] as const;
 
 // Commands that involve personal account data and must only be used in DMs
 const DM_ONLY_COMMANDS = ['!balance', '!sponsor'];
+
+// Commands that start a wizard
+const WIZARD_COMMANDS = ['!multisig'];
 
 // Commands that require stricter rate limiting
 const SENSITIVE_COMMANDS = ['!sponsor', '!trustline', '!validate'];
@@ -49,6 +53,8 @@ export class DiscordAdapter {
   private token: string;
   // #145: Track last command timestamp per user
   private lastCommandTime: Map<string, number> = new Map();
+  // #125: Multisig wizard instance
+  private multisigWizard: MultisigWizard;
   // #123: Rate limiters for bot commands
   private defaultRateLimiter: RateLimiter;
   private strictRateLimiter: RateLimiter;
@@ -70,6 +76,8 @@ export class DiscordAdapter {
       ],
     });
     this.verificationService = new AssetVerificationService(HORIZON_URL);
+    // #125: Initialize multisig wizard
+    this.multisigWizard = new MultisigWizard();
     // #123: Initialize rate limiters
     this.defaultRateLimiter = new RateLimiter(DEFAULT_RATE_LIMIT);
     this.strictRateLimiter = new RateLimiter(STRICT_RATE_LIMIT);
@@ -316,6 +324,24 @@ export class DiscordAdapter {
               await message.reply(`❌ Verification error: ${error instanceof Error ? error.message : String(error)}`);
             }
           })();
+        }
+
+        // #125: Multisig wizard command
+        if (message.content === '!multisig') {
+          if (!isDM(message)) {
+            await rejectPublicChannel(message);
+            return;
+          }
+
+          const response = this.multisigWizard.startWizard(userId, 'discord');
+          await message.reply(response.message);
+        }
+
+        // Handle wizard input (for active wizard sessions)
+        const wizardState = this.multisigWizard.getWizardState(userId, 'discord');
+        if (wizardState && !WIZARD_COMMANDS.includes(message.content.split(' ')[0])) {
+          const response = this.multisigWizard.processInput(userId, 'discord', message.content);
+          await message.reply(response.message);
         }
       }
 
