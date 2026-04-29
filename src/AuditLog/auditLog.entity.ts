@@ -43,6 +43,17 @@ export enum AuditAction {
   // Data access
   DATA_EXPORT = "data_export",
   SENSITIVE_DATA_ACCESS = "sensitive_data_access",
+
+  // Bot commands
+  BOT_COMMAND_START = "bot_command_start",
+  BOT_COMMAND_HELP = "bot_command_help",
+  BOT_COMMAND_THREAD = "bot_command_thread",
+  BOT_COMMAND_SPONSOR = "bot_command_sponsor",
+  BOT_COMMAND_TRUSTLINE = "bot_command_trustline",
+  BOT_COMMAND_DASHBOARD = "bot_command_dashboard",
+  BOT_COMMAND_VALIDATE = "bot_command_validate",
+  BOT_COMMAND_BALANCE = "bot_command_balance",
+  BOT_COMMAND_SWAP = "bot_command_swap",
 }
 
 export enum AuditSeverity {
