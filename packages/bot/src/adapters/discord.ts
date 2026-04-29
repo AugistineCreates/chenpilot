@@ -15,6 +15,7 @@ import {
 } from "@chen-pilot/sdk-core";
 import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
 import { AssetVerificationService } from '../assetVerification';
+import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
 import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3000";
@@ -25,16 +26,8 @@ const DEBOUNCE_MS = 1000; // 1 second debounce between commands
 // Commands that involve personal account data and must only be used in DMs
 const DM_ONLY_COMMANDS = ['!balance', '!sponsor'];
 
-function isDM(message: Message): boolean {
-  return message.channel.type === ChannelType.DM;
-}
-
-async function rejectPublicChannel(message: Message): Promise<void> {
-  await message.reply('🔒 This command contains sensitive account data and can only be used in a Direct Message (DM) with the bot.');
-}
-
-// Commands that involve personal account data and must only be used in DMs
-const DM_ONLY_COMMANDS = ['!balance', '!sponsor'];
+// Commands that require stricter rate limiting
+const SENSITIVE_COMMANDS = ['!sponsor', '!trustline', '!validate'];
 
 function isDM(message: Message): boolean {
   return message.channel.type === ChannelType.DM;
@@ -50,6 +43,9 @@ export class DiscordAdapter {
   private token: string;
   // #145: Track last command timestamp per user
   private lastCommandTime: Map<string, number> = new Map();
+  // #123: Rate limiters for bot commands
+  private defaultRateLimiter: RateLimiter;
+  private strictRateLimiter: RateLimiter;
   private verificationService: AssetVerificationService;
 
   constructor(token: string, auditLogChannelId?: string) {
@@ -63,6 +59,9 @@ export class DiscordAdapter {
       ],
     });
     this.verificationService = new AssetVerificationService(HORIZON_URL);
+    // #123: Initialize rate limiters
+    this.defaultRateLimiter = new RateLimiter(DEFAULT_RATE_LIMIT);
+    this.strictRateLimiter = new RateLimiter(STRICT_RATE_LIMIT);
   }
 
   // #145: Returns true if the user is flooding (within debounce window)
@@ -72,6 +71,25 @@ export class DiscordAdapter {
     if (now - last < DEBOUNCE_MS) return true;
     this.lastCommandTime.set(userId, now);
     return false;
+  }
+
+  // #123: Check rate limit for a user and command
+  private checkRateLimit(userId: string, command: string): { allowed: boolean; message?: string } {
+    // Determine which rate limiter to use based on command
+    const isSensitive = SENSITIVE_COMMANDS.some(cmd => command.startsWith(cmd));
+    const rateLimiter = isSensitive ? this.strictRateLimiter : this.defaultRateLimiter;
+    
+    const status = rateLimiter.check(userId);
+    
+    if (!status.allowed) {
+      const retryAfter = status.retryAfter || 60;
+      return {
+        allowed: false,
+        message: `⏳ Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`
+      };
+    }
+    
+    return { allowed: true };
   }
 
   async init() {
@@ -94,11 +112,19 @@ export class DiscordAdapter {
         if (message.author.bot) return;
 
         const userId = message.author.id;
+        const command = message.content.split(' ')[0];
         const commandName = extractCommandName(message.content, 'discord');
 
         // #145: Anti-flood check for all commands
         if (this.isFlooding(userId)) {
           await message.reply("⏳ Please wait a moment before sending another command.");
+          return;
+        }
+
+        // #123: Rate limit check
+        const rateLimitResult = this.checkRateLimit(userId, command);
+        if (!rateLimitResult.allowed) {
+          await message.reply(rateLimitResult.message);
           return;
         }
 

@@ -3,6 +3,7 @@ import { TransactionNotificationData } from "../types";
 import { createTrustlineOperation } from "@chen-pilot/sdk-core";
 import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
 import { AssetVerificationService } from '../assetVerification';
+import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
 import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || `${process.env.API_BASE_URL || 'http://localhost:2333'}/dashboard`;
@@ -11,6 +12,9 @@ const DEBOUNCE_MS = 1000; // 1 second debounce between commands
 
 // Commands that involve personal account data and must only be used in DMs
 const DM_ONLY_COMMANDS = ['/balance'];
+
+// Commands that require stricter rate limiting
+const SENSITIVE_COMMANDS = ['/trustline', '/validate'];
 
 function isDM(ctx: Parameters<Parameters<Telegraf['command']>[1]>[0]): boolean {
   return ctx.chat?.type === 'private';
@@ -26,11 +30,17 @@ export class TelegramAdapter {
   private userChatIds: Map<string, string> = new Map(); // userId -> chatId
   // #145: Track last command timestamp per user
   private lastCommandTime: Map<number, number> = new Map();
+  // #123: Rate limiters for bot commands
+  private defaultRateLimiter: RateLimiter;
+  private strictRateLimiter: RateLimiter;
   private verificationService: AssetVerificationService;
 
   constructor(token: string) {
     this.token = token;
     this.verificationService = new AssetVerificationService(HORIZON_URL);
+    // #123: Initialize rate limiters
+    this.defaultRateLimiter = new RateLimiter(DEFAULT_RATE_LIMIT);
+    this.strictRateLimiter = new RateLimiter(STRICT_RATE_LIMIT);
   }
 
   // #145: Returns true if the user is flooding (within debounce window)
@@ -40,6 +50,25 @@ export class TelegramAdapter {
     if (now - last < DEBOUNCE_MS) return true;
     this.lastCommandTime.set(userId, now);
     return false;
+  }
+
+  // #123: Check rate limit for a user and command
+  private checkRateLimit(userId: number, command: string): { allowed: boolean; message?: string } {
+    // Determine which rate limiter to use based on command
+    const isSensitive = SENSITIVE_COMMANDS.some(cmd => command.startsWith(cmd));
+    const rateLimiter = isSensitive ? this.strictRateLimiter : this.defaultRateLimiter;
+    
+    const status = rateLimiter.check(String(userId));
+    
+    if (!status.allowed) {
+      const retryAfter = status.retryAfter || 60;
+      return {
+        allowed: false,
+        message: `⏳ Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`
+      };
+    }
+    
+    return { allowed: true };
   }
 
   async init() {
@@ -57,6 +86,17 @@ export class TelegramAdapter {
         await ctx.reply("⏳ Please wait a moment before sending another command.");
         return;
       }
+      
+      // #123: Rate limit check
+      const command = ctx.message?.text?.split(' ')[0] || '';
+      if (userId) {
+        const rateLimitResult = this.checkRateLimit(userId, command);
+        if (!rateLimitResult.allowed) {
+          await ctx.reply(rateLimitResult.message);
+          return;
+        }
+      }
+      
       return next();
     });
 
