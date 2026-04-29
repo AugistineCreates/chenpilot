@@ -3,9 +3,11 @@ import { TransactionNotificationData } from "../types";
 import { createTrustlineOperation } from "@chen-pilot/sdk-core";
 import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
 import { AssetVerificationService } from '../assetVerification';
+import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || `${process.env.API_BASE_URL || 'http://localhost:2333'}/dashboard`;
 const HORIZON_URL = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
+const DEBOUNCE_MS = 1000; // 1 second debounce between commands
 
 // Commands that involve personal account data and must only be used in DMs
 const DM_ONLY_COMMANDS = ['/balance'];
@@ -58,83 +60,100 @@ export class TelegramAdapter {
       return next();
     });
 
-    this.bot.start((ctx: any) => ctx.reply('Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant.'));
-    this.bot.help((ctx: any) => ctx.reply('Commands: /start, /balance, /swap, /trustline, /dashboard, /validate'));
+    this.bot.start(async (ctx: any) => {
+      const userId = String(ctx.from?.id || 'unknown');
+      await withPerformanceProfiling('/start', 'telegram', userId, () => ctx.reply('Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant.'))();
+    });
+    this.bot.help(async (ctx: any) => {
+      const userId = String(ctx.from?.id || 'unknown');
+      await withPerformanceProfiling('/help', 'telegram', userId, () => ctx.reply('Commands: /start, /balance, /swap, /trustline, /dashboard, /validate'))();
+    });
 
     this.bot.command('trustline', async (ctx: any) => {
-      const args = ctx.message.text.split(' ').slice(1);
-      if (args.length < 1) {
-        return ctx.reply(
-          "Usage: /trustline <assetCode> [issuerDomain|issuerAddress]\nExample: /trustline USDC circle.com"
-        );
-      }
+      const userId = String(ctx.from?.id || 'unknown');
+      const commandName = extractCommandName(ctx.message.text, 'telegram');
+      await withPerformanceProfiling(commandName, 'telegram', userId, async () => {
+        const args = ctx.message.text.split(' ').slice(1);
+        if (args.length < 1) {
+          return ctx.reply(
+            "Usage: /trustline <assetCode> [issuerDomain|issuerAddress]\nExample: /trustline USDC circle.com"
+          );
+        }
 
-      const assetCode = args[0];
-      const assetIssuer = args[1];
+        const assetCode = args[0];
+        const assetIssuer = args[1];
 
-      if (!assetIssuer) {
-        return ctx.reply(
-          `Please provide an issuer domain or address for ${assetCode}.`
-        );
-      }
+        if (!assetIssuer) {
+          return ctx.reply(
+            `Please provide an issuer domain or address for ${assetCode}.`
+          );
+        }
 
-      try {
-        await ctx.reply(
-          `🔍 Looking up asset ${assetCode} from ${assetIssuer}...`
-        );
-        const op = await createTrustlineOperation(assetCode, assetIssuer);
+        try {
+          await ctx.reply(
+            `🔍 Looking up asset ${assetCode} from ${assetIssuer}...`
+          );
+          const op = await createTrustlineOperation(assetCode, assetIssuer);
 
-        // In a real scenario, we would generate a signing link (e.g., Albedo or Stellar Laboratory)
-        // For now, we'll return the operation details
-        let message = `✅ Found asset ${assetCode}!\n\n`;
-        message += `To add this trustline, you can use the following details in your wallet:\n`;
-        message += `<b>Asset:</b> ${assetCode}\n`;
-        message += `<b>Issuer:</b> <code>${(op as any).asset.issuer}</code>\n\n`;
-        message += `<i>Note: In a future update, I will provide a direct signing link.</i>`;
+          // In a real scenario, we would generate a signing link (e.g., Albedo or Stellar Laboratory)
+          // For now, we'll return the operation details
+          let message = `✅ Found asset ${assetCode}!\n\n`;
+          message += `To add this trustline, you can use the following details in your wallet:\n`;
+          message += `<b>Asset:</b> ${assetCode}\n`;
+          message += `<b>Issuer:</b> <code>${(op as any).asset.issuer}</code>\n\n`;
+          message += `<i>Note: In a future update, I will provide a direct signing link.</i>`;
 
-        await ctx.reply(message, { parse_mode: "HTML" });
-      } catch (error) {
-        await ctx.reply(
-          `❌ Error: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
+          await ctx.reply(message, { parse_mode: "HTML" });
+        } catch (error) {
+          await ctx.reply(
+            `❌ Error: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      })();
     });
 
     // #146: Dashboard command
     this.bot.command('dashboard', async (ctx: any) => {
-      await ctx.reply(
-        `📊 <b>Chen Pilot Dashboard</b>\n\nAccess your admin dashboard here:\n🔗 <a href="${DASHBOARD_URL}">Open Dashboard</a>\n\n<i>Note: You must be logged in to view the dashboard.</i>`,
-        { parse_mode: 'HTML' }
-      );
+      const userId = String(ctx.from?.id || 'unknown');
+      await withPerformanceProfiling('/dashboard', 'telegram', userId, async () => {
+        await ctx.reply(
+          `📊 <b>Chen Pilot Dashboard</b>\n\nAccess your admin dashboard here:\n🔗 <a href="${DASHBOARD_URL}">Open Dashboard</a>\n\n<i>Note: You must be logged in to view the dashboard.</i>`,
+          { parse_mode: 'HTML' }
+        );
+      })();
     });
 
     // #148: /validate command for Stellar asset verification
     this.bot.command('validate', async (ctx: any) => {
-      const args = ctx.message.text.split(' ').slice(1);
-      if (args.length < 2) {
-        return ctx.reply('Usage: /validate <assetCode> <issuerAddress>\nExample: /validate USDC GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
-      }
+      const userId = String(ctx.from?.id || 'unknown');
+      const commandName = extractCommandName(ctx.message.text, 'telegram');
+      await withPerformanceProfiling(commandName, 'telegram', userId, async () => {
+        const args = ctx.message.text.split(' ').slice(1);
+        if (args.length < 2) {
+          return ctx.reply('Usage: /validate <assetCode> <issuerAddress>\nExample: /validate USDC GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
+        }
 
-      const [assetCode, issuerAddress] = args;
-      await ctx.reply(`🔍 Verifying asset <b>${assetCode}</b> from issuer <code>${issuerAddress.slice(0, 8)}...</code>`, { parse_mode: 'HTML' });
+        const [assetCode, issuerAddress] = args;
+        await ctx.reply(`🔍 Verifying asset <b>${assetCode}</b> from issuer <code>${issuerAddress.slice(0, 8)}...</code>`, { parse_mode: 'HTML' });
 
-      try {
-        const result = await this.verificationService.verifyAsset(assetCode, issuerAddress);
-        const statusEmoji = result.status === 'VERIFIED' ? '✅' : result.status === 'MALICIOUS' ? '🚨' : '⚠️';
+        try {
+          const result = await this.verificationService.verifyAsset(assetCode, issuerAddress);
+          const statusEmoji = result.status === 'VERIFIED' ? '✅' : result.status === 'MALICIOUS' ? '🚨' : '⚠️';
 
-        let reply = `${statusEmoji} <b>Asset Verification: ${result.status}</b>\n\n`;
-        reply += `<b>Asset:</b> ${assetCode}\n`;
-        reply += `<b>Issuer:</b> <code>${issuerAddress}</code>\n`;
-        if (result.domain) reply += `<b>Domain:</b> ${result.domain}\n`;
-        if (result.details) reply += `<b>Details:</b> ${result.details}\n`;
-        reply += `\n<b>Safe to use:</b> ${result.isSafe ? 'Yes ✅' : 'No ❌'}`;
+          let reply = `${statusEmoji} <b>Asset Verification: ${result.status}</b>\n\n`;
+          reply += `<b>Asset:</b> ${assetCode}\n`;
+          reply += `<b>Issuer:</b> <code>${issuerAddress}</code>\n`;
+          if (result.domain) reply += `<b>Domain:</b> ${result.domain}\n`;
+          if (result.details) reply += `<b>Details:</b> ${result.details}\n`;
+          reply += `\n<b>Safe to use:</b> ${result.isSafe ? 'Yes ✅' : 'No ❌'}`;
 
-        await ctx.reply(reply, { parse_mode: 'HTML' });
-      } catch (error) {
-        await ctx.reply(`❌ Verification error: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      return next();
+          await ctx.reply(reply, { parse_mode: 'HTML' });
+        } catch (error) {
+          await ctx.reply(`❌ Verification error: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      })();
     });
+
     // Set bot commands for mobile menu
     await this.bot.telegram.setMyCommands([
       { command: "start", description: "Start the bot" },
