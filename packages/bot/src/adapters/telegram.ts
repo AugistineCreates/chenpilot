@@ -7,7 +7,8 @@ import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimit
 import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
 import { MultisigWizard } from '../multisigWizard';
 
-const DASHBOARD_URL = process.env.DASHBOARD_URL || `${process.env.API_BASE_URL || 'http://localhost:2333'}/dashboard`;
+const BACKEND_URL = process.env.BACKEND_URL || process.env.API_BASE_URL || 'http://localhost:2333';
+const DASHBOARD_URL = process.env.DASHBOARD_URL || `${BACKEND_URL}/dashboard`;
 const HORIZON_URL = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
 const DEBOUNCE_MS = 1000; // 1 second debounce between commands
 
@@ -155,6 +156,41 @@ export class TelegramAdapter {
         } catch (error) {
           await ctx.reply(
             `❌ Error: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      })();
+    });
+
+    // #134: Ping command — measure end-to-end latency
+    this.bot.command('ping', async (ctx: any) => {
+      const userId = String(ctx.from?.id || 'unknown');
+      await withPerformanceProfiling('/ping', 'telegram', userId, async () => {
+        const startTime = Date.now();
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5000);
+          const response = await fetch(`${BACKEND_URL}/api/health`, {
+            method: 'GET',
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          const roundtripMs = Date.now() - startTime;
+          if (response.ok) {
+            await ctx.reply(
+              `🏓 <b>Pong!</b>\n\n📡 <b>End-to-End Latency:</b> ${roundtripMs}ms\n✅ Backend: Online`,
+              { parse_mode: 'HTML' }
+            );
+          } else {
+            await ctx.reply(
+              `🏓 <b>Pong!</b>\n\n📡 <b>End-to-End Latency:</b> ${roundtripMs}ms\n⚠️ Backend: Returned HTTP ${response.status}`,
+              { parse_mode: 'HTML' }
+            );
+          }
+        } catch {
+          const roundtripMs = Date.now() - startTime;
+          await ctx.reply(
+            `🏓 <b>Pong!</b>\n\n📡 <b>End-to-End Latency:</b> ${roundtripMs}ms\n❌ Backend: Unreachable`,
+            { parse_mode: 'HTML' }
           );
         }
       })();

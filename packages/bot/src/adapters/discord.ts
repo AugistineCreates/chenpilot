@@ -18,6 +18,8 @@ import { AssetVerificationService } from '../assetVerification';
 import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
 import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
 import { MultisigWizard } from '../multisigWizard';
+import { ScamDetectionService } from '../scamDetection';
+import { MarketOverviewService } from '../marketOverview';
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3000";
 const DASHBOARD_URL = process.env.DASHBOARD_URL || `${BACKEND_URL}/dashboard`;
@@ -39,6 +41,16 @@ const WIZARD_COMMANDS = ['!multisig'];
 // Commands that require stricter rate limiting
 const SENSITIVE_COMMANDS = ['!sponsor', '!trustline', '!validate'];
 
+// #124: Scam detection configuration
+const SCAM_DETECTION_ENABLED = process.env.DISCORD_SCAM_DETECTION_ENABLED !== 'false';
+const SCAM_DETECTION_ACTION = (process.env.DISCORD_SCAM_DETECTION_ACTION || 'flag') as 'flag' | 'block';
+const SCAM_DETECTION_CHANNELS = (process.env.DISCORD_SCAM_DETECTION_CHANNELS || '').split(',').filter(c => c.trim());
+
+// #128: Daily market overview digest configuration
+const MARKET_OVERVIEW_ENABLED = process.env.DISCORD_MARKET_OVERVIEW_ENABLED === 'true';
+const MARKET_OVERVIEW_CHANNEL_ID = process.env.DISCORD_MARKET_OVERVIEW_CHANNEL_ID || '';
+const MARKET_OVERVIEW_TIME = process.env.DISCORD_MARKET_OVERVIEW_TIME || '09:00'; // Format: HH:MM in UTC
+
 function isDM(message: Message): boolean {
   return message.channel.type === ChannelType.DM;
 }
@@ -51,6 +63,7 @@ export class DiscordAdapter {
   private client: Client;
   private userChannels: Map<string, string> = new Map(); // userId -> channelId
   private token: string;
+  private auditLogChannelId?: string;
   // #145: Track last command timestamp per user
   private lastCommandTime: Map<string, number> = new Map();
   // #125: Multisig wizard instance
@@ -59,11 +72,17 @@ export class DiscordAdapter {
   private defaultRateLimiter: RateLimiter;
   private strictRateLimiter: RateLimiter;
   private verificationService: AssetVerificationService;
+  // #124: Scam detection service
+  private scamDetectionService: ScamDetectionService;
+  // #128: Market overview service
+  private marketOverviewService: MarketOverviewService;
   // #118: User preferred currency (userId -> currency)
   private userCurrency: Map<string, 'USD' | 'XLM' | 'BTC'> = new Map();
   // #119: Active price alerts
   private priceAlerts: Map<string, PriceAlert> = new Map();
   private alertCheckInterval?: ReturnType<typeof setInterval>;
+  // #128: Market overview digest interval
+  private marketOverviewInterval?: ReturnType<typeof setInterval>;
 
   constructor(token: string, auditLogChannelId?: string) {
     this.token = token;
@@ -81,6 +100,10 @@ export class DiscordAdapter {
     // #123: Initialize rate limiters
     this.defaultRateLimiter = new RateLimiter(DEFAULT_RATE_LIMIT);
     this.strictRateLimiter = new RateLimiter(STRICT_RATE_LIMIT);
+    // #124: Initialize scam detection service
+    this.scamDetectionService = new ScamDetectionService();
+    // #128: Initialize market overview service
+    this.marketOverviewService = new MarketOverviewService();
   }
 
   // #145: Returns true if the user is flooding (within debounce window)
@@ -111,6 +134,122 @@ export class DiscordAdapter {
     return { allowed: true };
   }
 
+  // #124: Check if scam detection should be applied to a channel
+  private shouldScanForScams(message: Message): boolean {
+    if (!SCAM_DETECTION_ENABLED) return false;
+    if (isDM(message)) return false; // Don't scan DMs
+    
+    // If specific channels are configured, only scan those
+    if (SCAM_DETECTION_CHANNELS.length > 0) {
+      return SCAM_DETECTION_CHANNELS.includes(message.channelId);
+    }
+    
+    // Otherwise, scan all public channels
+    return true;
+  }
+
+  // #124: Handle detected scam links
+  private async handleScamDetection(message: Message, result: { isScam: boolean; reason?: string; matchedPattern?: string }): Promise<void> {
+    const warningMessage = `🚨 **Potential Scam Link Detected**\n\n` +
+      `**Reason:** ${result.reason}\n` +
+      `**Pattern:** \`${result.matchedPattern}\`\n\n` +
+      `This message has been ${SCAM_DETECTION_ACTION === 'block' ? 'blocked' : 'flagged'} for your safety.`;
+
+    if (SCAM_DETECTION_ACTION === 'block') {
+      await message.delete();
+      // Cast to TextChannel since we only scan public channels
+      if (message.channel.type === ChannelType.GuildText || message.channel.type === ChannelType.GuildPublicThread || message.channel.type === ChannelType.GuildPrivateThread) {
+        await message.channel.send(warningMessage);
+      }
+    } else {
+      await message.reply(warningMessage);
+    }
+
+    // Log to audit channel if configured
+    await this.logAuditAction({
+      action: 'SCAM_LINK_DETECTED',
+      triggeredBy: message.author.id,
+      details: `Reason: ${result.reason}, Pattern: ${result.matchedPattern}, Action: ${SCAM_DETECTION_ACTION}`,
+      success: true,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // #128: Calculate milliseconds until next scheduled market overview post
+  private getTimeUntilNextSchedule(): number {
+    const [hours, minutes] = MARKET_OVERVIEW_TIME.split(':').map(Number);
+    const now = new Date();
+    const scheduledTime = new Date();
+    scheduledTime.setUTCHours(hours, minutes, 0, 0);
+
+    // If the scheduled time has already passed today, schedule for tomorrow
+    if (scheduledTime <= now) {
+      scheduledTime.setDate(scheduledTime.getDate() + 1);
+    }
+
+    return scheduledTime.getTime() - now.getTime();
+  }
+
+  // #128: Post daily market overview to configured channel
+  private async postMarketOverview(): Promise<void> {
+    if (!MARKET_OVERVIEW_CHANNEL_ID) {
+      console.warn('⚠️ Market overview channel ID not configured, skipping digest');
+      return;
+    }
+
+    try {
+      console.log('📊 Fetching daily market overview...');
+      const marketData = await this.marketOverviewService.fetchMarketOverview();
+      const message = this.marketOverviewService.formatMarketOverviewMessage(marketData);
+
+      const channel = this.client.channels.cache.get(MARKET_OVERVIEW_CHANNEL_ID) as TextChannel;
+      if (!channel) {
+        console.error(`❌ Market overview channel ${MARKET_OVERVIEW_CHANNEL_ID} not found`);
+        return;
+      }
+
+      await channel.send(message);
+      console.log('✅ Daily market overview posted successfully');
+
+      await this.logAuditAction({
+        action: 'MARKET_OVERVIEW_POSTED',
+        triggeredBy: 'system',
+        details: `Channel: ${MARKET_OVERVIEW_CHANNEL_ID}`,
+        success: true,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('❌ Error posting market overview:', error);
+      await this.logAuditAction({
+        action: 'MARKET_OVERVIEW_FAILED',
+        triggeredBy: 'system',
+        details: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        success: false,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  // #128: Start the daily market overview scheduler
+  private startMarketOverviewScheduler(): void {
+    if (!MARKET_OVERVIEW_ENABLED || !MARKET_OVERVIEW_CHANNEL_ID) {
+      console.log('ℹ️ Market overview digest disabled or not configured');
+      return;
+    }
+
+    const initialDelay = this.getTimeUntilNextSchedule();
+    console.log(`📅 Market overview digest scheduled for ${MARKET_OVERVIEW_TIME} UTC (next post in ${Math.round(initialDelay / 1000 / 60)} minutes)`);
+
+    // Schedule the first post
+    setTimeout(async () => {
+      await this.postMarketOverview();
+      // Then schedule daily posts (24 hours = 86400000 ms)
+      this.marketOverviewInterval = setInterval(async () => {
+        await this.postMarketOverview();
+      }, 24 * 60 * 60 * 1000);
+    }, initialDelay);
+  }
+
   async init() {
     const token = process.env.DISCORD_BOT_TOKEN || this.token;
     if (!token) {
@@ -130,6 +269,15 @@ export class DiscordAdapter {
       async (message: Message) => {
         if (message.author.bot) return;
 
+        // #124: Scan for scam links in public channels
+        if (this.shouldScanForScams(message)) {
+          const scamResult = this.scamDetectionService.detectScamLinks(message.content);
+          if (scamResult.isScam) {
+            await this.handleScamDetection(message, scamResult);
+            return; // Stop processing if scam is detected and blocked
+          }
+        }
+
         const userId = message.author.id;
         const command = message.content.split(' ')[0];
         const commandName = extractCommandName(message.content, 'discord');
@@ -141,11 +289,11 @@ export class DiscordAdapter {
         }
 
         // #123: Rate limit check
-        const rateLimitResult = this.checkRateLimit(userId, command);
-        if (!rateLimitResult.allowed) {
-          await message.reply(rateLimitResult.message);
-          return;
-        }
+            const rateLimitResult = this.checkRateLimit(userId, command);
+            if (!rateLimitResult.allowed) {
+              await message.reply(rateLimitResult.message ?? '⏳ Rate limit exceeded. Please try again later.');
+              return;
+            }
 
         // Wrap each command handler with performance profiling
         if (message.content === "!start") {
@@ -153,6 +301,37 @@ export class DiscordAdapter {
             await message.reply(
               "Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant. Type !help to see what I can do!"
             );
+          })();
+        }
+
+        // #134: Ping command — measure end-to-end latency
+        if (message.content === '!ping') {
+          await withPerformanceProfiling('!ping', 'discord', userId, async () => {
+            const startTime = Date.now();
+            try {
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 5000);
+              const response = await fetch(`${BACKEND_URL}/api/health`, {
+                method: 'GET',
+                signal: controller.signal,
+              });
+              clearTimeout(timeout);
+              const roundtripMs = Date.now() - startTime;
+              if (response.ok) {
+                await message.reply(
+                  `🏓 **Pong!**\n\n📡 **End-to-End Latency:** ${roundtripMs}ms\n✅ Backend: Online`
+                );
+              } else {
+                await message.reply(
+                  `🏓 **Pong!**\n\n📡 **End-to-End Latency:** ${roundtripMs}ms\n⚠️ Backend: Returned HTTP ${response.status}`
+                );
+              }
+            } catch {
+              const roundtripMs = Date.now() - startTime;
+              await message.reply(
+                `🏓 **Pong!**\n\n📡 **End-to-End Latency:** ${roundtripMs}ms\n❌ Backend: Unreachable`
+              );
+            }
           })();
         }
 
@@ -343,7 +522,6 @@ export class DiscordAdapter {
           const response = this.multisigWizard.processInput(userId, 'discord', message.content);
           await message.reply(response.message);
         }
-      }
 
       // #118: !currency command — set preferred report currency
       if (message.content.startsWith('!currency')) {
@@ -443,10 +621,12 @@ export class DiscordAdapter {
           return message.reply('❌ Could not fetch trending assets. Please try again later.');
         }
       }
-    });
+    }));
 
     await this.client.login(token);
     this.startAlertPolling();
+    // #128: Start market overview scheduler
+    this.startMarketOverviewScheduler();
     console.log("✅ Discord bot initialized.");
   }
 
@@ -471,7 +651,7 @@ export class DiscordAdapter {
           alert.triggered = true;
           const channelId = this.userChannels.get(alert.userId);
           if (!channelId) continue;
-          const channel = this.client.channels.cache.get(channelId) as TextBasedChannel | undefined;
+          const channel = this.client.channels.cache.get(channelId) as any;
           if (!channel) continue;
           await channel.send(
             `🔔 **Price Alert Triggered!**\n**${alert.assetCode}** is now ${alert.condition} **${alert.targetPrice} ${alert.currency}** (current: ${price} ${alert.currency})`
@@ -479,6 +659,18 @@ export class DiscordAdapter {
         } catch { /* ignore per-alert errors */ }
       }
     }, 60_000); // check every minute
+  }
+
+  private async logAuditAction(entry: { action: string; triggeredBy: string; details?: string; success?: boolean; timestamp?: string }): Promise<void> {
+    if (!this.auditLogChannelId || !this.client) return;
+    try {
+      const ch = this.client.channels.cache.get(this.auditLogChannelId) as any;
+      if (ch && typeof ch.send === 'function') {
+        await ch.send(`📝 Audit: ${entry.action} by ${entry.triggeredBy} — ${entry.details ?? ''}`);
+      }
+    } catch (e) {
+      console.error('Audit log failed', e);
+    }
   }
 
   // #147: Announce a new GitHub release to all registered announcement channels
@@ -528,7 +720,7 @@ export class DiscordAdapter {
 
     const channel = this.client.channels.cache.get(
       channelId
-    ) as TextBasedChannel;
+    ) as any;
     if (!channel) {
       console.warn(`⚠️ Channel or Thread ${channelId} not found`);
       return false;
@@ -587,7 +779,7 @@ export class DiscordAdapter {
 
     const channel = this.client.channels.cache.get(
       channelId
-    ) as TextBasedChannel;
+    ) as any;
     if (!channel) {
       return false;
     }
