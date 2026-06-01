@@ -25,6 +25,11 @@ export enum RealtimeEventType {
   BOT_ERROR = "bot:error",
   DEPLOYMENT_STATUS = "deployment:status",
   SWAP_STATUS = "swap:status",
+  AGENT_EXECUTION_STARTED = "agent:execution-started",
+  AGENT_STEP_COMPLETED = "agent:step-completed",
+  AGENT_EXECUTION_COMPLETED = "agent:execution-completed",
+  AGENT_EXECUTION_FAILED = "agent:execution-failed",
+  AGENT_APPROVAL_REQUIRED = "agent:approval-required",
 }
 
 /**
@@ -39,6 +44,21 @@ export interface TransactionStatusUpdate {
   feeUsed?: number;
   memo?: string;
   userId?: string;
+}
+
+/**
+ * Agent execution payload
+ */
+export interface AgentExecutionUpdate {
+  executionId: string;
+  planId: string;
+  userId: string;
+  status: string;
+  currentStep?: number;
+  totalSteps?: number;
+  result?: any;
+  error?: string;
+  timestamp: Date;
 }
 
 /**
@@ -147,6 +167,16 @@ export class RealtimeEventEmitter extends EventEmitter {
    */
   emitSwapStatus(update: TransactionStatusUpdate): void {
     this.emit(RealtimeEventType.SWAP_STATUS, update);
+  }
+
+  /**
+   * Emit agent execution update
+   */
+  emitAgentExecutionUpdate(
+    type: RealtimeEventType,
+    update: AgentExecutionUpdate
+  ): void {
+    this.emit(type, update);
   }
 }
 
@@ -334,6 +364,19 @@ export class SocketManager {
         this.broadcastDeploymentStatus(status);
       }
     );
+
+    // Agent execution updates
+    [
+      RealtimeEventType.AGENT_EXECUTION_STARTED,
+      RealtimeEventType.AGENT_STEP_COMPLETED,
+      RealtimeEventType.AGENT_EXECUTION_COMPLETED,
+    RealtimeEventType.AGENT_EXECUTION_FAILED,
+    RealtimeEventType.AGENT_APPROVAL_REQUIRED,
+  ].forEach((eventType) => {
+    this.eventEmitter.on(eventType, (update: AgentExecutionUpdate) => {
+      this.broadcastAgentUpdate(eventType, update);
+    });
+  });
   }
 
   /**
@@ -415,6 +458,19 @@ export class SocketManager {
       this.io.to(`user:${status.userId}`).emit("deployment:status", status);
     }
     this.io.emit("deployment:status", status);
+  }
+
+  /**
+   * Broadcast agent execution update
+   */
+  private broadcastAgentUpdate(
+    eventType: string,
+    update: AgentExecutionUpdate
+  ): void {
+    if (update.userId) {
+      this.io.to(`user:${update.userId}`).emit(eventType, update);
+    }
+    this.io.to(`execution:${update.executionId}`).emit(eventType, update);
   }
 
   /**

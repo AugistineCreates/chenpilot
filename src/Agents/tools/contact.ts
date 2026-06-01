@@ -39,6 +39,9 @@ export class ContactTool extends BaseTool {
     ],
     category: "contacts",
     version: "1.0.0",
+    riskLevel: "medium",
+    capabilities: ["contact_management"],
+    permissions: ["user"],
   };
 
   private contactService = container.resolve(ContactService);

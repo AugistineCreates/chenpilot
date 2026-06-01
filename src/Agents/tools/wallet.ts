@@ -76,6 +76,9 @@ export class WalletTool extends BaseTool {
     ],
     category: "wallet",
     version: "1.0.0",
+    riskLevel: "high",
+    capabilities: ["starknet_wallet", "transfer"],
+    permissions: ["user"],
   };
 
   private accounts: AccountData[];

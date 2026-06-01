@@ -35,6 +35,9 @@ export class QATool extends BaseTool {
     ],
     category: "qa",
     version: "1.0.0",
+    riskLevel: "low",
+    capabilities: ["knowledge_retrieval"],
+    permissions: [],
   };
 
   private qaService = container.resolve(QaService);
