@@ -35,7 +35,7 @@ const ADVANCED_ROLE_NAMES = (process.env.DISCORD_ADVANCED_ROLES || 'DeFi Pro,Wha
 const SUPPORTED_CURRENCIES = ['USD', 'XLM', 'BTC'] as const;
 
 // Commands that involve personal account data and must only be used in DMs
-const DM_ONLY_COMMANDS = ['!balance', '!sponsor'];
+const DM_ONLY_COMMANDS = ['!balance', '!sponsor', '!swap'];
 
 // Commands that start a wizard
 const WIZARD_COMMANDS = ['!multisig'];
@@ -507,6 +507,53 @@ export class DiscordAdapter {
               await message.reply(
                 `❌ Error: ${error instanceof Error ? error.message : String(error)}`
               );
+            }
+          })();
+        }
+
+        // #109: Swap command
+        if (message.content.startsWith('!swap')) {
+          await withPerformanceProfiling('!swap', 'discord', userId, async () => {
+            if (!isDM(message)) {
+              await rejectPublicChannel(message);
+              return;
+            }
+
+            const args = message.content.split(' ').slice(1);
+            if (args.length < 3) {
+              return message.reply('Usage: !swap <fromAsset> <toAsset> <amount>\nExample: !swap XLM USDC 100');
+            }
+
+            const [fromAsset, toAsset, amountStr] = args;
+            const amount = parseFloat(amountStr);
+
+            if (isNaN(amount) || amount <= 0) {
+              return message.reply('❌ Amount must be a positive number.');
+            }
+
+            try {
+              await message.reply('🔄 Initiating swap...');
+              const response = await this.agentClient.query({
+                userId,
+                query: `swap ${amount} ${fromAsset} to ${toAsset}`
+              });
+
+              const result = response.result;
+              if (typeof result === 'string') {
+                await message.reply(result);
+              } else if ((result as any).successful) {
+                let reply = '✅ **Swap Successful!**\n\n';
+                reply += `**From:** ${(result as any).from} ${(result as any).amount}\n`;
+                reply += `**To:** ${(result as any).to}\n`;
+                reply += `**Estimated Output:** ${(result as any).estimatedOutput}\n`;
+                reply += `**Tx Hash:** \`${(result as any).txHash}\``;
+                await message.reply(reply);
+              } else {
+                await message.reply(`❌ Swap failed: ${(result as any).message || 'Unknown error'}`);
+              }
+            } catch (error) {
+              console.error('Swap command error:', error);
+              await message.reply('❌ Could not complete the swap. Please try again later.');
             }
           })();
         }

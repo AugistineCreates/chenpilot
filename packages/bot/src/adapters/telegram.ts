@@ -13,7 +13,7 @@ const HORIZON_URL = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.
 const DEBOUNCE_MS = 1000; // 1 second debounce between commands
 
 // Commands that involve personal account data and must only be used in DMs
-const DM_ONLY_COMMANDS = ['/balance'];
+const DM_ONLY_COMMANDS = ['/balance', '/swap'];
 
 // Commands that start a wizard
 const WIZARD_COMMANDS = ['/multisig'];
@@ -302,6 +302,54 @@ export class TelegramAdapter {
       }
       
       return next();
+    });
+
+    // #109: Swap command
+    this.bot.command('swap', async (ctx: any) => {
+      const userId = String(ctx.from?.id || 'unknown');
+      await withPerformanceProfiling('/swap', 'telegram', userId, async () => {
+        if (!isDM(ctx)) {
+          await rejectPublicChannel(ctx);
+          return;
+        }
+
+        const args = ctx.message.text.split(' ').slice(1);
+        if (args.length < 3) {
+          return ctx.replyWithHTML('Usage: <code>/swap &lt;fromAsset&gt; &lt;toAsset&gt; &lt;amount&gt;</code>\nExample: <code>/swap XLM USDC 100</code>');
+        }
+
+        const [fromAsset, toAsset, amountStr] = args;
+        const amount = parseFloat(amountStr);
+
+        if (isNaN(amount) || amount <= 0) {
+          return ctx.replyWithHTML('❌ Amount must be a positive number.');
+        }
+
+        try {
+          await ctx.replyWithHTML('🔄 Initiating swap...');
+          const response = await this.agentClient.query({
+            userId,
+            query: `swap ${amount} ${fromAsset} to ${toAsset}`
+          });
+
+          const result = response.result;
+          if (typeof result === 'string') {
+            await ctx.replyWithHTML(result);
+          } else if ((result as any).successful) {
+            let reply = '✅ <b>Swap Successful!</b>\n\n';
+            reply += `<b>From:</b> ${(result as any).from} ${(result as any).amount}\n`;
+            reply += `<b>To:</b> ${(result as any).to}\n`;
+            reply += `<b>Estimated Output:</b> ${(result as any).estimatedOutput}\n`;
+            reply += `<b>Tx Hash:</b> <code>${(result as any).txHash}</code>`;
+            await ctx.replyWithHTML(reply);
+          } else {
+            await ctx.replyWithHTML(`❌ Swap failed: ${(result as any).message || 'Unknown error'}`);
+          }
+        } catch (error) {
+          console.error('Swap command error:', error);
+          await ctx.replyWithHTML('❌ Could not complete the swap. Please try again later.');
+        }
+      })();
     });
 
     // #115: Settings command with WebApp
