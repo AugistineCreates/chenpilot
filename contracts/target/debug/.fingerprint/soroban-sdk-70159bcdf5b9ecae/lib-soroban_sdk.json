@@ -1,1 +1,39 @@
-{"rustc":4643058173861170821,"features":"[\"testutils\"]","declared_features":"[\"alloc\", \"curve25519-dalek\", \"docs\", \"hazmat\", \"testutils\"]","target":1625221161988619007,"profile":2241668132362809309,"path":6302967493981594236,"deps":[[1929691056782483866,"soroban_env_host",false,14206887014845100693],[4842213027971481301,"build_script_build",false,9034488345292635543],[4877901010865624961,"arbitrary",false,16037874804891337375],[5306016253860807931,"ed25519_dalek",false,17729789067084425013],[6606131838865521726,"ctor",false,17493042806212385110],[6839232481333891070,"soroban_sdk_macros",false,3333362849174668842],[9749591605358360692,"bytes_lit",false,16752198708899474978],[10187655140533542017,"derive_arbitrary",false,9186525830692638848],[10445999912041431769,"stellar_strkey",false,4603573807446936263],[13208667028893622512,"rand",false,12675191433371967559],[13548984313718623784,"serde",false,12732875665854219502],[13795362694956882968,"serde_json",false,5957141066125606619],[14299617496515691868,"soroban_ledger_snapshot",false,13598176840744287104]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/soroban-sdk-70159bcdf5b9ecae/dep-lib-soroban_sdk","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"testutils\"]",
+  "declared_features": "[\"alloc\", \"curve25519-dalek\", \"docs\", \"hazmat\", \"testutils\"]",
+  "target": 1625221161988619007,
+  "profile": 2241668132362809309,
+  "path": 6302967493981594236,
+  "deps": [
+    [1929691056782483866, "soroban_env_host", false, 14206887014845100693],
+    [4842213027971481301, "build_script_build", false, 9034488345292635543],
+    [4877901010865624961, "arbitrary", false, 16037874804891337375],
+    [5306016253860807931, "ed25519_dalek", false, 17729789067084425013],
+    [6606131838865521726, "ctor", false, 17493042806212385110],
+    [6839232481333891070, "soroban_sdk_macros", false, 3333362849174668842],
+    [9749591605358360692, "bytes_lit", false, 16752198708899474978],
+    [10187655140533542017, "derive_arbitrary", false, 9186525830692638848],
+    [10445999912041431769, "stellar_strkey", false, 4603573807446936263],
+    [13208667028893622512, "rand", false, 12675191433371967559],
+    [13548984313718623784, "serde", false, 12732875665854219502],
+    [13795362694956882968, "serde_json", false, 5957141066125606619],
+    [
+      14299617496515691868,
+      "soroban_ledger_snapshot",
+      false,
+      13598176840744287104
+    ]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/soroban-sdk-70159bcdf5b9ecae/dep-lib-soroban_sdk",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

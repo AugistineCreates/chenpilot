@@ -14,9 +14,13 @@ import {
 } from "./realtimeIntegration";
 
 async function main() {
-  console.log("\n╔═══════════════════════════════════════════════════════════╗");
+  console.log(
+    "\n╔═══════════════════════════════════════════════════════════╗"
+  );
   console.log("║     Socket.io Standalone Test - Core Functionality       ║");
-  console.log("╚═══════════════════════════════════════════════════════════╝\n");
+  console.log(
+    "╚═══════════════════════════════════════════════════════════╝\n"
+  );
 
   try {
     // Create a minimal HTTP server just for Socket.io
@@ -73,7 +77,13 @@ async function main() {
     TransactionUpdateHelper.notifyCreated(txId, "hash_abc123", userId);
     console.log("      ✓ transaction:created emitted");
 
-    TransactionUpdateHelper.notifyConfirmed(txId, "hash_abc123", 12345, 1200, userId);
+    TransactionUpdateHelper.notifyConfirmed(
+      txId,
+      "hash_abc123",
+      12345,
+      1200,
+      userId
+    );
     console.log("      ✓ transaction:confirmed emitted");
 
     TransactionUpdateHelper.notifyFailed(txId, "Insufficient balance", userId);
@@ -94,7 +104,12 @@ async function main() {
     SwapUpdateHelper.notifyStarted("swap_123", "hash_swap", userId);
     console.log("      ✓ swap started event emitted");
 
-    SwapUpdateHelper.notifyCompleted("swap_123", "hash_swap", { output: "95.5" }, userId);
+    SwapUpdateHelper.notifyCompleted(
+      "swap_123",
+      "hash_swap",
+      { output: "95.5" },
+      userId
+    );
     console.log("      ✓ swap completed event emitted");
 
     // Test Deployment Events
@@ -104,19 +119,37 @@ async function main() {
     DeploymentUpdateHelper.notifyStarted(deploymentId, userId);
     console.log("      ✓ deployment started event emitted");
 
-    DeploymentUpdateHelper.notifyProgress(deploymentId, 25, "Initializing...", userId);
+    DeploymentUpdateHelper.notifyProgress(
+      deploymentId,
+      25,
+      "Initializing...",
+      userId
+    );
     console.log("      ✓ deployment:status (25%) emitted");
 
-    DeploymentUpdateHelper.notifyProgress(deploymentId, 75, "Building...", userId);
+    DeploymentUpdateHelper.notifyProgress(
+      deploymentId,
+      75,
+      "Building...",
+      userId
+    );
     console.log("      ✓ deployment:status (75%) emitted");
 
-    DeploymentUpdateHelper.notifyCompleted(deploymentId, userId, { contractAddress: "0x123" });
+    DeploymentUpdateHelper.notifyCompleted(deploymentId, userId, {
+      contractAddress: "0x123",
+    });
     console.log("      ✓ deployment:status (success) emitted");
 
     // Summary
-    console.log("\n╔═══════════════════════════════════════════════════════════╗");
-    console.log("║                   ✅ ALL TESTS PASSED                      ║");
-    console.log("╚═══════════════════════════════════════════════════════════╝\n");
+    console.log(
+      "\n╔═══════════════════════════════════════════════════════════╗"
+    );
+    console.log(
+      "║                   ✅ ALL TESTS PASSED                      ║"
+    );
+    console.log(
+      "╚═══════════════════════════════════════════════════════════╝\n"
+    );
 
     console.log("Summary:");
     console.log(`  Total events emitted: ${emittedEvents.length}`);

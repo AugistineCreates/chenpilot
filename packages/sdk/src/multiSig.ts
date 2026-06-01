@@ -42,10 +42,7 @@ export class MultiSigBuilder {
    * @param masterAccount - The master account address
    * @param options - Optional configuration for the builder
    */
-  constructor(
-    masterAccount: string,
-    options: MultiSigBuilderOptions = {}
-  ) {
+  constructor(masterAccount: string, options: MultiSigBuilderOptions = {}) {
     this.masterAccount = masterAccount;
     this.options = {
       autoValidate: options.autoValidate ?? true,
@@ -227,9 +224,7 @@ export class MultiSigBuilder {
     // Check for signers with zero weight
     const zeroWeightSigners = this.signers.filter((s) => s.weight === 0);
     if (zeroWeightSigners.length > 0) {
-      warnings.push(
-        `${zeroWeightSigners.length} signer(s) have zero weight`
-      );
+      warnings.push(`${zeroWeightSigners.length} signer(s) have zero weight`);
     }
 
     // Check if any threshold can be met

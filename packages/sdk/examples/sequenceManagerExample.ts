@@ -1,15 +1,12 @@
 /**
  * Sequence Manager Example
- * 
+ *
  * Demonstrates how to use the Sequence Manager for concurrent
  * Stellar transaction submissions
  */
 
 import * as StellarSdk from "@stellar/stellar-sdk";
-import {
-  SequenceManager,
-  createStellarSequenceHelper,
-} from "../src";
+import { SequenceManager, createStellarSequenceHelper } from "../src";
 
 // Example 1: Basic Usage
 async function basicExample() {
@@ -86,7 +83,9 @@ async function concurrentExample() {
         }
       );
 
-      console.log(`Transaction ${i + 1} built with sequence: ${managed.sequence}`);
+      console.log(
+        `Transaction ${i + 1} built with sequence: ${managed.sequence}`
+      );
 
       return {
         index: i + 1,
@@ -107,7 +106,9 @@ async function concurrentExample() {
 
   console.log("\nResults:");
   results.forEach((result) => {
-    console.log(`  Transaction ${result.index}: ${result.status} (seq: ${result.sequence || "N/A"})`);
+    console.log(
+      `  Transaction ${result.index}: ${result.status} (seq: ${result.sequence || "N/A"})`
+    );
   });
 
   // Show statistics
@@ -148,7 +149,11 @@ async function lifecycleExample() {
   console.log("2. Reserved sequence:", transaction?.sequence);
 
   // Mark as submitted
-  await sequenceManager.markSubmitted(accountId, sequenceInfo.next, "txhash123");
+  await sequenceManager.markSubmitted(
+    accountId,
+    sequenceInfo.next,
+    "txhash123"
+  );
   console.log("3. Marked as submitted");
 
   // Check pending
@@ -221,7 +226,10 @@ async function errorHandlingExample() {
       success = true;
       console.log("  Success!");
     } catch (error) {
-      console.error(`  Failed:`, error instanceof Error ? error.message : error);
+      console.error(
+        `  Failed:`,
+        error instanceof Error ? error.message : error
+      );
 
       if (attempt < maxRetries) {
         console.log("  Refreshing sequence and retrying...");
@@ -270,7 +278,9 @@ async function monitoringExample() {
     console.log(`  ${stat.accountId}:`);
     console.log(`    Pending: ${stat.pendingCount}`);
     console.log(`    Cache age: ${stat.cacheAge}ms`);
-    console.log(`    Last fetched: ${new Date(stat.lastFetched).toISOString()}`);
+    console.log(
+      `    Last fetched: ${new Date(stat.lastFetched).toISOString()}`
+    );
   });
 
   console.log();

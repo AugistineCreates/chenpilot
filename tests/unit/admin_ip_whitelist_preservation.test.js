@@ -70,22 +70,22 @@ function createMockRequest(ip, user) {
         },
         socket: {
             remoteAddress: ip,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         user: user,
     };
 }
 // Helper to create mock response
 function createMockResponse() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let jsonData = null;
     const res = {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         status: jest.fn((_code) => {
             return res;
         }),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         json: jest.fn((data) => {
             jsonData = data;
             return res;
@@ -122,7 +122,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res } = createMockResponse();
             const next = jest.fn();
             const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             middleware(req, res, next);
             // EXPECTED: next() should be called (IP is whitelisted)
             expect(next).toHaveBeenCalled();
@@ -135,7 +135,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res } = createMockResponse();
             const next = jest.fn();
             const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             middleware(req, res, next);
             // EXPECTED: next() should be called (IP is whitelisted)
             expect(next).toHaveBeenCalled();
@@ -148,7 +148,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res } = createMockResponse();
             const next = jest.fn();
             const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             middleware(req, res, next);
             // EXPECTED: next() should be called (IP is whitelisted)
             expect(next).toHaveBeenCalled();
@@ -169,7 +169,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
                 const { res } = createMockResponse();
                 const next = jest.fn();
                 const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 middleware(req, res, next);
                 // EXPECTED: next() should be called (IP is in whitelisted range)
                 expect(next).toHaveBeenCalled();
@@ -193,7 +193,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res } = createMockResponse();
             const next = jest.fn();
             const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             middleware(req, res, next);
             // EXPECTED: next() should be called (backward compatibility - no IP restriction)
             expect(next).toHaveBeenCalled();
@@ -206,7 +206,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res } = createMockResponse();
             const next = jest.fn();
             const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             middleware(req, res, next);
             // EXPECTED: next() should be called (backward compatibility)
             expect(next).toHaveBeenCalled();
@@ -227,7 +227,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
                 const { res } = createMockResponse();
                 const next = jest.fn();
                 const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 middleware(req, res, next);
                 // EXPECTED: next() should be called (backward compatibility)
                 expect(next).toHaveBeenCalled();
@@ -254,7 +254,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res, getJsonData } = createMockResponse();
             const next = jest.fn();
             // Test requireAdmin middleware (RBAC check)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (0, rbac_middleware_1.requireAdmin)(req, res, next);
             // EXPECTED: 403 from RBAC (user is not admin)
             expect(next).not.toHaveBeenCalled();
@@ -271,7 +271,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res, getJsonData } = createMockResponse();
             const next = jest.fn();
             // Test requireAdmin middleware (RBAC check)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (0, rbac_middleware_1.requireAdmin)(req, res, next);
             // EXPECTED: 403 from RBAC (user is not admin)
             expect(next).not.toHaveBeenCalled();
@@ -288,7 +288,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res, getJsonData } = createMockResponse();
             const next = jest.fn();
             // Test requireAdmin middleware (RBAC check)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             (0, rbac_middleware_1.requireAdmin)(req, res, next);
             // EXPECTED: 403 from RBAC (user is not admin)
             expect(next).not.toHaveBeenCalled();
@@ -313,7 +313,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
                 const { res, getJsonData } = createMockResponse();
                 const next = jest.fn();
                 // Test requireAdmin middleware (RBAC check)
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 (0, rbac_middleware_1.requireAdmin)(req, res, next);
                 // EXPECTED: 403 from RBAC (user is not admin)
                 expect(next).not.toHaveBeenCalled();
@@ -341,13 +341,13 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
                 },
                 socket: {
                     remoteAddress: "10.0.0.1",
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                     
                 },
             };
             const { res } = createMockResponse();
             const next = jest.fn();
             const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             middleware(req, res, next);
             // EXPECTED: next() should be called (first IP is whitelisted)
             expect(next).toHaveBeenCalled();
@@ -360,7 +360,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res } = createMockResponse();
             const next = jest.fn();
             const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             middleware(req, res, next);
             // EXPECTED: next() should be called (IP matches /32 CIDR)
             expect(next).toHaveBeenCalled();
@@ -373,7 +373,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res } = createMockResponse();
             const next = jest.fn();
             const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             middleware(req, res, next);
             // EXPECTED: next() should be called (IP is in /16 range)
             expect(next).toHaveBeenCalled();
@@ -386,7 +386,7 @@ describe("Preservation Property Tests: Admin IP Whitelist Enforcement", () => {
             const { res } = createMockResponse();
             const next = jest.fn();
             const middleware = (0, ipWhitelist_middleware_1.requireAdminWithIpWhitelist)();
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             middleware(req, res, next);
             // EXPECTED: next() should be called (IPv6 is in range)
             expect(next).toHaveBeenCalled();

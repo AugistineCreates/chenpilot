@@ -88,12 +88,14 @@ async findOptimalPath(
 ```
 
 **Options:**
+
 - `maxHops`: Maximum intermediate hops (default: 5)
 - `minDestinationAmount`: Minimum acceptable output
 - `includeAssets`: Specific assets to include in paths
 - `timeout`: Timeout in milliseconds (default: 10000)
 
 **Returns:**
+
 - `bestPath`: Optimal trading path with full metrics
 - `allPaths`: All discovered paths sorted by efficiency
 - `evaluationTime`: Time taken to evaluate (ms)
@@ -104,6 +106,7 @@ async findOptimalPath(
 **Tool Name:** `multi_hop_trade`
 
 **Parameters:**
+
 - `fromAsset` (required): Source asset symbol (XLM, USDC, USDT)
 - `toAsset` (required): Destination asset symbol
 - `amount` (required): Amount to trade
@@ -111,6 +114,7 @@ async findOptimalPath(
 - `executeOptimal` (optional): Execute best path (default: false)
 
 **Response:**
+
 ```typescript
 {
   action: "multi_hop_trade",
@@ -146,12 +150,12 @@ async findOptimalPath(
 ### 1. Direct Service Usage
 
 ```typescript
-import { multiHopPathFinder } from './services/multiHopPathFinder';
+import { multiHopPathFinder } from "./services/multiHopPathFinder";
 
 const result = await multiHopPathFinder.findOptimalPath(
   sourceAsset,
   destAsset,
-  '100.0000000',
+  "100.0000000",
   { maxHops: 3 }
 );
 ```
@@ -159,11 +163,11 @@ const result = await multiHopPathFinder.findOptimalPath(
 ### 2. Price Service
 
 ```typescript
-import stellarPriceService from './services/stellarPrice.service';
+import stellarPriceService from "./services/stellarPrice.service";
 
 const quote = await stellarPriceService.getPriceWithMultiHop(
-  'XLM',
-  'USDC',
+  "XLM",
+  "USDC",
   100,
   5
 );
@@ -172,12 +176,12 @@ const quote = await stellarPriceService.getPriceWithMultiHop(
 ### 3. Agent Tool
 
 ```typescript
-import { toolRegistry } from './Agents/registry/ToolRegistry';
+import { toolRegistry } from "./Agents/registry/ToolRegistry";
 
 const result = await toolRegistry.executeTool(
-  'multi_hop_trade',
-  { fromAsset: 'XLM', toAsset: 'USDC', amount: 100 },
-  'user-id'
+  "multi_hop_trade",
+  { fromAsset: "XLM", toAsset: "USDC", amount: 100 },
+  "user-id"
 );
 ```
 
@@ -201,17 +205,20 @@ Agent: Uses multi_hop_trade tool to evaluate paths
 ## Supported Assets
 
 Currently supports:
+
 - **XLM**: Native Stellar Lumens
 - **USDC**: Circle USD Coin (GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN)
 - **USDT**: Tether USD (GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V)
 
 To add more assets, update the `STELLAR_ASSETS` constant in:
+
 - `src/Agents/tools/multiHopTradeTool.ts`
 - `src/services/stellarPrice.service.ts`
 
 ## Files Created/Modified
 
 ### New Files
+
 - `src/services/multiHopPathFinder.ts` (280 lines)
 - `src/Agents/tools/multiHopTradeTool.ts` (150 lines)
 - `tests/unit/multiHopPathFinder.test.ts` (180 lines)
@@ -220,6 +227,7 @@ To add more assets, update the `STELLAR_ASSETS` constant in:
 - `examples/multiHopTradeExample.ts` (350 lines)
 
 ### Modified Files
+
 - `src/services/stellarPrice.service.ts` - Added multi-hop integration
 - `src/Agents/registry/ToolAutoDiscovery.ts` - Registered new tool
 
@@ -230,12 +238,15 @@ To add more assets, update the `STELLAR_ASSETS` constant in:
 ```typescript
 const result = await multiHopPathFinder.findOptimalPath(
   StellarSdk.Asset.native(),
-  new StellarSdk.Asset('USDC', 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'),
-  '100.0000000'
+  new StellarSdk.Asset(
+    "USDC",
+    "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+  ),
+  "100.0000000"
 );
 
-console.log('Best path:', result.bestPath.route.join(' → '));
-console.log('Efficiency:', result.bestPath.efficiency);
+console.log("Best path:", result.bestPath.route.join(" → "));
+console.log("Efficiency:", result.bestPath.efficiency);
 ```
 
 ### Example 2: Compare Paths
@@ -254,17 +265,17 @@ result.allPaths.forEach((path, i) => {
 
 ```typescript
 const result = await toolRegistry.executeTool(
-  'multi_hop_trade',
+  "multi_hop_trade",
   {
-    fromAsset: 'XLM',
-    toAsset: 'USDC',
+    fromAsset: "XLM",
+    toAsset: "USDC",
     amount: 100,
-    maxHops: 3
+    maxHops: 3,
   },
-  'user-id'
+  "user-id"
 );
 
-console.log('Recommendation:', result.data.recommendation);
+console.log("Recommendation:", result.data.recommendation);
 ```
 
 ## Future Enhancements

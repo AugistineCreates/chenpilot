@@ -55,7 +55,8 @@ export class MultiHopTradeTool extends BaseTool<MultiHopTradePayload> {
       },
       executeOptimal: {
         type: "boolean",
-        description: "Whether to execute the optimal path (default: false, only evaluate)",
+        description:
+          "Whether to execute the optimal path (default: false, only evaluate)",
         required: false,
       },
     },
@@ -150,7 +151,8 @@ export class MultiHopTradeTool extends BaseTool<MultiHopTradePayload> {
       return {
         action: "multi_hop_trade",
         status: "error",
-        error: error instanceof Error ? error.message : "Unknown error occurred",
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
       };
     }
   }

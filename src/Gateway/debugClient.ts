@@ -37,7 +37,7 @@ async function main() {
     console.log("✅ CONNECTED SUCCESSFULLY!");
     console.log("✅ Socket ID:", socket.id);
     console.log("✅ ============================================\n");
-    
+
     // Send authentication
     socket.emit("authenticate", userId);
     console.log("🔐 Authentication sent\n");

@@ -43,7 +43,8 @@ describe("SequenceManager", () => {
     });
 
     it("should refresh after cache TTL expires", async () => {
-      const fetchSequence = jest.fn()
+      const fetchSequence = jest
+        .fn()
         .mockResolvedValueOnce("100")
         .mockResolvedValueOnce("105");
 
@@ -94,11 +95,9 @@ describe("SequenceManager", () => {
 
   describe("reserveSequence", () => {
     it("should reserve a sequence number", async () => {
-      const transaction = await manager.reserveSequence(
-        testAccountId,
-        "101",
-        { type: "payment" }
-      );
+      const transaction = await manager.reserveSequence(testAccountId, "101", {
+        type: "payment",
+      });
 
       expect(transaction).not.toBeNull();
       expect(transaction?.sequence).toBe("101");
@@ -250,7 +249,8 @@ describe("SequenceManager", () => {
 
   describe("refreshSequence", () => {
     it("should force refresh from network", async () => {
-      const fetchSequence = jest.fn()
+      const fetchSequence = jest
+        .fn()
         .mockResolvedValueOnce("100")
         .mockResolvedValueOnce("105");
 
@@ -344,7 +344,10 @@ describe("SequenceManager", () => {
 
       // Simulate 50 concurrent transaction requests
       const promises = Array.from({ length: 50 }, async (_, i) => {
-        const info = await manager.getNextSequence(testAccountId, fetchSequence);
+        const info = await manager.getNextSequence(
+          testAccountId,
+          fetchSequence
+        );
         await manager.reserveSequence(testAccountId, info.next);
         return info.next;
       });

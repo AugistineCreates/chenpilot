@@ -113,7 +113,9 @@ export class MultiHopPathFinder {
 
       for (const record of strictSendPaths.records) {
         if (record.path.length <= maxHops) {
-          paths.push(this.convertStrictSendPath(record, sourceAsset, destinationAsset));
+          paths.push(
+            this.convertStrictSendPath(record, sourceAsset, destinationAsset)
+          );
         }
       }
     } catch (error) {
@@ -123,17 +125,15 @@ export class MultiHopPathFinder {
     // Try strict receive paths for comparison
     try {
       const strictReceivePaths = await this.server
-        .strictReceivePaths(
-          [sourceAsset],
-          destinationAsset,
-          amount
-        )
+        .strictReceivePaths([sourceAsset], destinationAsset, amount)
         .limit(20)
         .call();
 
       for (const record of strictReceivePaths.records) {
         if (record.path.length <= maxHops) {
-          paths.push(this.convertStrictReceivePath(record, sourceAsset, destinationAsset));
+          paths.push(
+            this.convertStrictReceivePath(record, sourceAsset, destinationAsset)
+          );
         }
       }
     } catch (error) {
@@ -151,7 +151,11 @@ export class MultiHopPathFinder {
     sourceAsset: StellarSdk.Asset,
     destinationAsset: StellarSdk.Asset
   ): TradePath {
-    const path = [sourceAsset, ...record.path.map(this.parseAsset), destinationAsset];
+    const path = [
+      sourceAsset,
+      ...record.path.map(this.parseAsset),
+      destinationAsset,
+    ];
     const route = path.map((asset) => this.assetToString(asset));
 
     return {
@@ -174,7 +178,11 @@ export class MultiHopPathFinder {
     sourceAsset: StellarSdk.Asset,
     destinationAsset: StellarSdk.Asset
   ): TradePath {
-    const path = [sourceAsset, ...record.path.map(this.parseAsset), destinationAsset];
+    const path = [
+      sourceAsset,
+      ...record.path.map(this.parseAsset),
+      destinationAsset,
+    ];
     const route = path.map((asset) => this.assetToString(asset));
 
     return {
@@ -197,7 +205,11 @@ export class MultiHopPathFinder {
       paths.map(async (path) => {
         const priceImpact = this.calculatePriceImpact(path);
         const estimatedSlippage = this.estimateSlippage(path);
-        const efficiency = this.calculateEfficiency(path, priceImpact, estimatedSlippage);
+        const efficiency = this.calculateEfficiency(
+          path,
+          priceImpact,
+          estimatedSlippage
+        );
 
         return {
           ...path,
@@ -222,7 +234,7 @@ export class MultiHopPathFinder {
 
     const effectiveRate = destinationAmount / sourceAmount;
     const hopPenalty = path.hops * 0.003;
-    
+
     return hopPenalty * 100;
   }
 
@@ -232,7 +244,7 @@ export class MultiHopPathFinder {
   private estimateSlippage(path: TradePath): number {
     const baseSlippage = 0.001;
     const hopMultiplier = Math.pow(1.5, path.hops - 1);
-    
+
     return baseSlippage * hopMultiplier;
   }
 
@@ -249,8 +261,9 @@ export class MultiHopPathFinder {
     const impactPenalty = priceImpact / 100;
     const slippagePenalty = slippage * 10;
 
-    const efficiency = destinationAmount * (1 - hopPenalty - impactPenalty - slippagePenalty);
-    
+    const efficiency =
+      destinationAmount * (1 - hopPenalty - impactPenalty - slippagePenalty);
+
     return Math.max(0, efficiency);
   }
 

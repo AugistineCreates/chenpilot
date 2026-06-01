@@ -142,7 +142,7 @@ export class TransactionHistoryService {
    */
   private generateCacheKey(
     userId: string,
-    params: TransactionQueryParams,
+    params: TransactionQueryParams
   ): string {
     return `${userId}-${JSON.stringify(params)}`;
   }
@@ -151,7 +151,7 @@ export class TransactionHistoryService {
    * Get cached data if available and not expired
    */
   private getCachedData(
-    cacheKey: string,
+    cacheKey: string
   ): PaginatedTransactionsResponse | null {
     const entry = this.cache.get(cacheKey);
     if (!entry) {
@@ -172,7 +172,7 @@ export class TransactionHistoryService {
    */
   private setCachedData(
     cacheKey: string,
-    data: PaginatedTransactionsResponse,
+    data: PaginatedTransactionsResponse
   ): void {
     this.cache.set(cacheKey, {
       data,
@@ -213,7 +213,7 @@ export class TransactionHistoryService {
    * Determine transaction type based on operations
    */
   private determineTransactionType(
-    operations: HorizonOperation[],
+    operations: HorizonOperation[]
   ): TransactionType {
     for (const op of operations) {
       switch (op.type) {
@@ -244,7 +244,7 @@ export class TransactionHistoryService {
    */
   private normalizeTransaction(
     tx: HorizonTransaction,
-    effects: HorizonEffect[],
+    effects: HorizonEffect[]
   ): TransactionHistoryItem {
     const type = this.determineTransactionType(tx.operations);
 
@@ -290,7 +290,7 @@ export class TransactionHistoryService {
    */
   private filterByType(
     transactions: TransactionHistoryItem[],
-    type: TransactionType,
+    type: TransactionType
   ): TransactionHistoryItem[] {
     if (type === "all") {
       return transactions;
@@ -304,7 +304,7 @@ export class TransactionHistoryService {
   private filterByDate(
     transactions: TransactionHistoryItem[],
     startDate?: string,
-    endDate?: string,
+    endDate?: string
   ): TransactionHistoryItem[] {
     let filtered = transactions;
 
@@ -327,7 +327,7 @@ export class TransactionHistoryService {
   private async fetchTransactions(
     address: string,
     limit: number,
-    cursor?: string,
+    cursor?: string
   ): Promise<{ transactions: HorizonTransaction[]; nextCursor?: string }> {
     try {
       const builder = this.server
@@ -353,7 +353,7 @@ export class TransactionHistoryService {
     } catch (error) {
       console.error("Error fetching transactions from Horizon:", error);
       throw new Error(
-        `Failed to fetch transactions: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Failed to fetch transactions: ${error instanceof Error ? error.message : "Unknown error"}`
       );
     }
   }
@@ -362,7 +362,7 @@ export class TransactionHistoryService {
    * Fetch effects for a transaction
    */
   private async fetchEffects(
-    transactionHash: string,
+    transactionHash: string
   ): Promise<HorizonEffect[]> {
     try {
       const response = await this.server
@@ -373,7 +373,7 @@ export class TransactionHistoryService {
     } catch (error) {
       console.error(
         `Error fetching effects for transaction ${transactionHash}:`,
-        error,
+        error
       );
       return [];
     }
@@ -384,7 +384,7 @@ export class TransactionHistoryService {
    */
   public async getTransactionHistory(
     userId: string,
-    params: TransactionQueryParams = {},
+    params: TransactionQueryParams = {}
   ): Promise<PaginatedTransactionsResponse> {
     // Check cache first
     const cacheKey = this.generateCacheKey(userId, params);
@@ -414,7 +414,7 @@ export class TransactionHistoryService {
       horizonTxs.map(async (tx) => {
         const effects = await this.fetchEffects(tx.hash);
         return this.normalizeTransaction(tx, effects);
-      }),
+      })
     );
 
     // Apply filters
@@ -423,7 +423,7 @@ export class TransactionHistoryService {
     if (params.type) {
       filteredTransactions = this.filterByType(
         filteredTransactions,
-        params.type,
+        params.type
       );
     }
 
@@ -431,7 +431,7 @@ export class TransactionHistoryService {
       filteredTransactions = this.filterByDate(
         filteredTransactions,
         params.startDate,
-        params.endDate,
+        params.endDate
       );
     }
 

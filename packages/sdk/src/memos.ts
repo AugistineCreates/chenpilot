@@ -31,7 +31,9 @@ export function validateMemoReturn(value: string): boolean {
  */
 export function buildMemoHash(value: string): Buffer {
   if (!validateMemoHash(value)) {
-    throw new Error("Invalid Hash memo: must be a 64-character hex string (32 bytes)");
+    throw new Error(
+      "Invalid Hash memo: must be a 64-character hex string (32 bytes)"
+    );
   }
   return Buffer.from(value, "hex");
 }
@@ -44,7 +46,9 @@ export function buildMemoHash(value: string): Buffer {
  */
 export function buildMemoReturn(value: string): Buffer {
   if (!validateMemoReturn(value)) {
-    throw new Error("Invalid Return memo: must be a 64-character hex string (32 bytes)");
+    throw new Error(
+      "Invalid Return memo: must be a 64-character hex string (32 bytes)"
+    );
   }
   return Buffer.from(value, "hex");
 }

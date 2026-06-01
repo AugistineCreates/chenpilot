@@ -35,68 +35,68 @@ The Multi-Hop Trade Path Evaluation feature identifies the most efficient tradin
 ### Using the Service Directly
 
 ```typescript
-import { multiHopPathFinder } from './services/multiHopPathFinder';
-import * as StellarSdk from '@stellar/stellar-sdk';
+import { multiHopPathFinder } from "./services/multiHopPathFinder";
+import * as StellarSdk from "@stellar/stellar-sdk";
 
 const sourceAsset = StellarSdk.Asset.native(); // XLM
 const destAsset = new StellarSdk.Asset(
-  'USDC',
-  'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'
+  "USDC",
+  "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
 );
 
 const result = await multiHopPathFinder.findOptimalPath(
   sourceAsset,
   destAsset,
-  '100.0000000',
+  "100.0000000",
   {
     maxHops: 5,
-    timeout: 10000
+    timeout: 10000,
   }
 );
 
-console.log('Best Path:', result.bestPath);
-console.log('All Paths:', result.allPaths);
-console.log('Evaluation Time:', result.evaluationTime, 'ms');
+console.log("Best Path:", result.bestPath);
+console.log("All Paths:", result.allPaths);
+console.log("Evaluation Time:", result.evaluationTime, "ms");
 ```
 
 ### Using the Agent Tool
 
 ```typescript
-import { toolRegistry } from './Agents/registry/ToolRegistry';
+import { toolRegistry } from "./Agents/registry/ToolRegistry";
 
 const result = await toolRegistry.executeTool(
-  'multi_hop_trade',
+  "multi_hop_trade",
   {
-    fromAsset: 'XLM',
-    toAsset: 'USDC',
+    fromAsset: "XLM",
+    toAsset: "USDC",
     amount: 100,
-    maxHops: 3
+    maxHops: 3,
   },
-  'user-id'
+  "user-id"
 );
 
 if (result.success) {
-  console.log('Best Path:', result.data.bestPath);
-  console.log('Alternative Paths:', result.data.alternativePaths);
-  console.log('Recommendation:', result.data.recommendation);
+  console.log("Best Path:", result.data.bestPath);
+  console.log("Alternative Paths:", result.data.alternativePaths);
+  console.log("Recommendation:", result.data.recommendation);
 }
 ```
 
 ### Using the Price Service
 
 ```typescript
-import stellarPriceService from './services/stellarPrice.service';
+import stellarPriceService from "./services/stellarPrice.service";
 
 const quote = await stellarPriceService.getPriceWithMultiHop(
-  'XLM',
-  'USDC',
+  "XLM",
+  "USDC",
   100,
   5 // maxHops
 );
 
-console.log('Price:', quote.price);
-console.log('Path:', quote.path);
-console.log('Multi-hop Analysis:', quote.multiHopAnalysis);
+console.log("Price:", quote.price);
+console.log("Path:", quote.path);
+console.log("Multi-hop Analysis:", quote.multiHopAnalysis);
 ```
 
 ## Response Structure
@@ -152,12 +152,14 @@ console.log('Multi-hop Analysis:', quote.multiHopAnalysis);
 ### Efficiency Score
 
 The efficiency score combines multiple factors:
+
 - **Destination Amount**: Higher output is better
 - **Hop Penalty**: Each hop reduces efficiency by 10%
 - **Price Impact**: Higher impact reduces efficiency
 - **Slippage**: Higher slippage reduces efficiency
 
 Formula:
+
 ```
 efficiency = destinationAmount × (1 - hopPenalty - impactPenalty - slippagePenalty)
 ```
@@ -165,12 +167,14 @@ efficiency = destinationAmount × (1 - hopPenalty - impactPenalty - slippagePena
 ### Price Impact
 
 Calculated based on:
+
 - Number of hops (0.3% per hop)
 - Path complexity
 
 ### Estimated Slippage
 
 Calculated using:
+
 - Base slippage: 0.1%
 - Hop multiplier: 1.5^(hops-1)
 
@@ -180,21 +184,23 @@ Calculated using:
 
 ```typescript
 interface PathFinderOptions {
-  maxHops?: number;           // Maximum hops (default: 5)
-  minDestinationAmount?: string;  // Minimum acceptable output
-  includeAssets?: Asset[];    // Specific assets to include
-  timeout?: number;           // Timeout in ms (default: 10000)
+  maxHops?: number; // Maximum hops (default: 5)
+  minDestinationAmount?: string; // Minimum acceptable output
+  includeAssets?: Asset[]; // Specific assets to include
+  timeout?: number; // Timeout in ms (default: 10000)
 }
 ```
 
 ### Supported Assets
 
 Currently supports:
+
 - **XLM**: Native Stellar asset
 - **USDC**: Circle USD Coin
 - **USDT**: Tether USD
 
 To add more assets, update the `STELLAR_ASSETS` constant in:
+
 - `src/Agents/tools/multiHopTradeTool.ts`
 - `src/services/stellarPrice.service.ts`
 
@@ -252,8 +258,8 @@ The tool is automatically available to the agent planner:
 ```typescript
 // Agent can now use multi-hop evaluation in workflows
 const plan = await agentPlanner.createPlan({
-  userId: 'user-id',
-  userInput: 'Find the best path to swap 100 XLM to USDC'
+  userId: "user-id",
+  userInput: "Find the best path to swap 100 XLM to USDC",
 });
 ```
 
@@ -282,6 +288,7 @@ const plan = await agentPlanner.createPlan({
 ```
 
 **Solutions**:
+
 - Check asset liquidity on Stellar DEX
 - Verify asset codes and issuers
 - Increase maxHops parameter
@@ -294,6 +301,7 @@ const plan = await agentPlanner.createPlan({
 ```
 
 **Solutions**:
+
 - Reduce maxHops
 - Increase timeout parameter
 - Check Horizon server performance
@@ -301,11 +309,13 @@ const plan = await agentPlanner.createPlan({
 ### Low Efficiency Scores
 
 **Causes**:
+
 - High number of hops
 - Low liquidity
 - Wide spreads
 
 **Solutions**:
+
 - Consider direct paths
 - Split large trades
 - Wait for better liquidity
@@ -313,6 +323,7 @@ const plan = await agentPlanner.createPlan({
 ## API Reference
 
 See inline documentation in:
+
 - `src/services/multiHopPathFinder.ts`
 - `src/Agents/tools/multiHopTradeTool.ts`
 - `src/services/stellarPrice.service.ts`

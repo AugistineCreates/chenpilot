@@ -1,1 +1,20 @@
-{"rustc":4643058173861170821,"features":"[\"testutils\"]","declared_features":"[\"alloc\", \"curve25519-dalek\", \"docs\", \"hazmat\", \"testutils\"]","target":5408242616063297496,"profile":2225463790103693989,"path":8925431059008579632,"deps":[[8576480473721236041,"rustc_version",false,7339652303031365484]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/soroban-sdk-0df1a3598d2e8e2f/dep-build-script-build-script-build","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"testutils\"]",
+  "declared_features": "[\"alloc\", \"curve25519-dalek\", \"docs\", \"hazmat\", \"testutils\"]",
+  "target": 5408242616063297496,
+  "profile": 2225463790103693989,
+  "path": 8925431059008579632,
+  "deps": [[8576480473721236041, "rustc_version", false, 7339652303031365484]],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/soroban-sdk-0df1a3598d2e8e2f/dep-build-script-build-script-build",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

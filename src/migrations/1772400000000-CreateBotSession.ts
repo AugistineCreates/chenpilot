@@ -1,4 +1,10 @@
-import { MigrationInterface, QueryRunner, Table, TableIndex, TableForeignKey } from "typeorm";
+import {
+  MigrationInterface,
+  QueryRunner,
+  Table,
+  TableIndex,
+  TableForeignKey,
+} from "typeorm";
 
 export class CreateBotSession1772400000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -121,9 +127,18 @@ export class CreateBotSession1772400000000 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Drop indexes
     await queryRunner.dropIndex("bot_session", "IDX_bot_session_userId");
-    await queryRunner.dropIndex("bot_session", "IDX_bot_session_userId_createdAt");
-    await queryRunner.dropIndex("bot_session", "IDX_bot_session_sessionType_createdAt");
-    await queryRunner.dropIndex("bot_session", "IDX_bot_session_platform_userId_expiresAt");
+    await queryRunner.dropIndex(
+      "bot_session",
+      "IDX_bot_session_userId_createdAt"
+    );
+    await queryRunner.dropIndex(
+      "bot_session",
+      "IDX_bot_session_sessionType_createdAt"
+    );
+    await queryRunner.dropIndex(
+      "bot_session",
+      "IDX_bot_session_platform_userId_expiresAt"
+    );
     await queryRunner.dropIndex("bot_session", "IDX_bot_session_createdAt");
     await queryRunner.dropIndex("bot_session", "IDX_bot_session_updatedAt");
 

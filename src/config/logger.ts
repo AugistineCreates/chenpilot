@@ -172,8 +172,8 @@ export const logError = (
     error instanceof Error
       ? { error: error.message, stack: error.stack }
       : error
-      ? { error: String(error) }
-      : {};
+        ? { error: String(error) }
+        : {};
 
   logger.error(message, { ...errorInfo, ...meta });
 };

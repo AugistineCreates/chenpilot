@@ -79,6 +79,7 @@ const manager = new StellarMetadataManager({
 Prepare a transaction to store metadata on an account.
 
 **Parameters:**
+
 - `accountId`: Stellar account address
 - `key`: Metadata key (alphanumeric, underscores, hyphens; max 128 chars)
 - `value`: Metadata value (max 4KB)
@@ -88,6 +89,7 @@ Prepare a transaction to store metadata on an account.
 **Returns:** Transaction XDR string (ready for signing and submission)
 
 **Example:**
+
 ```typescript
 const manager = createMetadataManager();
 
@@ -106,12 +108,14 @@ const txn = await manager.prepareSetMetadata({
 Retrieve metadata for an account.
 
 **Parameters:**
+
 - `accountId`: Stellar account address
 - `key`: Metadata key to retrieve
 
 **Returns:** MetadataEntry or null if not found (or expired)
 
 **Example:**
+
 ```typescript
 const metadata = await manager.getMetadata({
   accountId: "GADDM5YJRQYHCR46JQKKGV5JBHIIJ3IXVJ3BBQFN5PLMVFXXUTDBWZF",
@@ -130,16 +134,18 @@ if (metadata) {
 List all metadata entries for an account.
 
 **Parameters:**
+
 - `accountId`: Stellar account address
 
 **Returns:** MetadataListResponse with all non-expired entries
 
 **Example:**
+
 ```typescript
 const response = await manager.listMetadata(accountId);
 
 console.log(`Total entries: ${response.total}`);
-response.metadata.forEach(entry => {
+response.metadata.forEach((entry) => {
   console.log(`${entry.key}: ${entry.value.substring(0, 50)}`);
 });
 ```
@@ -149,12 +155,14 @@ response.metadata.forEach(entry => {
 Prepare a transaction to delete metadata from an account.
 
 **Parameters:**
+
 - `accountId`: Stellar account address
 - `key`: Metadata key to delete
 
 **Returns:** Transaction XDR string (ready for signing and submission)
 
 **Example:**
+
 ```typescript
 const txn = await manager.prepareDeleteMetadata(
   "GADDM5YJRQYHCR46JQKKGV5JBHIIJ3IXVJ3BBQFN5PLMVFXXUTDBWZF",
@@ -169,12 +177,14 @@ const txn = await manager.prepareDeleteMetadata(
 Retrieve multiple metadata entries in one operation.
 
 **Parameters:**
+
 - `accountId`: Stellar account address
 - `keys`: Array of metadata keys to retrieve
 
 **Returns:** Map of keys to MetadataEntry (or null for missing entries)
 
 **Example:**
+
 ```typescript
 const results = await manager.getMetadataBatch(accountId, [
   "user-profile",
@@ -194,6 +204,7 @@ results.forEach((entry, key) => {
 Clear the internal metadata cache.
 
 **Example:**
+
 ```typescript
 // After making external changes to account metadata
 manager.clearCache();
@@ -202,35 +213,38 @@ manager.clearCache();
 ### Types
 
 #### MetadataSetParams
+
 ```typescript
 interface MetadataSetParams {
-  accountId: string;      // Stellar account address
-  key: string;            // Metadata key (alphanumeric, max 128 chars)
-  value: string;          // Metadata value (max 4KB)
-  type?: string;          // Optional type/category
-  expiresAt?: number;     // Optional expiration (unix seconds)
+  accountId: string; // Stellar account address
+  key: string; // Metadata key (alphanumeric, max 128 chars)
+  value: string; // Metadata value (max 4KB)
+  type?: string; // Optional type/category
+  expiresAt?: number; // Optional expiration (unix seconds)
 }
 ```
 
 #### MetadataEntry
+
 ```typescript
 interface MetadataEntry {
-  key: string;            // Metadata key
-  value: string;          // Metadata value
-  type?: string;          // Optional metadata type
-  createdAt: number;      // Creation timestamp (unix seconds)
-  updatedAt: number;      // Last update timestamp (unix seconds)
-  expiresAt?: number;     // Optional expiration timestamp (unix seconds)
+  key: string; // Metadata key
+  value: string; // Metadata value
+  type?: string; // Optional metadata type
+  createdAt: number; // Creation timestamp (unix seconds)
+  updatedAt: number; // Last update timestamp (unix seconds)
+  expiresAt?: number; // Optional expiration timestamp (unix seconds)
 }
 ```
 
 #### MetadataListResponse
+
 ```typescript
 interface MetadataListResponse {
-  accountId: string;      // Account address
+  accountId: string; // Account address
   metadata: MetadataEntry[]; // Array of metadata entries
-  total: number;          // Total entries count
-  hasMore: boolean;       // Whether more results available
+  total: number; // Total entries count
+  hasMore: boolean; // Whether more results available
 }
 ```
 
@@ -331,7 +345,7 @@ const kyc = await manager.getMetadata({
 if (kyc) {
   const data = JSON.parse(kyc.value);
   const isExpired = kyc.expiresAt! < Math.floor(Date.now() / 1000);
-  
+
   if (!isExpired && data.status === "verified") {
     // Grant access to premium features
   }
@@ -378,7 +392,7 @@ const response = await manager.listMetadata(userAccount);
 
 console.log(`This account has ${response.total} metadata entries:\n`);
 
-response.metadata.forEach(entry => {
+response.metadata.forEach((entry) => {
   console.log(`Key: ${entry.key}`);
   console.log(`Type: ${entry.type || "generic"}`);
   console.log(`Value: ${entry.value.substring(0, 100)}`);
@@ -393,18 +407,23 @@ response.metadata.forEach(entry => {
 ## Performance Considerations
 
 ### Caching
+
 The metadata manager automatically caches retrieved entries. This means:
+
 - Repeated `getMetadata()` calls for the same key are instant
 - Cache is cleared when `prepareDeleteMetadata()` is called
 - Call `clearCache()` if you make external changes to account metadata
 
 ### Chunking
+
 Large values (>64 bytes) are automatically chunked for storage:
+
 - Chunks are 64 bytes each and stored separately
 - Chunk count is stored for reconstruction
 - Retrieval automatically reconstructs chunked data
 
 ### Network
+
 - List operations fetch the entire account from Horizon
 - Consider pagination if accounts have many metadata entries
 - Use batch operations when retrieving multiple entries
@@ -452,6 +471,7 @@ npm test -- src/__tests__/metadata.test.ts
 ```
 
 Test coverage includes:
+
 - ✅ Basic get/set operations
 - ✅ Expiration handling
 - ✅ Batch operations
@@ -493,6 +513,7 @@ When extending the metadata API:
 ## Next Steps
 
 Potential enhancements:
+
 - Query API for filtering metadata (e.g., by type)
 - Encryption support for sensitive metadata
 - Bulk transaction building for multiple entries

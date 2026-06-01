@@ -67,7 +67,9 @@ describe("IPBlacklist Routes", () => {
   describe("GET /check/:ip", () => {
     it("should check if IP is blacklisted", async () => {
       (ipBlacklistService.isBlacklisted as jest.Mock).mockResolvedValue(false);
-      (ipBlacklistService.getBlacklistEntry as jest.Mock).mockResolvedValue(null);
+      (ipBlacklistService.getBlacklistEntry as jest.Mock).mockResolvedValue(
+        null
+      );
 
       const response = await request(app)
         .get("/blacklist/check/192.168.1.1")
@@ -114,7 +116,10 @@ describe("IPBlacklist Routes", () => {
   describe("GET /", () => {
     it("should list blacklisted IPs", async () => {
       const mockEntries = [
-        { ipAddress: "192.168.1.1", reason: BlacklistReason.MALICIOUS_ACTIVITY },
+        {
+          ipAddress: "192.168.1.1",
+          reason: BlacklistReason.MALICIOUS_ACTIVITY,
+        },
         { ipAddress: "192.168.1.2", reason: BlacklistReason.BRUTE_FORCE },
       ];
 
@@ -123,9 +128,7 @@ describe("IPBlacklist Routes", () => {
         total: 2,
       });
 
-      const response = await request(app)
-        .get("/admin/blacklist")
-        .expect(200);
+      const response = await request(app).get("/admin/blacklist").expect(200);
 
       expect(response.body.success).toBe(true);
       expect(response.body.data.entries).toHaveLength(2);
@@ -138,9 +141,7 @@ describe("IPBlacklist Routes", () => {
         total: 100,
       });
 
-      await request(app)
-        .get("/admin/blacklist?limit=25&offset=50")
-        .expect(200);
+      await request(app).get("/admin/blacklist?limit=25&offset=50").expect(200);
 
       expect(ipBlacklistService.listBlacklist).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -156,9 +157,7 @@ describe("IPBlacklist Routes", () => {
         total: 1000,
       });
 
-      await request(app)
-        .get("/admin/blacklist?limit=1000")
-        .expect(200);
+      await request(app).get("/admin/blacklist?limit=1000").expect(200);
 
       // Should cap at 500
       expect(ipBlacklistService.listBlacklist).toHaveBeenCalledWith(
@@ -398,9 +397,7 @@ describe("IPBlacklist Routes", () => {
         3
       );
 
-      await request(app)
-        .post("/admin/blacklist/cleanup")
-        .expect(200);
+      await request(app).post("/admin/blacklist/cleanup").expect(200);
 
       expect(logger.info).toHaveBeenCalledWith(
         "Cleaned up expired blacklist entries",
@@ -427,9 +424,7 @@ describe("IPBlacklist Routes", () => {
         new Error("Database connection failed")
       );
 
-      const response = await request(app)
-        .get("/admin/blacklist")
-        .expect(500);
+      const response = await request(app).get("/admin/blacklist").expect(500);
 
       expect(response.body.success).toBe(false);
       expect(response.body.error).toBe("Internal server error");

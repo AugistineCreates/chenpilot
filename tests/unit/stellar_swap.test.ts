@@ -4,13 +4,13 @@ import * as StellarSdk from "@stellar/stellar-sdk";
 describe("Stellar Swap Logic", () => {
   it("should find a path and build a swap transaction", async () => {
     const server = new StellarSdk.Horizon.Server(
-      "https://horizon-testnet.stellar.org",
+      "https://horizon-testnet.stellar.org"
     );
 
     const sourceAccount = "GD77MOCKPUBLICKEY1234567890";
     const destinationAsset = new StellarSdk.Asset(
       "USDC",
-      "GD77MOCKPUBLICKEY1234567890",
+      "GD77MOCKPUBLICKEY1234567890"
     );
     const destinationAmount = "10";
 

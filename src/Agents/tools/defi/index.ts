@@ -1,9 +1,9 @@
 /**
  * DeFi Adapters Module
- * 
+ *
  * This module provides centralized access to DeFi protocol adapters
  * for the Stellar ecosystem.
- * 
+ *
  * Supported Protocols:
  * - Equilibre: DEX with swap and liquidity capabilities
  * - YieldBlox: Lending protocol with lending and borrowing capabilities

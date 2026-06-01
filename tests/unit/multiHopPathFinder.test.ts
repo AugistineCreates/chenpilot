@@ -31,7 +31,8 @@ describe("MultiHopPathFinder", () => {
               {
                 asset_type: "credit_alphanum4",
                 asset_code: "USDC",
-                asset_issuer: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+                asset_issuer:
+                  "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
               },
             ],
           },
@@ -42,7 +43,8 @@ describe("MultiHopPathFinder", () => {
               {
                 asset_type: "credit_alphanum4",
                 asset_code: "USDT",
-                asset_issuer: "GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V",
+                asset_issuer:
+                  "GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V",
               },
             ],
           },
@@ -85,7 +87,8 @@ describe("MultiHopPathFinder", () => {
               {
                 asset_type: "credit_alphanum4",
                 asset_code: "USDC",
-                asset_issuer: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+                asset_issuer:
+                  "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
               },
             ],
           },
@@ -106,7 +109,9 @@ describe("MultiHopPathFinder", () => {
         "100"
       );
 
-      expect(parseFloat(result.bestPath.destinationAmount)).toBeGreaterThanOrEqual(
+      expect(
+        parseFloat(result.bestPath.destinationAmount)
+      ).toBeGreaterThanOrEqual(
         parseFloat(result.allPaths[1]?.destinationAmount || "0")
       );
     });
@@ -123,9 +128,21 @@ describe("MultiHopPathFinder", () => {
             source_amount: "100.0000000",
             destination_amount: "12.5000000",
             path: [
-              { asset_type: "credit_alphanum4", asset_code: "USDC", asset_issuer: "ISSUER1" },
-              { asset_type: "credit_alphanum4", asset_code: "USDT", asset_issuer: "ISSUER2" },
-              { asset_type: "credit_alphanum4", asset_code: "BTC", asset_issuer: "ISSUER3" },
+              {
+                asset_type: "credit_alphanum4",
+                asset_code: "USDC",
+                asset_issuer: "ISSUER1",
+              },
+              {
+                asset_type: "credit_alphanum4",
+                asset_code: "USDT",
+                asset_issuer: "ISSUER2",
+              },
+              {
+                asset_type: "credit_alphanum4",
+                asset_code: "BTC",
+                asset_issuer: "ISSUER3",
+              },
             ],
           },
         ],

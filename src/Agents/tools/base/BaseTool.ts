@@ -5,9 +5,9 @@ import {
   ToolPayload,
 } from "../../registry/ToolMetadata";
 
-export abstract class BaseTool<T extends ToolPayload = ToolPayload>
-  implements ToolDefinition<T>
-{
+export abstract class BaseTool<
+  T extends ToolPayload = ToolPayload,
+> implements ToolDefinition<T> {
   abstract metadata: ToolMetadata;
 
   abstract execute(payload: T, userId: string): Promise<ToolResult>;
@@ -99,5 +99,3 @@ export abstract class BaseTool<T extends ToolPayload = ToolPayload>
     };
   }
 }
-
-

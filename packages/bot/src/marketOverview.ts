@@ -1,6 +1,6 @@
 /**
  * Market Overview Service
- * 
+ *
  * Fetches and formats daily market summaries of top-performing Stellar assets
  * for automated daily digest posts in Discord channels.
  */
@@ -27,7 +27,8 @@ export interface MarketOverviewData {
 }
 
 export class MarketOverviewService {
-  private readonly BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3000";
+  private readonly BACKEND_URL =
+    process.env.BACKEND_URL || "http://localhost:3000";
 
   /**
    * Fetch market overview data from the backend
@@ -35,26 +36,40 @@ export class MarketOverviewService {
   async fetchMarketOverview(): Promise<MarketOverviewData> {
     try {
       // Fetch top gainers
-      const gainersRes = await fetch(`${this.BACKEND_URL}/api/assets/trending?sort=price_change&order=desc&limit=5`);
-      const topGainers = gainersRes.ok ? await gainersRes.json() as AssetData[] : [];
+      const gainersRes = await fetch(
+        `${this.BACKEND_URL}/api/assets/trending?sort=price_change&order=desc&limit=5`
+      );
+      const topGainers = gainersRes.ok
+        ? ((await gainersRes.json()) as AssetData[])
+        : [];
 
       // Fetch top losers
-      const losersRes = await fetch(`${this.BACKEND_URL}/api/assets/trending?sort=price_change&order=asc&limit=5`);
-      const topLosers = losersRes.ok ? await losersRes.json() as AssetData[] : [];
+      const losersRes = await fetch(
+        `${this.BACKEND_URL}/api/assets/trending?sort=price_change&order=asc&limit=5`
+      );
+      const topLosers = losersRes.ok
+        ? ((await losersRes.json()) as AssetData[])
+        : [];
 
       // Fetch top by volume
-      const volumeRes = await fetch(`${this.BACKEND_URL}/api/assets/trending?sort=volume&order=desc&limit=5`);
-      const topVolume = volumeRes.ok ? await volumeRes.json() as AssetData[] : [];
+      const volumeRes = await fetch(
+        `${this.BACKEND_URL}/api/assets/trending?sort=volume&order=desc&limit=5`
+      );
+      const topVolume = volumeRes.ok
+        ? ((await volumeRes.json()) as AssetData[])
+        : [];
 
       // Fetch network status
       let networkStatus;
       try {
         const statusRes = await fetch(`${this.BACKEND_URL}/api/network/status`);
         if (statusRes.ok) {
-          const statusData = await statusRes.json() as { health?: { isHealthy?: boolean; latestLedger?: number } };
+          const statusData = (await statusRes.json()) as {
+            health?: { isHealthy?: boolean; latestLedger?: number };
+          };
           networkStatus = {
             isHealthy: statusData.health?.isHealthy || false,
-            latestLedger: statusData.health?.latestLedger || 0
+            latestLedger: statusData.health?.latestLedger || 0,
           };
         }
       } catch {
@@ -66,11 +81,11 @@ export class MarketOverviewService {
         topGainers,
         topLosers,
         topVolume,
-        networkStatus
+        networkStatus,
       };
     } catch (error) {
-      console.error('Error fetching market overview:', error);
-      throw new Error('Failed to fetch market overview data');
+      console.error("Error fetching market overview:", error);
+      throw new Error("Failed to fetch market overview data");
     }
   }
 
@@ -78,18 +93,18 @@ export class MarketOverviewService {
    * Format market overview data for Discord message
    */
   formatMarketOverviewMessage(data: MarketOverviewData): string {
-    const date = new Date(data.timestamp).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    const date = new Date(data.timestamp).toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
 
     let message = `📊 **Daily Market Overview - ${date}**\n\n`;
 
     // Network status
     if (data.networkStatus) {
-      const healthEmoji = data.networkStatus.isHealthy ? '🟢' : '🔴';
+      const healthEmoji = data.networkStatus.isHealthy ? "🟢" : "🔴";
       message += `${healthEmoji} **Stellar Network Status:** Ledger ${data.networkStatus.latestLedger}\n\n`;
     }
 
@@ -99,8 +114,11 @@ export class MarketOverviewService {
       message += `No data available\n`;
     } else {
       for (const asset of data.topGainers) {
-        const change = asset.priceChange24h >= 0 ? `+${asset.priceChange24h.toFixed(2)}%` : `${asset.priceChange24h.toFixed(2)}%`;
-        message += `• **${asset.code}** ${asset.domain ? `(${asset.domain})` : ''}\n`;
+        const change =
+          asset.priceChange24h >= 0
+            ? `+${asset.priceChange24h.toFixed(2)}%`
+            : `${asset.priceChange24h.toFixed(2)}%`;
+        message += `• **${asset.code}** ${asset.domain ? `(${asset.domain})` : ""}\n`;
         message += `  Price: $${asset.price.toFixed(4)} | 24h: ${change} | Vol: ${this.formatNumber(asset.volume24h)}\n`;
       }
     }
@@ -112,8 +130,11 @@ export class MarketOverviewService {
       message += `No data available\n`;
     } else {
       for (const asset of data.topLosers) {
-        const change = asset.priceChange24h >= 0 ? `+${asset.priceChange24h.toFixed(2)}%` : `${asset.priceChange24h.toFixed(2)}%`;
-        message += `• **${asset.code}** ${asset.domain ? `(${asset.domain})` : ''}\n`;
+        const change =
+          asset.priceChange24h >= 0
+            ? `+${asset.priceChange24h.toFixed(2)}%`
+            : `${asset.priceChange24h.toFixed(2)}%`;
+        message += `• **${asset.code}** ${asset.domain ? `(${asset.domain})` : ""}\n`;
         message += `  Price: $${asset.price.toFixed(4)} | 24h: ${change} | Vol: ${this.formatNumber(asset.volume24h)}\n`;
       }
     }
@@ -125,8 +146,11 @@ export class MarketOverviewService {
       message += `No data available\n`;
     } else {
       for (const asset of data.topVolume) {
-        const change = asset.priceChange24h >= 0 ? `+${asset.priceChange24h.toFixed(2)}%` : `${asset.priceChange24h.toFixed(2)}%`;
-        message += `• **${asset.code}** ${asset.domain ? `(${asset.domain})` : ''}\n`;
+        const change =
+          asset.priceChange24h >= 0
+            ? `+${asset.priceChange24h.toFixed(2)}%`
+            : `${asset.priceChange24h.toFixed(2)}%`;
+        message += `• **${asset.code}** ${asset.domain ? `(${asset.domain})` : ""}\n`;
         message += `  Price: $${asset.price.toFixed(4)} | 24h: ${change} | Vol: ${this.formatNumber(asset.volume24h)}\n`;
       }
     }

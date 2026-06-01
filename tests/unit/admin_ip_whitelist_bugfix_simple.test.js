@@ -17,49 +17,58 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const fs_1 = require("fs");
 const path_1 = require("path");
 describe("Bug Condition Exploration: Admin IP Whitelist Middleware Application", () => {
-    /**
-     * Test Case: Check if requireAdminWithIpWhitelist is imported and used in routes.ts
-     * EXPECTED ON UNFIXED CODE: Import and usage will NOT be found (BUG)
-     * EXPECTED ON FIXED CODE: Import and usage will be found
-     */
-    it("should have requireAdminWithIpWhitelist imported in routes.ts", () => {
-        const routesPath = (0, path_1.join)(__dirname, "../../src/Gateway/routes.ts");
-        const routesContent = (0, fs_1.readFileSync)(routesPath, "utf-8");
-        // Check if requireAdminWithIpWhitelist is imported
-        const hasImport = routesContent.includes("requireAdminWithIpWhitelist");
-        // EXPECTED: true on fixed code, false on unfixed code
-        expect(hasImport).toBe(true);
-    });
-    it("should apply requireAdminWithIpWhitelist middleware to /admin/stats route", () => {
-        const routesPath = (0, path_1.join)(__dirname, "../../src/Gateway/routes.ts");
-        const routesContent = (0, fs_1.readFileSync)(routesPath, "utf-8");
-        // Find the /admin/stats route definition
-        const adminStatsRouteRegex = /router\.get\s*\(\s*["']\/admin\/stats["']\s*,([^)]+)\)/s;
-        const match = routesContent.match(adminStatsRouteRegex);
-        expect(match).not.toBeNull();
-        if (match) {
-            const middlewareChain = match[1];
-            // Check if requireAdminWithIpWhitelist is in the middleware chain
-            const hasIpWhitelistMiddleware = middlewareChain.includes("requireAdminWithIpWhitelist");
-            // EXPECTED: true on fixed code, false on unfixed code
-            // This will FAIL on unfixed code, proving the bug exists
-            expect(hasIpWhitelistMiddleware).toBe(true);
-        }
-    });
-    /**
-     * Documentation of Expected Counterexamples:
-     *
-     * On UNFIXED code, the tests above will FAIL with:
-     * - requireAdminWithIpWhitelist is NOT imported in routes.ts
-     * - requireAdminWithIpWhitelist is NOT applied to /admin/stats route
-     * - Only authenticateToken and requireAdmin are present in the middleware chain
-     *
-     * This proves that the IP whitelist middleware exists but is not being used,
-     * which is the root cause of the bug.
-     *
-     * After the fix is applied:
-     * - requireAdminWithIpWhitelist WILL be imported
-     * - requireAdminWithIpWhitelist WILL be in the middleware chain for /admin/stats
-     * - The tests will PASS, validating the fix
-     */
+  /**
+   * Test Case: Check if requireAdminWithIpWhitelist is imported and used in routes.ts
+   * EXPECTED ON UNFIXED CODE: Import and usage will NOT be found (BUG)
+   * EXPECTED ON FIXED CODE: Import and usage will be found
+   */
+  it("should have requireAdminWithIpWhitelist imported in routes.ts", () => {
+    const routesPath = (0, path_1.join)(
+      __dirname,
+      "../../src/Gateway/routes.ts"
+    );
+    const routesContent = (0, fs_1.readFileSync)(routesPath, "utf-8");
+    // Check if requireAdminWithIpWhitelist is imported
+    const hasImport = routesContent.includes("requireAdminWithIpWhitelist");
+    // EXPECTED: true on fixed code, false on unfixed code
+    expect(hasImport).toBe(true);
+  });
+  it("should apply requireAdminWithIpWhitelist middleware to /admin/stats route", () => {
+    const routesPath = (0, path_1.join)(
+      __dirname,
+      "../../src/Gateway/routes.ts"
+    );
+    const routesContent = (0, fs_1.readFileSync)(routesPath, "utf-8");
+    // Find the /admin/stats route definition
+    const adminStatsRouteRegex =
+      /router\.get\s*\(\s*["']\/admin\/stats["']\s*,([^)]+)\)/s;
+    const match = routesContent.match(adminStatsRouteRegex);
+    expect(match).not.toBeNull();
+    if (match) {
+      const middlewareChain = match[1];
+      // Check if requireAdminWithIpWhitelist is in the middleware chain
+      const hasIpWhitelistMiddleware = middlewareChain.includes(
+        "requireAdminWithIpWhitelist"
+      );
+      // EXPECTED: true on fixed code, false on unfixed code
+      // This will FAIL on unfixed code, proving the bug exists
+      expect(hasIpWhitelistMiddleware).toBe(true);
+    }
+  });
+  /**
+   * Documentation of Expected Counterexamples:
+   *
+   * On UNFIXED code, the tests above will FAIL with:
+   * - requireAdminWithIpWhitelist is NOT imported in routes.ts
+   * - requireAdminWithIpWhitelist is NOT applied to /admin/stats route
+   * - Only authenticateToken and requireAdmin are present in the middleware chain
+   *
+   * This proves that the IP whitelist middleware exists but is not being used,
+   * which is the root cause of the bug.
+   *
+   * After the fix is applied:
+   * - requireAdminWithIpWhitelist WILL be imported
+   * - requireAdminWithIpWhitelist WILL be in the middleware chain for /admin/stats
+   * - The tests will PASS, validating the fix
+   */
 });

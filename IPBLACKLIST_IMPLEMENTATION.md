@@ -1,11 +1,13 @@
 # IP Blacklist Middleware Implementation Summary
 
 ## Overview
+
 A comprehensive IP blacklist security middleware system has been implemented to block requests from known malicious IP addresses stored in a database blacklist.
 
 ## Components Created
 
 ### 1. **Entity Layer** (`src/Security/ipBlacklist.entity.ts`)
+
 - TypeORM entity for storing blacklist entries
 - Fields: IP address, reason, description, active status, expiration date, block count, metadata
 - Indexes on: `ipAddress`, `isActive`, `expiresAt`, `reason`
@@ -13,6 +15,7 @@ A comprehensive IP blacklist security middleware system has been implemented to 
 - Helper method: `isCurrentlyBlocked()` to check active status
 
 **Key Features:**
+
 - UUID primary key
 - Automatic timestamps (createdAt, updatedAt)
 - Expiration support for temporary bans
@@ -20,6 +23,7 @@ A comprehensive IP blacklist security middleware system has been implemented to 
 - Support for custom metadata
 
 ### 2. **Service Layer** (`src/Security/ipBlacklist.service.ts`)
+
 - Business logic for all blacklist operations
 - Core methods:
   - `isBlacklisted(ip)` - Check if IP is blacklisted
@@ -32,6 +36,7 @@ A comprehensive IP blacklist security middleware system has been implemented to 
   - `getStatistics()` - Blacklist analytics
 
 **Features:**
+
 - IP normalization (IPv4/IPv6 handling)
 - Database transaction support
 - Automatic expiration handling
@@ -40,6 +45,7 @@ A comprehensive IP blacklist security middleware system has been implemented to 
 - Error resilience
 
 ### 3. **Middleware** (`src/Security/ipBlacklist.middleware.ts`)
+
 - Express middleware to intercept and validate requests
 - Extracts IP from multiple sources (x-forwarded-for, socket, req.ip)
 - Returns 403 Forbidden for blacklisted IPs
@@ -47,6 +53,7 @@ A comprehensive IP blacklist security middleware system has been implemented to 
 - Logging of blocked requests
 
 **Features:**
+
 - IP extraction from multiple sources
 - IPv6 normalization
 - Port stripping
@@ -55,10 +62,12 @@ A comprehensive IP blacklist security middleware system has been implemented to 
 - Error resilience
 
 ### 4. **Routes/API** (`src/Security/ipBlacklist.routes.ts`)
+
 - 7 admin endpoints for blacklist management
 - All endpoints require authentication and admin role
 
 **Endpoints:**
+
 ```
 GET    /security/blacklist/check/:ip       → Check blacklist status
 GET    /security/blacklist                  → List all blacklisted IPs
@@ -70,6 +79,7 @@ POST   /security/blacklist/cleanup          → Clean expired entries
 ```
 
 **Features:**
+
 - Input validation
 - Pagination support
 - Reason filtering
@@ -79,6 +89,7 @@ POST   /security/blacklist/cleanup          → Clean expired entries
 ### 5. **Tests** (Under `src/Security/__tests__/`)
 
 #### `ipBlacklist.service.test.ts` (50+ tests)
+
 - Entity behavior tests
 - Service operation tests
 - Advanced operations
@@ -87,6 +98,7 @@ POST   /security/blacklist/cleanup          → Clean expired entries
 - Logging verification
 
 #### `ipBlacklist.middleware.test.ts` (40+ tests)
+
 - Normal request flow
 - IP blocking verification
 - IP extraction edge cases
@@ -95,6 +107,7 @@ POST   /security/blacklist/cleanup          → Clean expired entries
 - IPv6 handling
 
 #### `ipBlacklist.routes.test.ts` (35+ tests)
+
 - All API endpoint tests
 - Input validation
 - Pagination
@@ -105,6 +118,7 @@ POST   /security/blacklist/cleanup          → Clean expired entries
 **Total: 125+ test cases with 85%+ code coverage**
 
 ### 6. **Documentation** (`src/Security/README.md`)
+
 - Complete usage guide
 - Integration examples
 - API endpoint documentation
@@ -113,11 +127,13 @@ POST   /security/blacklist/cleanup          → Clean expired entries
 - Troubleshooting guide
 
 ### 7. **Index Export** (`src/Security/index.ts`)
+
 - Central export point for all security modules
 
 ## Integration
 
 ### Added to API Gateway (`src/Gateway/api.ts`)
+
 ```typescript
 // Import
 import { ipBlacklistMiddleware, ipBlacklistRoutes } from "../Security";
@@ -134,6 +150,7 @@ app.use("/api/security/blacklist", ipBlacklistRoutes);
 ## Features Implemented
 
 ### ✅ Core Functionality
+
 - [x] IP blocking based on database blacklist
 - [x] Database persistence with TypeORM
 - [x] IPv4 and IPv6 support
@@ -142,6 +159,7 @@ app.use("/api/security/blacklist", ipBlacklistRoutes);
 - [x] Admin API endpoints
 
 ### ✅ Advanced Features
+
 - [x] Automatic cleanup of expired entries
 - [x] Block count tracking
 - [x] Detailed logging
@@ -150,6 +168,7 @@ app.use("/api/security/blacklist", ipBlacklistRoutes);
 - [x] Filtering by reason
 
 ### ✅ Security Features
+
 - [x] Admin authentication required
 - [x] Role-based access control
 - [x] Fail-open design
@@ -158,6 +177,7 @@ app.use("/api/security/blacklist", ipBlacklistRoutes);
 - [x] Error message sanitization
 
 ### ✅ Testing
+
 - [x] 125+ unit tests
 - [x] 85%+ code coverage
 - [x] Mock-based isolation
@@ -168,6 +188,7 @@ app.use("/api/security/blacklist", ipBlacklistRoutes);
 ## Usage Examples
 
 ### Add IP to Blacklist
+
 ```bash
 curl -X POST http://localhost:3000/api/security/blacklist \
   -H "Authorization: Bearer TOKEN" \
@@ -181,6 +202,7 @@ curl -X POST http://localhost:3000/api/security/blacklist \
 ```
 
 ### Bulk Add IPs
+
 ```bash
 curl -X POST http://localhost:3000/api/security/blacklist/bulk \
   -H "Authorization: Bearer TOKEN" \
@@ -192,18 +214,21 @@ curl -X POST http://localhost:3000/api/security/blacklist/bulk \
 ```
 
 ### Check Blacklist Status
+
 ```bash
 curl http://localhost:3000/api/security/blacklist/check/192.168.1.100 \
   -H "Authorization: Bearer TOKEN"
 ```
 
 ### Get Statistics
+
 ```bash
 curl http://localhost:3000/api/security/blacklist/stats \
   -H "Authorization: Bearer TOKEN"
 ```
 
 ## File Structure
+
 ```
 src/Security/
 ├── ipBlacklist.entity.ts          # TypeORM entity
@@ -227,6 +252,7 @@ npm run typeorm migration:create ./src/migrations/CreateIPBlacklistTable
 ```
 
 Then update to include:
+
 - id (UUID, PK)
 - ipAddress (VARCHAR, UNIQUE)
 - reason (VARCHAR)

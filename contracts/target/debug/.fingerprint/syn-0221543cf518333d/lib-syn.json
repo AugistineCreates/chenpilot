@@ -1,1 +1,24 @@
-{"rustc":4643058173861170821,"features":"[\"clone-impls\", \"default\", \"derive\", \"extra-traits\", \"full\", \"parsing\", \"printing\", \"proc-macro\", \"visit\"]","declared_features":"[\"clone-impls\", \"default\", \"derive\", \"extra-traits\", \"fold\", \"full\", \"parsing\", \"printing\", \"proc-macro\", \"test\", \"visit\", \"visit-mut\"]","target":9442126953582868550,"profile":2225463790103693989,"path":15018617064461302185,"deps":[[4289358735036141001,"proc_macro2",false,11781682634645666361],[8901712065508858692,"unicode_ident",false,7660780932222218934],[13111758008314797071,"quote",false,46692176628791793]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/syn-0221543cf518333d/dep-lib-syn","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"clone-impls\", \"default\", \"derive\", \"extra-traits\", \"full\", \"parsing\", \"printing\", \"proc-macro\", \"visit\"]",
+  "declared_features": "[\"clone-impls\", \"default\", \"derive\", \"extra-traits\", \"fold\", \"full\", \"parsing\", \"printing\", \"proc-macro\", \"test\", \"visit\", \"visit-mut\"]",
+  "target": 9442126953582868550,
+  "profile": 2225463790103693989,
+  "path": 15018617064461302185,
+  "deps": [
+    [4289358735036141001, "proc_macro2", false, 11781682634645666361],
+    [8901712065508858692, "unicode_ident", false, 7660780932222218934],
+    [13111758008314797071, "quote", false, 46692176628791793]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/syn-0221543cf518333d/dep-lib-syn",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

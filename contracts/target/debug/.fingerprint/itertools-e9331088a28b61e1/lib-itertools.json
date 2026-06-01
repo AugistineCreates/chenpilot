@@ -1,1 +1,20 @@
-{"rustc":4643058173861170821,"features":"[\"default\", \"use_alloc\", \"use_std\"]","declared_features":"[\"default\", \"use_alloc\", \"use_std\"]","target":9541170365560449339,"profile":2225463790103693989,"path":3055786100797227762,"deps":[[12170264697963848012,"either",false,8934309731986641764]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/itertools-e9331088a28b61e1/dep-lib-itertools","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"default\", \"use_alloc\", \"use_std\"]",
+  "declared_features": "[\"default\", \"use_alloc\", \"use_std\"]",
+  "target": 9541170365560449339,
+  "profile": 2225463790103693989,
+  "path": 3055786100797227762,
+  "deps": [[12170264697963848012, "either", false, 8934309731986641764]],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/itertools-e9331088a28b61e1/dep-lib-itertools",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

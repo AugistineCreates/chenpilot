@@ -41,22 +41,23 @@ Defines the `IPBlacklist` entity with the following fields:
 ```typescript
 @Entity()
 export class IPBlacklist {
-  id: string;                    // UUID primary key
-  ipAddress: string;             // IP address (unique)
-  reason: BlacklistReason;       // Enum: reason for blacklist
-  description?: string;          // Details about why blocked
-  isActive: boolean;             // Whether entry is active
-  expiresAt?: Date;              // Optional expiration date
-  blockCount: number;            // How many times blocked
-  lastBlockedAt?: Date;          // Last block timestamp
-  addedBy?: string;              // Admin who added it
+  id: string; // UUID primary key
+  ipAddress: string; // IP address (unique)
+  reason: BlacklistReason; // Enum: reason for blacklist
+  description?: string; // Details about why blocked
+  isActive: boolean; // Whether entry is active
+  expiresAt?: Date; // Optional expiration date
+  blockCount: number; // How many times blocked
+  lastBlockedAt?: Date; // Last block timestamp
+  addedBy?: string; // Admin who added it
   metadata?: Record<string, unknown>; // Custom metadata
-  createdAt: Date;               // Creation timestamp
-  updatedAt: Date;               // Last update timestamp
+  createdAt: Date; // Creation timestamp
+  updatedAt: Date; // Last update timestamp
 }
 ```
 
 **Blacklist Reasons:**
+
 - `BRUTE_FORCE` - Brute force attack attempts
 - `MALICIOUS_ACTIVITY` - General malicious behavior
 - `DDOS_ATTACK` - DDoS attack detected
@@ -99,7 +100,10 @@ const stats = await ipBlacklistService.getStatistics();
 
 // Bulk operations
 await ipBlacklistService.bulkAddToBlacklist([
-  { ip: "192.168.1.1", options: { reason: BlacklistReason.MALICIOUS_ACTIVITY } },
+  {
+    ip: "192.168.1.1",
+    options: { reason: BlacklistReason.MALICIOUS_ACTIVITY },
+  },
   { ip: "192.168.1.2", options: { reason: BlacklistReason.DDOS_ATTACK } },
 ]);
 
@@ -110,6 +114,7 @@ const cleaned = await ipBlacklistService.cleanupExpiredEntries();
 ### 3. Middleware: `ipBlacklist.middleware.ts`
 
 Express middleware that:
+
 - Extracts client IP from request
 - Checks against blacklist
 - Blocks if necessary (403 response)
@@ -117,6 +122,7 @@ Express middleware that:
 - Includes error handling for resilience
 
 **Features:**
+
 - Handles multiple IP sources: `x-forwarded-for`, `socket.remoteAddress`, `req.ip`
 - IPv6 localhost normalization (`::1` → `127.0.0.1`)
 - IPv6 mapped IPv4 normalization
@@ -269,21 +275,21 @@ curl -X POST \
 
 ```typescript
 // Setup periodic cleanup (e.g., in a cron job)
-import cron from 'node-cron';
+import cron from "node-cron";
 
-cron.schedule('0 0 * * *', async () => {
+cron.schedule("0 0 * * *", async () => {
   const cleaned = await ipBlacklistService.cleanupExpiredEntries();
   console.log(`Cleaned ${cleaned} expired blacklist entries`);
 });
 
 // Monitor statistics
-cron.schedule('0 */6 * * *', async () => {
+cron.schedule("0 */6 * * *", async () => {
   const stats = await ipBlacklistService.getStatistics();
-  console.log('Blacklist statistics:', stats);
-  
+  console.log("Blacklist statistics:", stats);
+
   // Send alerts if threshold exceeded
   if (stats.totalActive > 1000) {
-    sendAlert('High number of blacklisted IPs detected');
+    sendAlert("High number of blacklisted IPs detected");
   }
 });
 ```
@@ -292,19 +298,19 @@ cron.schedule('0 */6 * * *', async () => {
 
 ```typescript
 // Integrate with WAF rules
-import { ipBlacklistService } from './Security/ipBlacklist.service';
+import { ipBlacklistService } from "./Security/ipBlacklist.service";
 
 async function integrateWithWAF() {
   const stats = await ipBlacklistService.getStatistics();
-  
+
   // Export to WAF
-  const wafRules = stats.mostBlocked.map(entry => ({
-    action: 'DROP',
-    protocol: 'TCP',
+  const wafRules = stats.mostBlocked.map((entry) => ({
+    action: "DROP",
+    protocol: "TCP",
     sourceIP: entry.ipAddress,
     comment: entry.reason,
   }));
-  
+
   await uploadToWAF(wafRules);
 }
 ```
@@ -313,8 +319,8 @@ async function integrateWithWAF() {
 
 ```typescript
 // Use blacklist in rate limiter skip function
-import { rateLimit } from 'express-rate-limit';
-import { ipBlacklistService } from './Security/ipBlacklist.service';
+import { rateLimit } from "express-rate-limit";
+import { ipBlacklistService } from "./Security/ipBlacklist.service";
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -363,7 +369,7 @@ npm test -- src/Security/__tests__ --coverage
 
 ```typescript
 // Add Redis caching
-import redis from 'redis';
+import redis from "redis";
 
 const redisClient = redis.createClient();
 
@@ -371,15 +377,15 @@ async function isBlacklistedCached(ip: string): Promise<boolean> {
   // Check cache first
   const cached = await redisClient.get(`blacklist:${ip}`);
   if (cached !== null) {
-    return cached === 'true';
+    return cached === "true";
   }
-  
+
   // Check database
   const isBlacklisted = await ipBlacklistService.isBlacklisted(ip);
-  
+
   // Cache result for 1 hour
   await redisClient.setex(`blacklist:${ip}`, 3600, String(isBlacklisted));
-  
+
   return isBlacklisted;
 }
 ```
@@ -416,7 +422,7 @@ const { entries, total } = await ipBlacklistService.listBlacklist({
 });
 
 // Check database indexes
-SELECT * FROM information_schema.STATISTICS 
+SELECT * FROM information_schema.STATISTICS
 WHERE TABLE_NAME = 'ip_blacklist';
 ```
 

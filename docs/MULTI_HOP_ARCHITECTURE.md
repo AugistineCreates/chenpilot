@@ -41,23 +41,27 @@
 ## Component Details
 
 ### 1. MultiHopPathFinder Service
+
 - Core path discovery and evaluation logic
 - Queries Stellar Horizon API
 - Calculates efficiency scores
 - Selects optimal paths
 
 ### 2. MultiHopTradeTool
+
 - Agent-facing interface
 - Input validation
 - Response formatting
 - Recommendation generation
 
 ### 3. Price Service Integration
+
 - Enhanced price quotes
 - Multi-hop analysis
 - Cache integration
 
 ### 4. Tool Registry
+
 - Automatic tool discovery
 - Agent planner integration
 - Workflow orchestration

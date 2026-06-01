@@ -1,0 +1,552 @@
+# Implementation Plan: Simulation Stack Hardening
+
+## Overview
+
+This implementation plan transforms the existing simulation infrastructure into a production-grade pre-execution environment. The plan follows a 7-phase approach building from core determinism through advanced features, with each phase delivering working, tested components. The implementation uses TypeScript and includes comprehensive property-based testing using fast-check to validate the 52 correctness properties defined in the design.
+
+## Tasks
+
+### Phase 1: Core Determinism
+
+- [-] 1. Set up deterministic execution foundation
+  - [x] 1.1 Implement SeededRNG class with Mulberry32 algorithm
+    - Create SeededRNG class with state management
+    - Implement next() method returning values in [0, 1)
+    - Implement clone() method for RNG state duplication
+    - _Requirements: 1.2_
+  - [ ] 1.2 Implement DeterministicMode class
+    - Create DeterministicMode with seed initialization
+    - Implement nextRandom(), nextInt(), nextBoolean() methods
+    - Implement generateHash() and generateAddress() for deterministic IDs
+    - Add getSeed(), reset(), and getOperationCount() methods
+    - _Requirements: 1.1, 1.2, 1.3_
+  - [ ]\* 1.3 Write property tests for SeededRNG
+    - **Property 2: Seeded RNG Consistency**
+    - **Validates: Requirements 1.2**
+  - [ ]\* 1.4 Write property tests for DeterministicMode
+    - **Property 1: Deterministic Trace Reproduction**
+    - **Property 3: Deterministic Hash Generation**
+    - **Property 52: Seed Generation When Not Provided**
+    - **Validates: Requirements 1.1, 1.3, 1.5, 1.6**
+
+- [ ] 2. Integrate deterministic mode into existing components
+  - [ ] 2.1 Extend SimulationConfig with DeterministicConfig
+    - Add deterministic field to SimulationConfig interface
+    - Create DeterministicConfig interface with enabled, seed, strictMode fields
+    - _Requirements: 1.1_
+  - [ ] 2.2 Modify SimulationEngine to support deterministic mode
+    - Add DeterministicMode instance to SimulationEngine
+    - Initialize DeterministicMode from config on engine startup
+    - Pass DeterministicMode to components that need it
+    - _Requirements: 1.1, 1.3_
+  - [ ] 2.3 Create DeterministicResponseGenerator
+    - Implement deterministic hash generation using DeterministicMode
+    - Implement deterministic address generation using DeterministicMode
+    - Replace random hash/address generation in ResponseGenerator
+    - _Requirements: 1.6_
+  - [ ] 2.4 Update GasSimulator to use seeded RNG
+    - Inject DeterministicMode into GasSimulator
+    - Replace Math.random() calls with DeterministicMode.nextRandom()
+    - Ensure gas variance uses deterministic randomness
+    - _Requirements: 1.7_
+  - [ ]\* 2.5 Write property test for deterministic gas estimation
+    - **Property 4: Deterministic Gas Estimation**
+    - **Validates: Requirements 1.7**
+  - [ ]\* 2.6 Write integration tests for deterministic replay
+    - **Property 5: Trace Contains Seed**
+    - **Validates: Requirements 1.4, 1.5**
+
+- [ ] 3. Checkpoint - Verify deterministic execution
+  - Ensure all tests pass, verify identical traces for same seed, ask the user if questions arise.
+
+### Phase 2: Failure Injection
+
+- [ ] 4. Implement failure injection infrastructure
+  - [ ] 4.1 Create failure scenario type definitions
+    - Define FailureType union type with all failure modes
+    - Create FailureTrigger interface with trigger types
+    - Create FailureCondition interface with condition fields
+    - Create FailureScenario interface with all required fields
+    - Create FailureInjectionResult interface
+    - _Requirements: 2.1, 2.3_
+  - [ ] 4.2 Implement FailureInjector class
+    - Create FailureInjector with scenario storage and execution tracking
+    - Implement registerScenario() and removeScenario() methods
+    - Implement shouldInjectFailure() with trigger evaluation logic
+    - Implement generateError() for creating realistic error objects
+    - Add getActiveScenarios() and reset() methods
+    - _Requirements: 2.2, 2.3, 2.5_
+  - [ ] 4.3 Implement trigger condition evaluation
+    - Implement operation type matching for 'operation' triggers
+    - Implement parameter matching for 'parameter' triggers with comparators
+    - Implement state query evaluation for 'state' triggers
+    - Implement execution count tracking for 'count' triggers
+    - Implement probability-based triggers using DeterministicMode
+    - _Requirements: 2.3, 2.6_
+  - [ ]\* 4.4 Write property tests for failure injection
+    - **Property 6: Failure Injection at Trigger**
+    - **Property 8: Failure Priority Ordering**
+    - **Property 9: Deterministic Failure Probability**
+    - **Validates: Requirements 2.2, 2.5, 2.6**
+  - [ ]\* 4.5 Write unit tests for all failure types
+    - Test network_timeout, gas_exhaustion, contract_revert
+    - Test insufficient_balance, nonce_conflict, invalid_signature
+    - Test rate_limit, node_unavailable
+    - _Requirements: 2.1, 2.7_
+
+- [ ] 5. Integrate failure injection into SimulationEngine
+  - [ ] 5.1 Extend SimulationConfig with FailureInjectionConfig
+    - Add failureInjection field to SimulationConfig
+    - Create FailureInjectionConfig interface with enabled and scenarios fields
+    - _Requirements: 2.1_
+  - [ ] 5.2 Modify SimulationEngine to check for failure injection
+    - Add FailureInjector instance to SimulationEngine
+    - Call shouldInjectFailure() before each operation execution
+    - Inject failures when conditions are met
+    - _Requirements: 2.2_
+  - [ ] 5.3 Update ResponseGenerator to generate realistic errors
+    - Implement error response generation for each FailureType
+    - Match actual blockchain error formats
+    - Include appropriate error codes and messages
+    - _Requirements: 2.7_
+  - [ ]\* 5.4 Write integration tests for failure scenarios
+    - Test end-to-end failure injection for each failure type
+    - Verify error responses match expected formats
+    - _Requirements: 2.1, 2.7_
+
+- [ ] 6. Checkpoint - Verify failure injection
+  - Ensure all tests pass, verify failures inject correctly, ask the user if questions arise.
+
+### Phase 3: Execution Tracing
+
+- [ ] 7. Implement execution trace data structures
+  - [ ] 7.1 Create trace type definitions
+    - Define ExecutionTrace interface with all required fields
+    - Define OperationTrace interface with operation details
+    - Define ErrorTrace interface for error capture
+    - Define TraceMetadata interface for trace summary
+    - _Requirements: 3.1, 3.2, 3.6_
+  - [ ] 7.2 Implement ExecutionTracer class
+    - Create ExecutionTracer with trace state management
+    - Implement startTrace() to initialize new trace
+    - Implement recordOperation() to capture operation details
+    - Implement recordWarning() for warning messages
+    - Implement completeTrace() to finalize trace with metadata
+    - Add getCurrentTrace() for inspection
+    - _Requirements: 3.1, 3.2_
+  - [ ]\* 7.3 Write property tests for trace completeness
+    - **Property 10: Trace Completeness**
+    - **Property 11: Timestamp Precision**
+    - **Property 12: Error Trace Completeness**
+    - **Property 51: Trace Creation**
+    - **Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.6, 3.7**
+
+- [ ] 8. Implement trace serialization
+  - [ ] 8.1 Implement JSONSerializer for traces
+    - Implement serializeTrace() to convert trace to JSON string
+    - Implement parseTrace() to deserialize JSON to trace object
+    - Add version information to serialized format
+    - Handle circular references and special types (Map, Date)
+    - _Requirements: 3.5, 11.1, 11.2, 11.6_
+  - [ ] 8.2 Add trace schema validation
+    - Define JSON schema for ExecutionTrace using zod
+    - Validate traces during deserialization
+    - Return descriptive errors for invalid traces
+    - _Requirements: 11.2, 11.7_
+  - [ ]\* 8.3 Write property tests for serialization
+    - **Property 13: Trace Serialization Round-Trip**
+    - **Property 45: Trace JSON Serializability**
+    - **Property 46: Trace JSON Parseability**
+    - **Property 47: JSON Version Inclusion**
+    - **Property 48: Descriptive Parse Errors**
+    - **Validates: Requirements 3.5, 11.1, 11.2, 11.3, 11.5, 11.6, 11.7**
+
+- [ ] 9. Integrate tracing into SimulationEngine
+  - [ ] 9.1 Extend SimulationConfig with TracingConfig
+    - Add tracing field to SimulationConfig
+    - Create TracingConfig interface with enabled, captureSnapshots, maxTraceSize, autoSave, savePath
+    - _Requirements: 3.1_
+  - [ ] 9.2 Modify SimulationEngine to capture traces
+    - Add ExecutionTracer instance to SimulationEngine
+    - Start trace at beginning of simulation run
+    - Record each operation with before/after state
+    - Record injected failures in trace
+    - Complete trace at end of simulation
+    - _Requirements: 3.1, 3.2, 3.4, 3.6_
+  - [ ] 9.3 Capture error context in traces
+    - Record complete error stack traces
+    - Capture operation context when errors occur
+    - Include failure scenario details for injected failures
+    - _Requirements: 2.4, 3.7_
+  - [ ]\* 9.4 Write integration tests for trace capture
+    - Test trace capture for successful operations
+    - Test trace capture for failed operations
+    - Test trace capture with failure injection
+    - _Requirements: 3.1, 3.2, 3.7_
+
+- [ ] 10. Checkpoint - Verify execution tracing
+  - Ensure all tests pass, verify traces capture complete execution, ask the user if questions arise.
+
+### Phase 4: State Management
+
+- [ ] 11. Implement snapshot data structures
+  - [ ] 11.1 Create snapshot type definitions
+    - Define StateSnapshot interface with state capture fields
+    - Define SnapshotMetadata interface with name, description, tags
+    - Define SnapshotDiff interface for state comparison
+    - Define AccountStateDiff and ContractStateDiff interfaces
+    - Define TrustlineDiff interface
+    - _Requirements: 4.2, 4.6_
+  - [ ] 11.2 Implement SnapshotManager class
+    - Create SnapshotManager with snapshot storage
+    - Implement createSnapshot() to capture current state
+    - Implement restoreSnapshot() to reset state
+    - Implement getSnapshot() and listSnapshots() for access
+    - Implement deleteSnapshot() for cleanup
+    - _Requirements: 4.1, 4.3_
+  - [ ]\* 11.3 Write property tests for snapshot operations
+    - **Property 14: Snapshot Completeness**
+    - **Property 15: Snapshot Restore Round-Trip**
+    - **Property 50: Snapshot Creation Capability**
+    - **Validates: Requirements 4.1, 4.2, 4.3, 4.5**
+
+- [ ] 12. Implement snapshot comparison and serialization
+  - [ ] 12.1 Implement state comparison in SnapshotManager
+    - Implement compareSnapshots() to identify differences
+    - Detect added, removed, and modified accounts
+    - Detect added, removed, and modified contracts
+    - Compute detailed diffs for balances, storage, sequences, trustlines
+    - _Requirements: 4.6_
+  - [ ] 12.2 Implement snapshot serialization
+    - Implement serializeSnapshot() to convert snapshot to JSON
+    - Implement deserializeSnapshot() to parse JSON snapshot
+    - Implement saveSnapshotToDisk() for persistence
+    - Implement loadSnapshotFromDisk() for loading
+    - _Requirements: 4.4_
+  - [ ]\* 12.3 Write property tests for snapshot serialization
+    - **Property 16: Snapshot Serialization Round-Trip**
+    - **Property 17: Snapshot Diff Completeness**
+    - **Validates: Requirements 4.4, 4.6**
+
+- [ ] 13. Integrate snapshots into SimulationEngine
+  - [ ] 13.1 Add SnapshotManager to SimulationEngine
+    - Create SnapshotManager instance in SimulationEngine
+    - Pass StateManager and VirtualClock to SnapshotManager
+    - _Requirements: 4.1_
+  - [ ] 13.2 Implement automatic snapshot creation
+    - Create snapshot before each operation
+    - Create snapshot after each operation
+    - Store snapshots in ExecutionTrace
+    - _Requirements: 4.7_
+  - [ ]\* 13.3 Write property test for automatic snapshots
+    - **Property 18: Automatic Snapshot Creation**
+    - **Validates: Requirements 4.7**
+  - [ ]\* 13.4 Write performance tests for large states
+    - Test snapshot creation time for large state
+    - Test snapshot restore time for large state
+    - Verify O(1) state lookup complexity
+    - _Requirements: 12.3_
+
+- [ ] 14. Checkpoint - Verify state management
+  - Ensure all tests pass, verify snapshots work correctly, ask the user if questions arise.
+
+### Phase 5: Gas & Fidelity
+
+- [ ] 15. Implement gas modeling infrastructure
+  - [ ] 15.1 Create gas model type definitions
+    - Define GasModel interface with operation-specific models
+    - Define ComplexityFactor interface for complexity calculations
+    - Define GasDataPoint interface for historical data
+    - Define GasEstimateWithConfidence interface extending GasEstimate
+    - _Requirements: 5.1, 5.2, 5.3_
+  - [ ] 15.2 Implement GasModeler class
+    - Create GasModeler with model storage
+    - Implement registerModel() to add operation-specific models
+    - Implement estimateGas() with confidence intervals
+    - Implement updateModel() to incorporate actual gas data
+    - Implement calibrateModel() for model refinement
+    - Add getModel() and getModelConfidence() methods
+    - _Requirements: 5.1, 5.2, 5.3_
+  - [ ]\* 15.3 Write property tests for gas modeling
+    - **Property 19: Gas Increases with Complexity**
+    - **Property 20: Gas Confidence Intervals**
+    - **Validates: Requirements 5.2, 5.3**
+  - [ ]\* 15.4 Write unit tests for gas model operations
+    - Test model registration for different operation types
+    - Test model calibration with historical data
+    - Test confidence score calculation
+    - _Requirements: 5.1, 5.6_
+
+- [ ] 16. Implement fidelity validation infrastructure
+  - [ ] 16.1 Create fidelity type definitions
+    - Define FidelityMetrics interface with accuracy measurements
+    - Define FidelityComparison interface for result comparisons
+    - Define FidelityAlert interface for threshold violations
+    - Define FidelityReport and FidelityTrend interfaces
+    - _Requirements: 6.2, 6.3, 6.4, 6.5_
+  - [ ] 16.2 Implement FidelityValidator class
+    - Create FidelityValidator with metrics storage
+    - Implement recordComparison() to capture fidelity data
+    - Implement getMetrics() and getOverallFidelity() for reporting
+    - Implement setThreshold() for configurable thresholds
+    - Implement onAlert() for alert callbacks
+    - Implement generateReport() for fidelity reporting
+    - Add recordManualValidation() for operator confirmation
+    - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.7_
+  - [ ]\* 16.3 Write property tests for fidelity validation
+    - **Property 21: Fidelity Threshold Alerting**
+    - **Property 22: Multi-Dimensional Fidelity**
+    - **Property 23: Per-Operation Fidelity Tracking**
+    - **Property 24: Response Includes Fidelity**
+    - **Validates: Requirements 5.5, 6.2, 6.3, 6.4, 6.6**
+  - [ ]\* 16.4 Write unit tests for fidelity reporting
+    - Test fidelity report generation
+    - Test trend analysis (improving/declining/stable)
+    - Test alert triggering on threshold violations
+    - _Requirements: 6.5_
+
+- [ ] 17. Integrate gas modeling and fidelity into SimulationEngine
+  - [ ] 17.1 Add GasModeler to GasSimulator
+    - Create GasModeler instance in GasSimulator
+    - Pass FidelityValidator to GasModeler
+    - Use GasModeler for gas estimation
+    - _Requirements: 5.1_
+  - [ ] 17.2 Add FidelityValidator to SimulationEngine
+    - Create FidelityValidator instance in SimulationEngine
+    - Track fidelity for each operation type
+    - Include fidelity scores in simulation responses
+    - _Requirements: 6.1, 6.6_
+  - [ ]\* 17.3 Write integration tests with testnet
+    - Test fidelity validation against real network
+    - Test gas model accuracy against actual consumption
+    - Sample 10% of operations for validation
+    - _Requirements: 5.4, 6.1_
+
+- [ ] 18. Checkpoint - Verify gas and fidelity
+  - Ensure all tests pass, verify gas estimates and fidelity tracking work, ask the user if questions arise.
+
+### Phase 6: Advanced Features
+
+- [ ] 19. Implement virtual clock
+  - [ ] 19.1 Create virtual clock type definitions
+    - Define VirtualClockConfig interface with time control settings
+    - _Requirements: 8.1_
+  - [ ] 19.2 Implement VirtualClock class
+    - Create VirtualClock with time state management
+    - Implement now() to return virtual time
+    - Implement realNow() to return real time
+    - Implement advance() to progress virtual time
+    - Implement setTime() for absolute time setting
+    - Add reset(), isEnabled(), and getOffset() methods
+    - _Requirements: 8.1, 8.3, 8.4_
+  - [ ]\* 19.3 Write property tests for virtual clock
+    - **Property 29: Deterministic Time Progression**
+    - **Property 30: Exact Time Advancement**
+    - **Property 31: Virtual Clock Usage**
+    - **Property 32: Dual Time Recording**
+    - **Property 33: Virtual Timestamp Queries**
+    - **Validates: Requirements 8.2, 8.3, 8.4, 8.5, 8.6**
+  - [ ]\* 19.4 Write unit tests for virtual clock modes
+    - Test manual time advancement mode
+    - Test automatic time progression mode
+    - _Requirements: 8.1, 8.7_
+
+- [ ] 20. Implement transaction bundling
+  - [ ] 20.1 Create transaction bundle type definitions
+    - Define TransactionBundle interface with operations and atomicity
+    - Define BundleExecutionResult interface with execution details
+    - Define ValidationResult and BundleAnalysis interfaces
+    - _Requirements: 9.1, 9.3, 9.4_
+  - [ ] 20.2 Implement TransactionBundler class
+    - Create TransactionBundler with dependencies
+    - Implement executeBundle() with atomic rollback support
+    - Implement validateBundle() for pre-execution checks
+    - Implement analyzeBundle() for optimization analysis
+    - _Requirements: 9.1, 9.2, 9.5, 9.7_
+  - [ ]\* 20.3 Write property tests for transaction bundling
+    - **Property 34: Atomic Bundle Rollback**
+    - **Property 35: Bundle Boundary Delineation**
+    - **Property 36: Bundle Gas Aggregation**
+    - **Property 37: Nested Transaction Rollback**
+    - **Property 38: Transaction Ordering Effects**
+    - **Property 39: Dependency Respect**
+    - **Validates: Requirements 9.2, 9.3, 9.4, 9.5, 9.6, 9.7**
+  - [ ]\* 20.4 Write unit tests for bundle validation
+    - Test bundle validation for invalid configurations
+    - Test dependency detection
+    - Test risk assessment
+    - _Requirements: 9.1_
+
+- [ ] 21. Implement execution preview generation
+  - [ ] 21.1 Create preview type definitions
+    - Define ExecutionPreview interface with preview details
+    - Define OperationPreview interface for operation summaries
+    - Define StateChangePreview interface for state changes
+    - Define RiskAssessment and Warning interfaces
+    - _Requirements: 7.1, 7.2, 7.3, 7.5_
+  - [ ] 21.2 Implement PreviewGenerator class
+    - Create PreviewGenerator with dependencies
+    - Implement generateOperationPreview() for single operations
+    - Implement generateBundlePreview() for transaction bundles
+    - Implement assessRisks() for risk identification
+    - Implement generateWarnings() for warning generation
+    - Add formatAsHTML() and formatAsText() for output formatting
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
+  - [ ]\* 21.3 Write property tests for preview generation
+    - **Property 25: Preview Generation**
+    - **Property 26: Preview Completeness**
+    - **Property 27: High-Risk Flagging**
+    - **Property 28: Divergence Warnings**
+    - **Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5, 7.7**
+  - [ ]\* 21.4 Write unit tests for preview formatting
+    - Test HTML output formatting
+    - Test plain text output formatting
+    - _Requirements: 7.6_
+
+- [ ] 22. Implement configuration validation
+  - [ ] 22.1 Create validation type definitions
+    - Define ValidationError interface with error details
+    - Define StateHealthCheck interface for state validation
+    - Define StateIssue interface for state problems
+    - _Requirements: 10.1, 10.2, 10.4_
+  - [ ] 22.2 Implement ConfigValidator class
+    - Create ConfigValidator with validation logic
+    - Implement validateConfig() for configuration validation
+    - Implement validateFailureScenarios() for scenario validation
+    - Implement checkStateHealth() for state divergence detection
+    - Implement validateBundle() for bundle validation
+    - Add detectConflicts() and validateSnapshot() methods
+    - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7_
+  - [ ]\* 22.3 Write property tests for configuration validation
+    - **Property 40: Invalid Config Rejection**
+    - **Property 41: Divergence Threshold Warnings**
+    - **Property 42: Scenario Mode Compatibility**
+    - **Property 43: State Consistency Prevention**
+    - **Property 44: Hybrid Component Compatibility**
+    - **Validates: Requirements 10.1, 10.2, 10.4, 10.5, 10.6, 10.7**
+
+- [ ] 23. Integrate advanced features into SimulationEngine
+  - [ ] 23.1 Add VirtualClock to SimulationEngine
+    - Create VirtualClock instance in SimulationEngine
+    - Initialize from VirtualClockConfig
+    - Use virtual time for all timestamp operations
+    - Pass VirtualClock to components that need it
+    - _Requirements: 8.1, 8.4_
+  - [ ] 23.2 Add TransactionBundler to SimulationEngine
+    - Create TransactionBundler instance in SimulationEngine
+    - Expose bundle execution API
+    - Integrate with ExecutionTracer for bundle traces
+    - _Requirements: 9.1, 9.3_
+  - [ ] 23.3 Add PreviewGenerator to SimulationEngine
+    - Create PreviewGenerator instance in SimulationEngine
+    - Generate previews for all operations
+    - Include previews in simulation responses
+    - _Requirements: 7.1_
+  - [ ] 23.4 Add ConfigValidator to SimulationEngine
+    - Create ConfigValidator instance in SimulationEngine
+    - Validate configuration on initialization
+    - Check state health periodically
+    - _Requirements: 10.1, 10.3_
+  - [ ]\* 23.5 Write integration tests for advanced features
+    - Test virtual clock integration
+    - Test bundle execution end-to-end
+    - Test preview generation for complex operations
+    - Test configuration validation
+    - _Requirements: 8.1, 9.1, 10.1_
+
+- [ ] 24. Checkpoint - Verify advanced features
+  - Ensure all tests pass, verify all advanced features work correctly, ask the user if questions arise.
+
+### Phase 7: Optimization & Polish
+
+- [ ] 25. Performance optimization
+  - [ ] 25.1 Profile and optimize hot paths
+    - Profile SimulationEngine execution
+    - Optimize RNG for minimal overhead
+    - Cache gas models for frequently used operations
+    - Optimize JSON serialization
+    - _Requirements: 12.1, 12.2_
+  - [ ] 25.2 Implement memory optimizations
+    - Use efficient data structures for traces
+    - Implement copy-on-write for snapshots
+    - Add compression for disk storage
+    - Implement lazy loading for large snapshots
+    - _Requirements: 12.5_
+  - [ ] 25.3 Implement parallel execution support
+    - Add parallel execution for independent simulations
+    - Use worker threads for expensive operations
+    - Batch operations where possible
+    - _Requirements: 12.4_
+  - [ ]\* 25.4 Write performance benchmark tests
+    - **Property 49: Performance Degradation Warnings**
+    - Test simple operations complete in <50ms
+    - Test complex operations complete in <200ms
+    - Test state lookup O(1) complexity
+    - Test parallel execution speedup
+    - Test memory overhead <10% for tracing
+    - **Validates: Requirements 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7**
+
+- [ ] 26. Documentation and examples
+  - [ ] 26.1 Write API documentation
+    - Document all public classes and interfaces using TypeDoc
+    - Include parameter descriptions and return types
+    - Add usage examples for common scenarios
+    - Create migration guide from current implementation
+  - [ ] 26.2 Write user guide
+    - Introduction to simulation stack hardening
+    - Getting started with deterministic mode
+    - Configuring failure injection
+    - Working with execution traces
+    - Using snapshots for testing
+    - Understanding fidelity scores
+    - Generating execution previews
+    - Advanced features (virtual clock, bundles)
+    - Performance tuning
+    - Troubleshooting
+  - [ ] 26.3 Write developer guide
+    - Architecture overview
+    - Component responsibilities
+    - Adding new failure types
+    - Creating custom gas models
+    - Extending the tracer
+    - Writing property tests
+    - Contributing guidelines
+  - [ ] 26.4 Document JSON schemas
+    - Create JSON Schema for ExecutionTrace
+    - Create JSON Schema for StateSnapshot
+    - Create JSON Schema for SimulationConfig
+    - Create JSON Schema for FailureScenario
+    - Include examples and validation rules
+
+- [ ] 27. Create example applications
+  - [ ] 27.1 Create deterministic simulation example
+    - Example showing deterministic replay
+    - Demonstrate seed usage for reproducibility
+  - [ ] 27.2 Create failure injection example
+    - Example showing failure scenario configuration
+    - Demonstrate different trigger types
+  - [ ] 27.3 Create trace analysis example
+    - Example showing trace capture and analysis
+    - Demonstrate trace serialization and parsing
+  - [ ] 27.4 Create snapshot testing example
+    - Example showing snapshot creation and restore
+    - Demonstrate state comparison
+  - [ ] 27.5 Create fidelity monitoring example
+    - Example showing fidelity tracking
+    - Demonstrate alert configuration
+
+- [ ] 28. Final checkpoint - Production readiness
+  - Ensure all tests pass, verify performance targets met, confirm documentation complete, ask the user if questions arise.
+
+## Notes
+
+- Tasks marked with `*` are optional property-based tests and can be skipped for faster MVP
+- Each task references specific requirements for traceability
+- Checkpoints ensure incremental validation throughout implementation
+- Property tests validate universal correctness properties from the design
+- Unit tests validate specific examples and edge cases
+- Integration tests validate end-to-end functionality
+- Performance tests ensure the system meets performance requirements
+- The implementation follows the 7-phase plan from the design document
+- All code is written in TypeScript with comprehensive type safety
+- The design includes 52 correctness properties that are validated through property-based testing

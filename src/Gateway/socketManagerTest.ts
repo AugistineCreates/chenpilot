@@ -96,12 +96,10 @@ export async function demoBotFlow() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     console.log(`2. Bot is monitoring market...`);
-    BotUpdateHelper.notifyInfo(
-      "Market scan initiated",
-      botId,
-      userId,
-      { pairs: 5, interval: "5m" }
-    );
+    BotUpdateHelper.notifyInfo("Market scan initiated", botId, userId, {
+      pairs: 5,
+      interval: "5m",
+    });
 
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -116,12 +114,10 @@ export async function demoBotFlow() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     console.log(`4. Execution: Trade completed`);
-    BotUpdateHelper.notifyInfo(
-      "Trade executed successfully",
-      botId,
-      userId,
-      { tradeId: "T-001", profit: "$245.50" }
-    );
+    BotUpdateHelper.notifyInfo("Trade executed successfully", botId, userId, {
+      tradeId: "T-001",
+      profit: "$245.50",
+    });
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -168,15 +164,12 @@ export async function demoDeploymentFlow() {
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     console.log(`✓ Deployment completed`);
-    DeploymentUpdateHelper.notifyCompleted(
-      deploymentId,
-      userId,
-      {
-        contractAddress: "CAB3XVCPLXL52VYXQ5BNQKR2Q5NBZNX3D7HW3IRXJQWN76DQQDLGET7",
-        gasUsed: "15,000,000",
-        deploymentTime: "45s",
-      }
-    );
+    DeploymentUpdateHelper.notifyCompleted(deploymentId, userId, {
+      contractAddress:
+        "CAB3XVCPLXL52VYXQ5BNQKR2Q5NBZNX3D7HW3IRXJQWN76DQQDLGET7",
+      gasUsed: "15,000,000",
+      deploymentTime: "45s",
+    });
 
     console.log("✓ Deployment flow completed");
   } catch (error) {
@@ -193,7 +186,9 @@ export function demoCheckStats() {
   try {
     const socketManager = getSocketManager();
 
-    console.log(`Connected clients: ${socketManager.getConnectedClientsCount()}`);
+    console.log(
+      `Connected clients: ${socketManager.getConnectedClientsCount()}`
+    );
     console.log(
       `Connected clients: ${JSON.stringify(
         socketManager.getAllConnectedClients(),
@@ -231,9 +226,13 @@ export async function runAllDemos() {
 
     demoCheckStats();
 
-    console.log("\n╔════════════════════════════════════════════════════════════╗");
+    console.log(
+      "\n╔════════════════════════════════════════════════════════════╗"
+    );
     console.log("║   ✓ All demos completed successfully!                    ║");
-    console.log("╚════════════════════════════════════════════════════════════╝\n");
+    console.log(
+      "╚════════════════════════════════════════════════════════════╝\n"
+    );
   } catch (error) {
     console.error("✗ Error running demos:", error);
   }

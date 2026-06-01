@@ -1,1 +1,32 @@
-{"rustc":4643058173861170821,"features":"[\"testutils\"]","declared_features":"[\"testutils\"]","target":11889818073967546717,"profile":2225463790103693989,"path":9819560428604051207,"deps":[[496455418292392305,"darling",false,17941689825212548788],[4289358735036141001,"proc_macro2",false,11781682634645666361],[5027556215623624228,"stellar_xdr",false,16475629390571696654],[6839232481333891070,"build_script_build",false,10573655368343629756],[9574613250161269515,"soroban_spec",false,5995099029991004882],[9857275760291862238,"sha2",false,3158105340349338004],[10420560437213941093,"syn",false,2239188020272299838],[11903278875415370753,"itertools",false,15860789076363467152],[12529489635975652664,"soroban_spec_rust",false,7627727920183661681],[13111758008314797071,"quote",false,46692176628791793],[15493370609364094450,"soroban_env_common",false,1253129946215903653]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/soroban-sdk-macros-270b9e4b41d0168d/dep-lib-soroban_sdk_macros","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"testutils\"]",
+  "declared_features": "[\"testutils\"]",
+  "target": 11889818073967546717,
+  "profile": 2225463790103693989,
+  "path": 9819560428604051207,
+  "deps": [
+    [496455418292392305, "darling", false, 17941689825212548788],
+    [4289358735036141001, "proc_macro2", false, 11781682634645666361],
+    [5027556215623624228, "stellar_xdr", false, 16475629390571696654],
+    [6839232481333891070, "build_script_build", false, 10573655368343629756],
+    [9574613250161269515, "soroban_spec", false, 5995099029991004882],
+    [9857275760291862238, "sha2", false, 3158105340349338004],
+    [10420560437213941093, "syn", false, 2239188020272299838],
+    [11903278875415370753, "itertools", false, 15860789076363467152],
+    [12529489635975652664, "soroban_spec_rust", false, 7627727920183661681],
+    [13111758008314797071, "quote", false, 46692176628791793],
+    [15493370609364094450, "soroban_env_common", false, 1253129946215903653]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/soroban-sdk-macros-270b9e4b41d0168d/dep-lib-soroban_sdk_macros",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

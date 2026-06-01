@@ -29,6 +29,10 @@ export interface AggregatedMetrics {
   averageStepsCompleted: number;
   executionsByAgentType: Record<string, number>;
   executionsByStatus: Record<string, number>;
+  toolPerformance: Record<
+    string,
+    { successRate: number; avgTime: number; count: number }
+  >;
   recentExecutions: AgentExecutionMetrics[];
   periodStart: Date;
   periodEnd: Date;
@@ -157,6 +161,32 @@ class AgentMetricsService {
       .select("AVG(metrics.stepsCompleted)", "avgSteps")
       .getRawOne();
 
+    // Get tool-specific performance
+    const toolPerformanceRaw = await queryBuilder
+      .clone()
+      .select("metrics.outputMetadata->>'lastTool'", "tool")
+      .addSelect("COUNT(*)", "count")
+      .addSelect("AVG(metrics.executionTimeMs)", "avgTime")
+      .addSelect(
+        "COUNT(CASE WHEN metrics.status = 'success' THEN 1 END)::float / COUNT(*)",
+        "successRate"
+      )
+      .where("metrics.outputMetadata->>'lastTool' IS NOT NULL")
+      .groupBy("tool")
+      .getRawMany();
+
+    const toolPerformance: Record<
+      string,
+      { successRate: number; avgTime: number; count: number }
+    > = {};
+    toolPerformanceRaw.forEach((row) => {
+      toolPerformance[row.tool] = {
+        successRate: parseFloat(row.successRate) * 100,
+        avgTime: parseFloat(row.avgTime),
+        count: parseInt(row.count, 10),
+      };
+    });
+
     // Get recent executions
     const recentExecutions = await queryBuilder
       .orderBy("metrics.createdAt", "DESC")
@@ -182,6 +212,7 @@ class AgentMetricsService {
       averageStepsCompleted: parseFloat(avgStepsResult?.avgSteps || "0"),
       executionsByAgentType,
       executionsByStatus,
+      toolPerformance,
       recentExecutions,
       periodStart,
       periodEnd,

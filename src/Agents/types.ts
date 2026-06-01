@@ -17,8 +17,8 @@ export type BalancePayload = {
 };
 
 export type WorkflowStep = {
-  action: string; 
-  payload: Record<string, unknown>; 
+  action: string;
+  payload: Record<string, unknown>;
 };
 
 export type WorkflowPlan = {

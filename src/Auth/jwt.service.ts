@@ -42,7 +42,11 @@ export default class JwtService {
   /**
    * Generate access and refresh token pair
    */
-  async generateTokenPair(userId: string, name: string, role: string = "user"): Promise<TokenPair> {
+  async generateTokenPair(
+    userId: string,
+    name: string,
+    role: string = "user"
+  ): Promise<TokenPair> {
     const payload: TokenPayload = { userId, name, role };
 
     // Generate access token (short-lived)

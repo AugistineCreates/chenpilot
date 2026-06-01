@@ -24,11 +24,7 @@ export async function exampleTransactionService(userId: string) {
   const transactionHash = "hash_abc123xyz";
 
   // Notify transaction created
-  TransactionUpdateHelper.notifyCreated(
-    transactionId,
-    transactionHash,
-    userId
-  );
+  TransactionUpdateHelper.notifyCreated(transactionId, transactionHash, userId);
 
   // Simulate processing
   await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -160,12 +156,10 @@ export async function exampleBotService(botId: string, userId: string) {
   await new Promise((resolve) => setTimeout(resolve, 1000));
 
   // Notify info about successful operation
-  BotUpdateHelper.notifyInfo(
-    "Trade executed successfully",
-    botId,
-    userId,
-    { tradeId: "trade-999", profit: "+$245.50" }
-  );
+  BotUpdateHelper.notifyInfo("Trade executed successfully", botId, userId, {
+    tradeId: "trade-999",
+    profit: "+$245.50",
+  });
 }
 
 // Usage in bot service:
@@ -240,15 +234,11 @@ export async function exampleDeploymentService(userId: string) {
   }
 
   // Notify deployment completed
-  DeploymentUpdateHelper.notifyCompleted(
-    deploymentId,
-    userId,
-    {
-      contractAddress: "CAB3XVCPLXL52VYXQ5BNQKR2Q5NBZNX3D7HW3IRXJQWN76DQQDLGET7",
-      gasUsed: "15000000",
-      deploymentTime: "45s",
-    }
-  );
+  DeploymentUpdateHelper.notifyCompleted(deploymentId, userId, {
+    contractAddress: "CAB3XVCPLXL52VYXQ5BNQKR2Q5NBZNX3D7HW3IRXJQWN76DQQDLGET7",
+    gasUsed: "15000000",
+    deploymentTime: "45s",
+  });
 }
 
 // Usage in deployment service:

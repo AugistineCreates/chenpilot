@@ -56,15 +56,16 @@ Soroban transactions require specifying resource limits for:
 
 The engine supports three strategies for adjusting limits:
 
-| Strategy | Multiplier | Use Case |
-|----------|------------|----------|
-| **Conservative** | 1.2x | Cost-sensitive applications, predictable contracts |
-| **Moderate** | 1.5x | General purpose (default) |
-| **Aggressive** | 2.0x | Complex contracts, unpredictable resource usage |
+| Strategy         | Multiplier | Use Case                                           |
+| ---------------- | ---------- | -------------------------------------------------- |
+| **Conservative** | 1.2x       | Cost-sensitive applications, predictable contracts |
+| **Moderate**     | 1.5x       | General purpose (default)                          |
+| **Aggressive**   | 2.0x       | Complex contracts, unpredictable resource usage    |
 
 ### Proportional Bumping
 
 When a specific resource limit is exceeded, the engine:
+
 1. Bumps the failed resource by the strategy multiplier
 2. Bumps all other resources by 1.1x to prevent cascading failures
 
@@ -81,18 +82,22 @@ new FeeBumpingEngine(config?: FeeBumpConfig)
 ```
 
 **Parameters:**
+
 - `config.strategy` (optional): Fee bump strategy - "conservative" | "moderate" | "aggressive"
 - `config.maxAttempts` (optional): Maximum retry attempts (default: 3)
 - `config.initialLimits` (optional): Initial resource limits (uses defaults if not provided)
 - `config.onBump` (optional): Callback invoked when limits are bumped
 
 **Example:**
+
 ```typescript
 const engine = new FeeBumpingEngine({
   strategy: "aggressive",
   maxAttempts: 5,
   onBump: (info) => {
-    console.log(`Bumping ${info.error.resource} from ${info.previousLimits[info.error.resource]} to ${info.newLimits[info.error.resource]}`);
+    console.log(
+      `Bumping ${info.error.resource} from ${info.previousLimits[info.error.resource]} to ${info.newLimits[info.error.resource]}`
+    );
   },
 });
 ```
@@ -111,10 +116,12 @@ async bumpAndRetry<T>(
 ```
 
 **Parameters:**
+
 - `txExecutor`: Function that executes the transaction with given limits
 - `initialLimits` (optional): Override initial limits for this transaction
 
 **Returns:** `FeeBumpResult<T>` containing:
+
 - `success`: Whether the transaction succeeded
 - `result`: Transaction result if successful
 - `error`: Error message if failed
@@ -123,6 +130,7 @@ async bumpAndRetry<T>(
 - `estimatedFee`: Estimated fee in stroops
 
 **Example:**
+
 ```typescript
 const result = await engine.bumpAndRetry(
   async (limits) => {
@@ -144,12 +152,14 @@ calculateAdjustment(
 ```
 
 **Parameters:**
+
 - `error`: Error message from failed transaction
 - `currentLimits`: Current resource limits
 
 **Returns:** Adjusted limits or null if error is not resource-related
 
 **Example:**
+
 ```typescript
 const adjusted = engine.calculateAdjustment(
   "cpu instructions exceeded 150000000 limit 100000000",
@@ -166,11 +176,13 @@ estimateFee(limits: ResourceLimits): number
 ```
 
 **Parameters:**
+
 - `limits`: Resource limits to estimate fee for
 
 **Returns:** Estimated fee in stroops
 
 **Example:**
+
 ```typescript
 const fee = engine.estimateFee(limits);
 console.log(`Estimated fee: ${fee / 10_000_000} XLM`);
@@ -187,6 +199,7 @@ static getDefaultLimits(): ResourceLimits
 **Returns:** Default resource limits
 
 **Example:**
+
 ```typescript
 const defaults = FeeBumpingEngine.getDefaultLimits();
 ```
@@ -198,10 +211,11 @@ const defaults = FeeBumpingEngine.getDefaultLimits();
 Create a fee bumping engine with optional configuration.
 
 ```typescript
-function createFeeBumpingEngine(config?: FeeBumpConfig): FeeBumpingEngine
+function createFeeBumpingEngine(config?: FeeBumpConfig): FeeBumpingEngine;
 ```
 
 **Example:**
+
 ```typescript
 const engine = createFeeBumpingEngine({ strategy: "conservative" });
 ```
@@ -332,7 +346,9 @@ const engine = new FeeBumpingEngine({
     logger.info("Fee bump", {
       attempt: info.attempt,
       resource: info.error.resource,
-      increase: info.newLimits[info.error.resource] - info.previousLimits[info.error.resource],
+      increase:
+        info.newLimits[info.error.resource] -
+        info.previousLimits[info.error.resource],
     });
   },
 });
@@ -396,12 +412,15 @@ if (await userConfirmsFee(fee)) {
 **Problem:** Transaction fails even after maximum retry attempts.
 
 **Solutions:**
+
 1. Increase `maxAttempts`:
+
    ```typescript
    const engine = new FeeBumpingEngine({ maxAttempts: 5 });
    ```
 
 2. Use a more aggressive strategy:
+
    ```typescript
    const engine = new FeeBumpingEngine({ strategy: "aggressive" });
    ```
@@ -418,7 +437,9 @@ if (await userConfirmsFee(fee)) {
 **Problem:** Estimated fees are higher than expected.
 
 **Solutions:**
+
 1. Use conservative strategy:
+
    ```typescript
    const engine = new FeeBumpingEngine({ strategy: "conservative" });
    ```
@@ -483,7 +504,7 @@ const engine = new FeeBumpingEngine();
 const result = await engine.bumpAndRetry(async (limits) => {
   const contract = new Contract(contractId);
   const operation = contract.call("method", ...args);
-  
+
   const transaction = new TransactionBuilder(account, {
     fee: limits.txSizeByte.toString(),
     networkPassphrase: Networks.TESTNET,
@@ -491,9 +512,9 @@ const result = await engine.bumpAndRetry(async (limits) => {
     .addOperation(operation)
     .setTimeout(30)
     .build();
-  
+
   transaction.sign(keypair);
-  
+
   return await server.sendTransaction(transaction);
 });
 ```
@@ -504,7 +525,7 @@ const result = await engine.bumpAndRetry(async (limits) => {
 const engine = new FeeBumpingEngine();
 
 const results = await Promise.all(
-  operations.map(op => 
+  operations.map((op) =>
     engine.bumpAndRetry(async (limits) => {
       return await executeOperation(op, limits);
     })
@@ -521,5 +542,6 @@ const results = await Promise.all(
 ## Support
 
 For issues or questions:
+
 - GitHub Issues: [github.com/gear5labs/chenpilot/issues](https://github.com/gear5labs/chenpilot/issues)
 - Documentation: [Full SDK Documentation](./README.md)

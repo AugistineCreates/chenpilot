@@ -4,6 +4,7 @@ import { requireAdmin } from "../../Gateway/middleware/rbac.middleware";
 import { agentMetricsService } from "../agentMetrics.service";
 import { AgentType, ExecutionStatus } from "../agentExecutionMetrics.entity";
 import { PromptVersion } from "../registry/PromptVersion.entity";
+import { promptRolloutService } from "../registry/PromptRolloutService";
 import AppDataSource from "../../config/Datasource";
 
 const router = Router();
@@ -169,6 +170,12 @@ router.put(
       if (version !== undefined) prompt.version = version;
       if (isActive !== undefined) prompt.isActive = isActive;
       if (weight !== undefined) prompt.weight = weight;
+      if (req.body.compatibility !== undefined)
+        prompt.compatibility = req.body.compatibility;
+      if (req.body.rolloutPolicy !== undefined)
+        prompt.rolloutPolicy = req.body.rolloutPolicy;
+      if (req.body.rollbackVersionId !== undefined)
+        prompt.rollbackVersionId = req.body.rollbackVersionId;
 
       const updatedPrompt = await promptRepository.save(prompt);
 
@@ -182,6 +189,69 @@ router.put(
       return res.status(500).json({
         success: false,
         message: "Failed to update prompt",
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/admin/agents/prompts/:promptId/activate
+ * Activate a prompt version with safety checks
+ * Requires admin role
+ */
+router.post(
+  "/prompts/:promptId/activate",
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    try {
+      const { promptId } = req.params;
+      const { rollbackVersionId } = req.body;
+
+      await promptRolloutService.activateWithPolicy(
+        promptId,
+        rollbackVersionId
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Prompt version activated safely",
+      });
+    } catch (error) {
+      console.error("Error activating prompt rollout:", error);
+      return res.status(400).json({
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Failed to activate prompt",
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/admin/agents/prompts/:promptId/validate
+ * Validate prompt compatibility
+ * Requires admin role
+ */
+router.get(
+  "/prompts/:promptId/validate",
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    try {
+      const { promptId } = req.params;
+      const validation =
+        await promptRolloutService.validateCompatibility(promptId);
+
+      return res.status(200).json({
+        success: true,
+        data: validation,
+      });
+    } catch (error) {
+      console.error("Error validating prompt:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to validate prompt",
       });
     }
   }

@@ -1,1 +1,24 @@
-{"rustc":4643058173861170821,"features":"[\"default\", \"std\"]","declared_features":"[\"asm\", \"asm-aarch64\", \"compress\", \"default\", \"force-soft\", \"force-soft-compact\", \"loongarch64_asm\", \"oid\", \"sha2-asm\", \"std\"]","target":9593554856174113207,"profile":2241668132362809309,"path":13945881858313663512,"deps":[[7667230146095136825,"cfg_if",false,12587111896139271210],[17475753849556516473,"digest",false,12349089324628477233],[17620084158052398167,"cpufeatures",false,9152468285162095872]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/sha2-625845b1fc3fbecb/dep-lib-sha2","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"default\", \"std\"]",
+  "declared_features": "[\"asm\", \"asm-aarch64\", \"compress\", \"default\", \"force-soft\", \"force-soft-compact\", \"loongarch64_asm\", \"oid\", \"sha2-asm\", \"std\"]",
+  "target": 9593554856174113207,
+  "profile": 2241668132362809309,
+  "path": 13945881858313663512,
+  "deps": [
+    [7667230146095136825, "cfg_if", false, 12587111896139271210],
+    [17475753849556516473, "digest", false, 12349089324628477233],
+    [17620084158052398167, "cpufeatures", false, 9152468285162095872]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/sha2-625845b1fc3fbecb/dep-lib-sha2",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

@@ -52,14 +52,12 @@ export interface TransactionRequest {
  */
 export abstract class DeFiAdapter {
   protected config: DeFiAdapterConfig;
-  
+
   constructor(protocol: "equilibre" | "yieldblox") {
     this.config = getAdapterConfig(protocol);
-    
+
     if (!this.config.enabled) {
-      console.warn(
-        `[DeFiAdapter] ${this.config.name} adapter is disabled`
-      );
+      console.warn(`[DeFiAdapter] ${this.config.name} adapter is disabled`);
     }
   }
 
@@ -88,7 +86,8 @@ export abstract class DeFiAdapter {
    * Get a contract address for the current network
    */
   getContractAddress(contractName: string): string | undefined {
-    const network = (process.env.STELLAR_NETWORK as "testnet" | "public") || "testnet";
+    const network =
+      (process.env.STELLAR_NETWORK as "testnet" | "public") || "testnet";
     return this.config.contracts[network]?.[contractName];
   }
 
@@ -104,7 +103,7 @@ export abstract class DeFiAdapter {
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     let lastError: Error | undefined;
-    
+
     for (let attempt = 1; attempt <= retry.maxAttempts; attempt++) {
       try {
         const response = await fetch(`${this.config.apiUrl}${endpoint}`, {
@@ -125,7 +124,7 @@ export abstract class DeFiAdapter {
         return await response.json();
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        
+
         if (attempt < retry.maxAttempts) {
           await new Promise((resolve) =>
             setTimeout(resolve, retry.backoffMs * attempt)
@@ -163,19 +162,25 @@ export abstract class DeFiAdapter {
    * Get liquidity positions for an address
    * Must be implemented by subclasses
    */
-  abstract getLiquidityPositions(address: string): Promise<AdapterResult<PositionResult[]>>;
+  abstract getLiquidityPositions(
+    address: string
+  ): Promise<AdapterResult<PositionResult[]>>;
 
   /**
    * Get lending positions for an address
    * Must be implemented by subclasses
    */
-  abstract getLendingPositions(address: string): Promise<AdapterResult<PositionResult[]>>;
+  abstract getLendingPositions(
+    address: string
+  ): Promise<AdapterResult<PositionResult[]>>;
 
   /**
    * Get borrowing positions for an address
    * Must be implemented by subclasses
    */
-  abstract getBorrowingPositions(address: string): Promise<AdapterResult<PositionResult[]>>;
+  abstract getBorrowingPositions(
+    address: string
+  ): Promise<AdapterResult<PositionResult[]>>;
 
   /**
    * Health check for the adapter
@@ -204,11 +209,11 @@ export class DeFiAdapterFactory {
     adapterClass: new (protocol: "equilibre" | "yieldblox") => T
   ): T {
     const key = protocol;
-    
+
     if (!this.adapters.has(key)) {
       this.adapters.set(key, new adapterClass(protocol));
     }
-    
+
     return this.adapters.get(key) as T;
   }
 
@@ -220,7 +225,4 @@ export class DeFiAdapterFactory {
   }
 }
 
-export {
-  DeFiAdapterConfig,
-  AdapterCapabilities,
-};
+export { DeFiAdapterConfig, AdapterCapabilities };

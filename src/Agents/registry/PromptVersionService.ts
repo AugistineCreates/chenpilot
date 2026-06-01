@@ -1,5 +1,6 @@
 import { AppDataSource } from "../../config/Datasource";
 import { PromptVersion, PromptMetric } from "./PromptVersion.entity";
+import { promptRolloutService } from "./PromptRolloutService";
 
 export class PromptVersionService {
   private promptRepo = AppDataSource.getRepository(PromptVersion);
@@ -11,6 +12,16 @@ export class PromptVersionService {
     });
 
     if (activePrompts.length === 0) return null;
+
+    // Evaluate rollback for active prompts periodically or on selection
+    for (const prompt of activePrompts) {
+      const rolledBack = await promptRolloutService.evaluateRollback(prompt.id);
+      if (rolledBack) {
+        // Refresh active prompts if a rollback occurred
+        return this.selectPrompt(type);
+      }
+    }
+
     if (activePrompts.length === 1) return activePrompts[0];
 
     const totalWeight = activePrompts.reduce((sum, p) => sum + p.weight, 0);

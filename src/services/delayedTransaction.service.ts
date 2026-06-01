@@ -6,7 +6,7 @@ import logger from "../config/logger";
 /**
  * Delay strategy for transaction submission
  */
-export type DelayStrategy = 
+export type DelayStrategy =
   /**
    * Submit at a specific time
    */
@@ -28,27 +28,27 @@ export interface DelayedTransactionConfig {
    * Delay strategy to use
    */
   strategy: DelayStrategy;
-  
+
   /**
    * Unix timestamp (in milliseconds) to submit at (for 'scheduled' strategy)
    */
   scheduledAt?: number;
-  
+
   /**
    * Maximum fee willing to pay (in stroops) for 'fee_based' strategy
    */
   maxFee?: number;
-  
+
   /**
    * Target fee (stroops) for 'fee_based' strategy
    */
   targetFee?: number;
-  
+
   /**
    * Maximum number of retries
    */
   maxRetries?: number;
-  
+
   /**
    * Retry delay in milliseconds
    */
@@ -58,7 +58,7 @@ export interface DelayedTransactionConfig {
 /**
  * Status of a delayed transaction
  */
-export type DelayedTransactionStatus = 
+export type DelayedTransactionStatus =
   | "pending"
   | "waiting_for_fee"
   | "waiting_for_congestion"
@@ -91,12 +91,12 @@ export interface NetworkFeeInfo {
    * Current fee in stroops per operation
    */
   fee: number;
-  
+
   /**
    * Last updated timestamp
    */
   lastUpdated: number;
-  
+
   /**
    * Number of pending transactions in the network
    */
@@ -126,7 +126,7 @@ export class DelayedTransactionService {
   async initialize(): Promise<void> {
     // Start background checking for delayed transactions
     this.startChecking();
-    
+
     logger.info("Delayed transaction service initialized");
   }
 
@@ -162,9 +162,14 @@ export class DelayedTransactionService {
 
     // Validate the XDR
     try {
-      const _tx = StellarSdk.Transaction.fromXDR(transactionXdr, "Test SDF Network ; September 2015");
+      const _tx = StellarSdk.Transaction.fromXDR(
+        transactionXdr,
+        "Test SDF Network ; September 2015"
+      );
     } catch (error) {
-      throw new Error(`Invalid transaction XDR: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw new Error(
+        `Invalid transaction XDR: ${error instanceof Error ? error.message : "Unknown error"}`
+      );
     }
 
     const delayedTx: DelayedTransaction = {
@@ -192,9 +197,11 @@ export class DelayedTransactionService {
     }
 
     this.pendingDelayedTxs.set(delayedTx.id, delayedTx);
-    
-    logger.info(`Created delayed transaction ${delayedTx.id} with strategy ${config.strategy}`);
-    
+
+    logger.info(
+      `Created delayed transaction ${delayedTx.id} with strategy ${config.strategy}`
+    );
+
     // If already ready to submit, try immediately
     if (delayedTx.status === "submitting") {
       this.submitTransaction(delayedTx.id);
@@ -220,14 +227,14 @@ export class DelayedTransactionService {
           throw new Error("scheduledAt must be in the future");
         }
         break;
-        
+
       case "fee_based":
         if (!config.targetFee && !config.maxFee) {
           config.targetFee = this.DEFAULT_TARGET_FEE;
           config.maxFee = this.DEFAULT_MAX_FEE;
         }
         break;
-        
+
       case "congestion_based":
         // No specific validation needed
         break;
@@ -241,14 +248,18 @@ export class DelayedTransactionService {
     const txsToRemove: string[] = [];
 
     for (const [id, delayedTx] of this.pendingDelayedTxs.entries()) {
-      if (delayedTx.status === "submitted" || delayedTx.status === "failed" || delayedTx.status === "cancelled") {
+      if (
+        delayedTx.status === "submitted" ||
+        delayedTx.status === "failed" ||
+        delayedTx.status === "cancelled"
+      ) {
         txsToRemove.push(id);
         continue;
       }
 
       // Check if ready to submit based on strategy
       const shouldSubmit = await this.checkShouldSubmit(delayedTx);
-      
+
       if (shouldSubmit) {
         await this.submitTransaction(id);
       }
@@ -263,7 +274,9 @@ export class DelayedTransactionService {
   /**
    * Check if a delayed transaction should be submitted
    */
-  private async checkShouldSubmit(delayedTx: DelayedTransaction): Promise<boolean> {
+  private async checkShouldSubmit(
+    delayedTx: DelayedTransaction
+  ): Promise<boolean> {
     const { config } = delayedTx;
 
     switch (config.strategy) {
@@ -287,9 +300,11 @@ export class DelayedTransactionService {
   /**
    * Check if current fee is acceptable
    */
-  private async isFeeAcceptable(config: DelayedTransactionConfig): Promise<boolean> {
+  private async isFeeAcceptable(
+    config: DelayedTransactionConfig
+  ): Promise<boolean> {
     const feeInfo = await this.getCurrentFee();
-    
+
     const targetFee = config.targetFee || this.DEFAULT_TARGET_FEE;
     const maxFee = config.maxFee || this.DEFAULT_MAX_FEE;
 
@@ -303,7 +318,7 @@ export class DelayedTransactionService {
   private async isNetworkCongestionAcceptable(): Promise<boolean> {
     // Simple congestion check - can be enhanced with more sophisticated logic
     const feeInfo = await this.getCurrentFee();
-    
+
     // Consider network uncongested if fee is below 10000 stroops (0.001 XLM)
     return feeInfo.fee <= 10000;
   }
@@ -313,24 +328,27 @@ export class DelayedTransactionService {
    */
   private async getCurrentFee(): Promise<NetworkFeeInfo> {
     // Check cache
-    if (this.lastFeeInfo && Date.now() - this.lastFeeInfo.lastUpdated < this.FEE_CACHE_TTL) {
+    if (
+      this.lastFeeInfo &&
+      Date.now() - this.lastFeeInfo.lastUpdated < this.FEE_CACHE_TTL
+    ) {
       return this.lastFeeInfo;
     }
 
     try {
       // Get latest fee from Horizon
       const response = await this.server.feeStats().call();
-      
+
       this.lastFeeInfo = {
         fee: response.fee_charged.max_fee || 100,
         lastUpdated: Date.now(),
         pendingTxCount: response.operations_in_queue_total || 0,
       };
-      
+
       return this.lastFeeInfo;
     } catch (error) {
       logger.error("Error fetching fee stats:", error);
-      
+
       // Return default fee if unable to fetch
       return {
         fee: 100,
@@ -342,35 +360,45 @@ export class DelayedTransactionService {
   /**
    * Submit a delayed transaction
    */
-  private async submitTransaction(id: string): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  private async submitTransaction(
+    id: string
+  ): Promise<{ success: boolean; txHash?: string; error?: string }> {
     const delayedTx = this.pendingDelayedTxs.get(id);
     if (!delayedTx) {
       return { success: false, error: "Transaction not found" };
     }
 
     delayedTx.status = "submitting";
-    
+
     try {
       const networkPassphrase = config.stellar.networkPassphrase;
-      const tx = StellarSdk.Transaction.fromXDR(delayedTx.transactionXdr, networkPassphrase);
-      
+      const tx = StellarSdk.Transaction.fromXDR(
+        delayedTx.transactionXdr,
+        networkPassphrase
+      );
+
       const response = await this.server.submitTransaction(tx);
-      
+
       delayedTx.status = "submitted";
       delayedTx.submittedAt = Date.now();
       delayedTx.txHash = response.hash;
-      
-      logger.info(`Successfully submitted delayed transaction ${id}: ${response.hash}`);
-      
+
+      logger.info(
+        `Successfully submitted delayed transaction ${id}: ${response.hash}`
+      );
+
       return { success: true, txHash: response.hash };
     } catch (error) {
       delayedTx.retries++;
       const maxRetries = delayedTx.config.maxRetries || 3;
-      
+
       if (delayedTx.retries >= maxRetries) {
         delayedTx.status = "failed";
-        delayedTx.error = error instanceof Error ? error.message : "Unknown error";
-        logger.error(`Delayed transaction ${id} failed after ${maxRetries} retries`);
+        delayedTx.error =
+          error instanceof Error ? error.message : "Unknown error";
+        logger.error(
+          `Delayed transaction ${id} failed after ${maxRetries} retries`
+        );
       } else {
         // Reset status based on strategy
         if (delayedTx.config.strategy === "fee_based") {
@@ -380,13 +408,15 @@ export class DelayedTransactionService {
         } else {
           delayedTx.status = "pending";
         }
-        
-        logger.warn(`Delayed transaction ${id} failed, retry ${delayedTx.retries}/${maxRetries}`);
+
+        logger.warn(
+          `Delayed transaction ${id} failed, retry ${delayedTx.retries}/${maxRetries}`
+        );
       }
-      
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : "Unknown error" 
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -396,7 +426,7 @@ export class DelayedTransactionService {
    */
   cancelTransaction(id: string, userId: string): boolean {
     const delayedTx = this.pendingDelayedTxs.get(id);
-    
+
     if (!delayedTx) {
       return false;
     }
@@ -411,7 +441,7 @@ export class DelayedTransactionService {
 
     delayedTx.status = "cancelled";
     logger.info(`Cancelled delayed transaction ${id}`);
-    
+
     return true;
   }
 
@@ -427,16 +457,24 @@ export class DelayedTransactionService {
    */
   getUserTransactions(userId: string): DelayedTransaction[] {
     return Array.from(this.pendingDelayedTxs.values()).filter(
-      (tx) => tx.userId === userId && tx.status !== "submitted" && tx.status !== "failed" && tx.status !== "cancelled"
+      (tx) =>
+        tx.userId === userId &&
+        tx.status !== "submitted" &&
+        tx.status !== "failed" &&
+        tx.status !== "cancelled"
     );
   }
 
   /**
    * Update a scheduled transaction time
    */
-  rescheduleTransaction(id: string, userId: string, newScheduledAt: number): boolean {
+  rescheduleTransaction(
+    id: string,
+    userId: string,
+    newScheduledAt: number
+  ): boolean {
     const delayedTx = this.pendingDelayedTxs.get(id);
-    
+
     if (!delayedTx) {
       return false;
     }
@@ -455,9 +493,11 @@ export class DelayedTransactionService {
 
     delayedTx.config.scheduledAt = newScheduledAt;
     delayedTx.status = "pending";
-    
-    logger.info(`Rescheduled delayed transaction ${id} to ${new Date(newScheduledAt).toISOString()}`);
-    
+
+    logger.info(
+      `Rescheduled delayed transaction ${id} to ${new Date(newScheduledAt).toISOString()}`
+    );
+
     return true;
   }
 

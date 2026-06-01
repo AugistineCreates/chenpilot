@@ -1,14 +1,14 @@
 /**
  * Bot Session Manager
- * 
+ *
  * Manages bot session persistence by communicating with the backend API.
  * This allows interactive bot sessions (wizards, multi-step flows) to survive bot restarts.
  */
 
 export interface BotSessionData {
   userId: string;
-  platform: 'discord' | 'telegram';
-  sessionType: 'multisig_wizard' | 'swap_wizard' | 'custom_flow';
+  platform: "discord" | "telegram";
+  sessionType: "multisig_wizard" | "swap_wizard" | "custom_flow";
   step: number;
   sessionData: Record<string, unknown>;
   expiresAt?: string;
@@ -35,7 +35,8 @@ export class SessionManager {
   private backendUrl: string;
 
   constructor(backendUrl?: string) {
-    this.backendUrl = backendUrl || process.env.BACKEND_URL || "http://localhost:3000";
+    this.backendUrl =
+      backendUrl || process.env.BACKEND_URL || "http://localhost:3000";
   }
 
   /**
@@ -44,20 +45,20 @@ export class SessionManager {
   async saveSession(data: BotSessionData): Promise<BotSessionResponse> {
     try {
       const response = await fetch(`${this.backendUrl}/api/bot/session`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(data),
       });
 
-      const result = await response.json() as BotSessionResponse;
+      const result = (await response.json()) as BotSessionResponse;
       return result;
     } catch (error) {
-      console.error('Error saving bot session:', error);
+      console.error("Error saving bot session:", error);
       return {
         success: false,
-        message: 'Failed to save session',
+        message: "Failed to save session",
       };
     }
   }
@@ -67,8 +68,8 @@ export class SessionManager {
    */
   async getSession(
     userId: string,
-    platform: 'discord' | 'telegram',
-    sessionType: 'multisig_wizard' | 'swap_wizard' | 'custom_flow'
+    platform: "discord" | "telegram",
+    sessionType: "multisig_wizard" | "swap_wizard" | "custom_flow"
   ): Promise<BotSessionResponse> {
     try {
       const params = new URLSearchParams({
@@ -77,20 +78,23 @@ export class SessionManager {
         sessionType,
       });
 
-      const response = await fetch(`${this.backendUrl}/api/bot/session?${params}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetch(
+        `${this.backendUrl}/api/bot/session?${params}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      const result = await response.json() as BotSessionResponse;
+      const result = (await response.json()) as BotSessionResponse;
       return result;
     } catch (error) {
-      console.error('Error getting bot session:', error);
+      console.error("Error getting bot session:", error);
       return {
         success: false,
-        message: 'Failed to get session',
+        message: "Failed to get session",
       };
     }
   }
@@ -108,21 +112,24 @@ export class SessionManager {
     }>
   ): Promise<BotSessionResponse> {
     try {
-      const response = await fetch(`${this.backendUrl}/api/bot/session/${sessionId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
-      });
+      const response = await fetch(
+        `${this.backendUrl}/api/bot/session/${sessionId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updates),
+        }
+      );
 
-      const result = await response.json() as BotSessionResponse;
+      const result = (await response.json()) as BotSessionResponse;
       return result;
     } catch (error) {
-      console.error('Error updating bot session:', error);
+      console.error("Error updating bot session:", error);
       return {
         success: false,
-        message: 'Failed to update session',
+        message: "Failed to update session",
       };
     }
   }
@@ -132,20 +139,23 @@ export class SessionManager {
    */
   async deactivateSession(sessionId: string): Promise<BotSessionResponse> {
     try {
-      const response = await fetch(`${this.backendUrl}/api/bot/session/${sessionId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetch(
+        `${this.backendUrl}/api/bot/session/${sessionId}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      const result = await response.json() as BotSessionResponse;
+      const result = (await response.json()) as BotSessionResponse;
       return result;
     } catch (error) {
-      console.error('Error deactivating bot session:', error);
+      console.error("Error deactivating bot session:", error);
       return {
         success: false,
-        message: 'Failed to deactivate session',
+        message: "Failed to deactivate session",
       };
     }
   }
@@ -155,7 +165,7 @@ export class SessionManager {
    */
   async deactivateUserSessions(
     userId: string,
-    platform?: 'discord' | 'telegram'
+    platform?: "discord" | "telegram"
   ): Promise<BotSessionResponse> {
     try {
       const url = platform
@@ -163,19 +173,19 @@ export class SessionManager {
         : `${this.backendUrl}/api/bot/sessions/user/${userId}`;
 
       const response = await fetch(url, {
-        method: 'DELETE',
+        method: "DELETE",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
       });
 
-      const result = await response.json() as BotSessionResponse;
+      const result = (await response.json()) as BotSessionResponse;
       return result;
     } catch (error) {
-      console.error('Error deactivating user sessions:', error);
+      console.error("Error deactivating user sessions:", error);
       return {
         success: false,
-        message: 'Failed to deactivate sessions',
+        message: "Failed to deactivate sessions",
       };
     }
   }

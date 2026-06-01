@@ -24,12 +24,9 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
     // Generate test keypairs
     sourceKeypair = StellarSdk.Keypair.random();
     destinationKeypair = StellarSdk.Keypair.random();
-    
+
     // Create a mock account with sequence number
-    sourceAccount = new StellarSdk.Account(
-      sourceKeypair.publicKey(),
-      "100"
-    );
+    sourceAccount = new StellarSdk.Account(sourceKeypair.publicKey(), "100");
   });
 
   describe("Multi-Operation Transaction Building", () => {
@@ -188,7 +185,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.signatures).toHaveLength(1);
       expect(reconstructed.signatures[0]).toBeDefined();
     });
@@ -218,7 +215,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.signatures).toHaveLength(3);
     });
   });
@@ -244,7 +241,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.memo.type).toBe("text");
       expect(reconstructed.memo.value).toBe("Payment for services");
     });
@@ -272,7 +269,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.memo.type).toBe("hash");
       expect(reconstructed.memo.value).toEqual(hash);
     });
@@ -297,7 +294,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.memo.type).toBe("id");
       expect(reconstructed.memo.value).toBe("123456789");
     });
@@ -391,7 +388,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.operations).toHaveLength(2);
       expect(reconstructed.signatures).toHaveLength(2);
     });
@@ -483,7 +480,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.operations).toHaveLength(3);
       expect(reconstructed.operations[0].type).toBe("setOptions");
       expect(reconstructed.operations[1].type).toBe("setOptions");
@@ -533,7 +530,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.operations).toHaveLength(3);
       expect(reconstructed.operations[0].type).toBe("manageSellOffer");
       expect(reconstructed.operations[1].type).toBe("manageBuyOffer");
@@ -563,7 +560,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.fee).toBe(customFee);
     });
 
@@ -588,7 +585,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       expect(xdr).toBeDefined();
-      
+
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
       expect(reconstructed.timeBounds).toBeDefined();
     });
@@ -619,7 +616,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.operations).toHaveLength(operationCount);
       expect(reconstructed.fee).toBe(expectedFee);
     });
@@ -644,7 +641,10 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
       transaction.sign(sourceKeypair);
 
       const originalXdr = transaction.toXDR();
-      const reconstructed = new StellarSdk.Transaction(originalXdr, networkPassphrase);
+      const reconstructed = new StellarSdk.Transaction(
+        originalXdr,
+        networkPassphrase
+      );
       const reEncodedXdr = reconstructed.toXDR();
 
       expect(reEncodedXdr).toBe(originalXdr);
@@ -666,10 +666,10 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
         .build();
 
       const originalHash = transaction.hash().toString("hex");
-      
+
       transaction.sign(sourceKeypair);
       const xdr = transaction.toXDR();
-      
+
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
       const reconstructedHash = reconstructed.hash().toString("hex");
 
@@ -733,7 +733,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 
       const xdr = transaction.toXDR();
       const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
-      
+
       expect(reconstructed.operations).toHaveLength(1);
       expect(reconstructed.operations[0].type).toBe("createClaimableBalance");
     });

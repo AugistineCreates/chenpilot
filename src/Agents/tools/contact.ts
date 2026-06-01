@@ -73,7 +73,11 @@ export class ContactTool extends BaseTool {
     data: CreatePayload,
     userId: string
   ): Promise<ToolResult> {
-    logger.info("Creating contact", { name: data?.name, tokenType: data?.tokenType, userId });
+    logger.info("Creating contact", {
+      name: data?.name,
+      tokenType: data?.tokenType,
+      userId,
+    });
     if (!data?.name || !data?.address || !data?.tokenType) {
       return this.createErrorResult(
         "create_contact",

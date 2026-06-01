@@ -101,10 +101,14 @@ function createAdapterConfig(
   defaults: Partial<DeFiAdapterConfig>
 ): DeFiAdapterConfig {
   const prefix = ADAPTER_ENV_PREFIXES[protocol];
-  
-  const enabled = parseBool(process.env[`${prefix}_ENABLED`], defaults.enabled ?? false);
-  const network = (process.env.STELLAR_NETWORK as "testnet" | "public") || "testnet";
-  
+
+  const enabled = parseBool(
+    process.env[`${prefix}_ENABLED`],
+    defaults.enabled ?? false
+  );
+  const network =
+    (process.env.STELLAR_NETWORK as "testnet" | "public") || "testnet";
+
   return {
     id: defaults.id || protocol,
     name: defaults.name || protocol.charAt(0).toUpperCase() + protocol.slice(1),
@@ -117,18 +121,45 @@ function createAdapterConfig(
       public: defaults.contracts?.public || {},
     },
     capabilities: {
-      swap: parseBool(process.env[`${prefix}_CAPABILITY_SWAP`], defaults.capabilities?.swap ?? false),
-      liquidity: parseBool(process.env[`${prefix}_CAPABILITY_LIQUIDITY`], defaults.capabilities?.liquidity ?? false),
-      staking: parseBool(process.env[`${prefix}_CAPABILITY_STAKING`], defaults.capabilities?.staking ?? false),
-      lending: parseBool(process.env[`${prefix}_CAPABILITY_LENDING`], defaults.capabilities?.lending ?? false),
-      borrowing: parseBool(process.env[`${prefix}_CAPABILITY_BORROWING`], defaults.capabilities?.borrowing ?? false),
-      farming: parseBool(process.env[`${prefix}_CAPABILITY_FARMING`], defaults.capabilities?.farming ?? false),
+      swap: parseBool(
+        process.env[`${prefix}_CAPABILITY_SWAP`],
+        defaults.capabilities?.swap ?? false
+      ),
+      liquidity: parseBool(
+        process.env[`${prefix}_CAPABILITY_LIQUIDITY`],
+        defaults.capabilities?.liquidity ?? false
+      ),
+      staking: parseBool(
+        process.env[`${prefix}_CAPABILITY_STAKING`],
+        defaults.capabilities?.staking ?? false
+      ),
+      lending: parseBool(
+        process.env[`${prefix}_CAPABILITY_LENDING`],
+        defaults.capabilities?.lending ?? false
+      ),
+      borrowing: parseBool(
+        process.env[`${prefix}_CAPABILITY_BORROWING`],
+        defaults.capabilities?.borrowing ?? false
+      ),
+      farming: parseBool(
+        process.env[`${prefix}_CAPABILITY_FARMING`],
+        defaults.capabilities?.farming ?? false
+      ),
     },
     customConfig: defaults.customConfig,
-    timeout: parseNumber(process.env[`${prefix}_TIMEOUT`], defaults.timeout ?? 30000),
+    timeout: parseNumber(
+      process.env[`${prefix}_TIMEOUT`],
+      defaults.timeout ?? 30000
+    ),
     retry: {
-      maxAttempts: parseNumber(process.env[`${prefix}_RETRY_ATTEMPTS`], defaults.retry?.maxAttempts ?? 3),
-      backoffMs: parseNumber(process.env[`${prefix}_RETRY_BACKOFF`], defaults.retry?.backoffMs ?? 1000),
+      maxAttempts: parseNumber(
+        process.env[`${prefix}_RETRY_ATTEMPTS`],
+        defaults.retry?.maxAttempts ?? 3
+      ),
+      backoffMs: parseNumber(
+        process.env[`${prefix}_RETRY_BACKOFF`],
+        defaults.retry?.backoffMs ?? 1000
+      ),
     },
   };
 }
@@ -179,7 +210,8 @@ const DEFAULT_ADAPTERS: Record<DeFiProtocol, Partial<DeFiAdapterConfig>> = {
       },
       public: {
         lendingPool: "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOUJ3LNLRK",
-        creditLine: "GCRA6F4H3K4KZ5P7V6D2J3T5Y8W9X0Z1Y2A3B4C5D6E7F8G9H0I1J2K3L4",
+        creditLine:
+          "GCRA6F4H3K4KZ5P7V6D2J3T5Y8W9X0Z1Y2A3B4C5D6E7F8G9H0I1J2K3L4",
       },
     },
     capabilities: {
@@ -203,12 +235,12 @@ const DEFAULT_ADAPTERS: Record<DeFiProtocol, Partial<DeFiAdapterConfig>> = {
  */
 export function generateDeFiAdapterConfigs(): DeFiAdapterConfig[] {
   const adapters: DeFiAdapterConfig[] = [];
-  
+
   for (const protocol of Object.keys(DEFAULT_ADAPTERS) as DeFiProtocol[]) {
     const config = createAdapterConfig(protocol, DEFAULT_ADAPTERS[protocol]);
     adapters.push(config);
   }
-  
+
   return adapters;
 }
 
@@ -246,6 +278,9 @@ export function getContractAddress(
   network?: "testnet" | "public"
 ): string | undefined {
   const config = getAdapterConfig(protocol);
-  const net = network || (process.env.STELLAR_NETWORK as "testnet" | "public") || "testnet";
+  const net =
+    network ||
+    (process.env.STELLAR_NETWORK as "testnet" | "public") ||
+    "testnet";
   return config.contracts[net]?.[contractName];
 }

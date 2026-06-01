@@ -1,1 +1,29 @@
-{"rustc":4643058173861170821,"features":"[\"alloc\", \"arbitrary\", \"base64\", \"curr\", \"hex\", \"serde\", \"std\"]","declared_features":"[\"alloc\", \"arbitrary\", \"base64\", \"cli\", \"curr\", \"default\", \"hex\", \"next\", \"schemars\", \"serde\", \"serde_json\", \"std\"]","target":10964764196340105078,"profile":2241668132362809309,"path":14069868070970244433,"deps":[[530211389790465181,"hex",false,7999536871867162131],[4877901010865624961,"arbitrary",false,16037874804891337375],[5027556215623624228,"build_script_build",false,18351195101260398385],[6192426815643438542,"serde_with",false,8720029731213633738],[8512051552764648367,"escape_bytes",false,7787354802149784533],[10445999912041431769,"stellar_strkey",false,4603573807446936263],[13548984313718623784,"serde",false,12732875665854219502],[17282734725213053079,"base64",false,2997845138225222419]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/stellar-xdr-a34bfed6e50aa3db/dep-lib-stellar_xdr","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"alloc\", \"arbitrary\", \"base64\", \"curr\", \"hex\", \"serde\", \"std\"]",
+  "declared_features": "[\"alloc\", \"arbitrary\", \"base64\", \"cli\", \"curr\", \"default\", \"hex\", \"next\", \"schemars\", \"serde\", \"serde_json\", \"std\"]",
+  "target": 10964764196340105078,
+  "profile": 2241668132362809309,
+  "path": 14069868070970244433,
+  "deps": [
+    [530211389790465181, "hex", false, 7999536871867162131],
+    [4877901010865624961, "arbitrary", false, 16037874804891337375],
+    [5027556215623624228, "build_script_build", false, 18351195101260398385],
+    [6192426815643438542, "serde_with", false, 8720029731213633738],
+    [8512051552764648367, "escape_bytes", false, 7787354802149784533],
+    [10445999912041431769, "stellar_strkey", false, 4603573807446936263],
+    [13548984313718623784, "serde", false, 12732875665854219502],
+    [17282734725213053079, "base64", false, 2997845138225222419]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/stellar-xdr-a34bfed6e50aa3db/dep-lib-stellar_xdr",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

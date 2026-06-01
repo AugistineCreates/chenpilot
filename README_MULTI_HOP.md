@@ -3,20 +3,23 @@
 ## Quick Start
 
 ```typescript
-import { multiHopPathFinder } from './src/services/multiHopPathFinder';
-import * as StellarSdk from '@stellar/stellar-sdk';
+import { multiHopPathFinder } from "./src/services/multiHopPathFinder";
+import * as StellarSdk from "@stellar/stellar-sdk";
 
 // Find optimal path
 const result = await multiHopPathFinder.findOptimalPath(
   StellarSdk.Asset.native(),
-  new StellarSdk.Asset('USDC', 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN'),
-  '100.0000000',
+  new StellarSdk.Asset(
+    "USDC",
+    "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+  ),
+  "100.0000000",
   { maxHops: 5 }
 );
 
-console.log('Best Path:', result.bestPath.route.join(' → '));
-console.log('Efficiency:', result.bestPath.efficiency);
-console.log('Total Paths Found:', result.allPaths.length);
+console.log("Best Path:", result.bestPath.route.join(" → "));
+console.log("Efficiency:", result.bestPath.efficiency);
+console.log("Total Paths Found:", result.allPaths.length);
 ```
 
 ## What's New
@@ -31,11 +34,13 @@ This implementation adds comprehensive multi-hop trade path evaluation to the St
 ## Key Features
 
 ### 1. Path Discovery
+
 - Queries both `strictSendPaths` and `strictReceivePaths` APIs
 - Evaluates up to 40 paths per request
 - Configurable maximum hops (default: 5)
 
 ### 2. Path Evaluation
+
 - **Efficiency Score**: Combines multiple factors into single metric
 - **Price Impact**: Calculated per hop with complexity adjustments
 - **Slippage Estimation**: Exponential model based on path length
@@ -44,21 +49,28 @@ This implementation adds comprehensive multi-hop trade path evaluation to the St
 ### 3. Integration Options
 
 #### Option A: Direct Service
+
 ```typescript
 import { multiHopPathFinder } from './src/services/multiHopPathFinder';
 const result = await multiHopPathFinder.findOptimalPath(...);
 ```
 
 #### Option B: Agent Tool
+
 ```typescript
 import { toolRegistry } from './src/Agents/registry/ToolRegistry';
 const result = await toolRegistry.executeTool('multi_hop_trade', {...}, 'user-id');
 ```
 
 #### Option C: Price Service
+
 ```typescript
-import stellarPriceService from './src/services/stellarPrice.service';
-const quote = await stellarPriceService.getPriceWithMultiHop('XLM', 'USDC', 100);
+import stellarPriceService from "./src/services/stellarPrice.service";
+const quote = await stellarPriceService.getPriceWithMultiHop(
+  "XLM",
+  "USDC",
+  100
+);
 ```
 
 ## Files Added
@@ -112,10 +124,10 @@ examples/
 
 ```typescript
 interface PathFinderOptions {
-  maxHops?: number;              // Default: 5
+  maxHops?: number; // Default: 5
   minDestinationAmount?: string; // Optional minimum output
-  includeAssets?: Asset[];       // Optional asset filter
-  timeout?: number;              // Default: 10000ms
+  includeAssets?: Asset[]; // Optional asset filter
+  timeout?: number; // Default: 10000ms
 }
 ```
 
@@ -155,7 +167,7 @@ npm test -- --coverage multiHop
 
 2. **Monitor Evaluation Time**
    - <500ms: Good performance
-   - >1000ms: Consider reducing maxHops
+   - > 1000ms: Consider reducing maxHops
 
 3. **Check Recommendations**
    - Direct paths are optimal
@@ -165,6 +177,7 @@ npm test -- --coverage multiHop
 ## Integration with Existing Features
 
 ### Risk Analysis
+
 ```typescript
 import { flashSwapRiskAnalyzer } from './src/services/flashSwapRiskAnalyzer';
 
@@ -177,7 +190,9 @@ const riskAnalysis = await flashSwapRiskAnalyzer.analyzeSwapRisk({
 ```
 
 ### Agent Planner
+
 The tool is automatically available for natural language workflows:
+
 ```
 User: "Find the best way to swap 100 XLM to USDC"
 Agent: Automatically uses multi_hop_trade tool
@@ -186,20 +201,23 @@ Agent: Automatically uses multi_hop_trade tool
 ## Troubleshooting
 
 ### No Paths Found
+
 - Check asset liquidity on Stellar DEX
 - Verify asset codes and issuers
 - Increase maxHops parameter
 
 ### Timeout Errors
+
 - Reduce maxHops
 - Increase timeout parameter
 - Check Horizon server status
 
 ### Low Efficiency Scores
+
 - High number of hops
 - Low liquidity
 - Wide spreads
-→ Consider direct paths or split trades
+  → Consider direct paths or split trades
 
 ## Future Enhancements
 
@@ -213,6 +231,7 @@ Agent: Automatically uses multi_hop_trade tool
 ## Support
 
 For issues or questions:
+
 1. Check `docs/MULTI_HOP_TRADING.md` for detailed documentation
 2. Review `examples/multiHopTradeExample.ts` for usage patterns
 3. Run tests to verify functionality

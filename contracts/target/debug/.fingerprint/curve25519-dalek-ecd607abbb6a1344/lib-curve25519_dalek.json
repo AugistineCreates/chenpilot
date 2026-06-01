@@ -1,1 +1,33 @@
-{"rustc":4643058173861170821,"features":"[\"alloc\", \"digest\", \"precomputed-tables\", \"zeroize\"]","declared_features":"[\"alloc\", \"default\", \"digest\", \"ff\", \"group\", \"group-bits\", \"legacy_compatibility\", \"precomputed-tables\", \"rand_core\", \"serde\", \"zeroize\"]","target":115635582535548150,"profile":2241668132362809309,"path":3167489928229295910,"deps":[[1513171335889705703,"curve25519_dalek_derive",false,4264075586642242418],[7667230146095136825,"cfg_if",false,12587111896139271210],[12865141776541797048,"zeroize",false,3534186868902853565],[13595581133353633439,"build_script_build",false,2896063761247928772],[17003143334332120809,"subtle",false,6112149247904494762],[17475753849556516473,"digest",false,12349089324628477233],[17620084158052398167,"cpufeatures",false,9152468285162095872]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/curve25519-dalek-ecd607abbb6a1344/dep-lib-curve25519_dalek","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"alloc\", \"digest\", \"precomputed-tables\", \"zeroize\"]",
+  "declared_features": "[\"alloc\", \"default\", \"digest\", \"ff\", \"group\", \"group-bits\", \"legacy_compatibility\", \"precomputed-tables\", \"rand_core\", \"serde\", \"zeroize\"]",
+  "target": 115635582535548150,
+  "profile": 2241668132362809309,
+  "path": 3167489928229295910,
+  "deps": [
+    [
+      1513171335889705703,
+      "curve25519_dalek_derive",
+      false,
+      4264075586642242418
+    ],
+    [7667230146095136825, "cfg_if", false, 12587111896139271210],
+    [12865141776541797048, "zeroize", false, 3534186868902853565],
+    [13595581133353633439, "build_script_build", false, 2896063761247928772],
+    [17003143334332120809, "subtle", false, 6112149247904494762],
+    [17475753849556516473, "digest", false, 12349089324628477233],
+    [17620084158052398167, "cpufeatures", false, 9152468285162095872]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/curve25519-dalek-ecd607abbb6a1344/dep-lib-curve25519_dalek",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

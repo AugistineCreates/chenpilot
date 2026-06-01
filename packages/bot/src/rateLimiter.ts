@@ -1,13 +1,13 @@
 /**
  * Rate Limiter for Bot Commands
- * 
+ *
  * Implements a sliding window rate limiter to prevent individual users
  * from flooding the bot with commands.
  */
 
 export interface RateLimitConfig {
-  maxRequests: number;      // Maximum number of requests allowed
-  windowMs: number;         // Time window in milliseconds
+  maxRequests: number; // Maximum number of requests allowed
+  windowMs: number; // Time window in milliseconds
 }
 
 export interface RateLimitStatus {
@@ -27,25 +27,25 @@ export class RateLimiter {
 
   /**
    * Check if a request is allowed for a given user
-   * 
+   *
    * @param userId - The user identifier
    * @returns Rate limit status
    */
   check(userId: string): RateLimitStatus {
     const now = Date.now();
     const timestamps = this.userTimestamps.get(userId) || [];
-    
+
     // Filter out timestamps outside the current window
     const windowStart = now - this.config.windowMs;
-    const validTimestamps = timestamps.filter(ts => ts > windowStart);
-    
+    const validTimestamps = timestamps.filter((ts) => ts > windowStart);
+
     // Update the stored timestamps
     this.userTimestamps.set(userId, validTimestamps);
-    
+
     const requestCount = validTimestamps.length;
     const remaining = Math.max(0, this.config.maxRequests - requestCount);
     const allowed = requestCount < this.config.maxRequests;
-    
+
     if (allowed) {
       // Add current timestamp
       validTimestamps.push(now);
@@ -53,8 +53,10 @@ export class RateLimiter {
     } else {
       // Calculate retry after time (when oldest request expires)
       const oldestTimestamp = validTimestamps[0];
-      const retryAfter = Math.ceil((oldestTimestamp + this.config.windowMs - now) / 1000);
-      
+      const retryAfter = Math.ceil(
+        (oldestTimestamp + this.config.windowMs - now) / 1000
+      );
+
       return {
         allowed: false,
         remaining: 0,
@@ -62,7 +64,7 @@ export class RateLimiter {
         retryAfter,
       };
     }
-    
+
     return {
       allowed: true,
       remaining: remaining - 1,
@@ -72,7 +74,7 @@ export class RateLimiter {
 
   /**
    * Reset rate limit for a specific user
-   * 
+   *
    * @param userId - The user identifier
    */
   reset(userId: string): void {
@@ -88,28 +90,30 @@ export class RateLimiter {
 
   /**
    * Get current rate limit status without consuming a request
-   * 
+   *
    * @param userId - The user identifier
    * @returns Current rate limit status
    */
   getStatus(userId: string): RateLimitStatus {
     const now = Date.now();
     const timestamps = this.userTimestamps.get(userId) || [];
-    
+
     // Filter out timestamps outside the current window
     const windowStart = now - this.config.windowMs;
-    const validTimestamps = timestamps.filter(ts => ts > windowStart);
-    
+    const validTimestamps = timestamps.filter((ts) => ts > windowStart);
+
     const requestCount = validTimestamps.length;
     const remaining = Math.max(0, this.config.maxRequests - requestCount);
     const allowed = requestCount < this.config.maxRequests;
-    
+
     let retryAfter: number | undefined;
     if (!allowed && validTimestamps.length > 0) {
       const oldestTimestamp = validTimestamps[0];
-      retryAfter = Math.ceil((oldestTimestamp + this.config.windowMs - now) / 1000);
+      retryAfter = Math.ceil(
+        (oldestTimestamp + this.config.windowMs - now) / 1000
+      );
     }
-    
+
     return {
       allowed,
       remaining,
@@ -121,12 +125,12 @@ export class RateLimiter {
 
 // Default rate limit configuration
 export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
-  maxRequests: 10,      // 10 requests
-  windowMs: 60000,      // per minute (60 seconds)
+  maxRequests: 10, // 10 requests
+  windowMs: 60000, // per minute (60 seconds)
 };
 
 // Strict rate limit for sensitive operations
 export const STRICT_RATE_LIMIT: RateLimitConfig = {
-  maxRequests: 3,       // 3 requests
-  windowMs: 60000,      // per minute
+  maxRequests: 3, // 3 requests
+  windowMs: 60000, // per minute
 };

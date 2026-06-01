@@ -159,16 +159,16 @@ describe("MultiSigBuilder", () => {
 
     it("should throw error for threshold < 0", () => {
       const builder = new MultiSigBuilder(masterAccount);
-      expect(() =>
-        builder.setThreshold(ThresholdCategory.LOW, -1)
-      ).toThrow("Threshold must be between 0 and 255");
+      expect(() => builder.setThreshold(ThresholdCategory.LOW, -1)).toThrow(
+        "Threshold must be between 0 and 255"
+      );
     });
 
     it("should throw error for threshold > 255", () => {
       const builder = new MultiSigBuilder(masterAccount);
-      expect(() =>
-        builder.setThreshold(ThresholdCategory.HIGH, 256)
-      ).toThrow("Threshold must be between 0 and 255");
+      expect(() => builder.setThreshold(ThresholdCategory.HIGH, 256)).toThrow(
+        "Threshold must be between 0 and 255"
+      );
     });
   });
 
@@ -322,11 +322,11 @@ describe("MultiSigBuilder", () => {
 
   describe("createPreset", () => {
     it("should create 2-of-3 preset", () => {
-      const builder = MultiSigBuilder.createPreset(
-        "2-of-3",
-        masterAccount,
-        [signer1, signer2, signer3]
-      );
+      const builder = MultiSigBuilder.createPreset("2-of-3", masterAccount, [
+        signer1,
+        signer2,
+        signer3,
+      ]);
 
       const config = builder.getConfig();
       expect(config.signers).toHaveLength(3);
@@ -347,11 +347,11 @@ describe("MultiSigBuilder", () => {
     });
 
     it("should create majority preset", () => {
-      const builder = MultiSigBuilder.createPreset(
-        "majority",
-        masterAccount,
-        [signer1, signer2, signer3]
-      );
+      const builder = MultiSigBuilder.createPreset("majority", masterAccount, [
+        signer1,
+        signer2,
+        signer3,
+      ]);
 
       const config = builder.getConfig();
       expect(config.signers).toHaveLength(3);
@@ -359,11 +359,11 @@ describe("MultiSigBuilder", () => {
     });
 
     it("should create unanimous preset", () => {
-      const builder = MultiSigBuilder.createPreset(
-        "unanimous",
-        masterAccount,
-        [signer1, signer2, signer3]
-      );
+      const builder = MultiSigBuilder.createPreset("unanimous", masterAccount, [
+        signer1,
+        signer2,
+        signer3,
+      ]);
 
       const config = builder.getConfig();
       expect(config.signers).toHaveLength(3);
@@ -449,11 +449,7 @@ describe("canMeetThreshold", () => {
   };
 
   it("should return true when signers can meet threshold", () => {
-    const result = canMeetThreshold(
-      ["GSIGNER1", "GSIGNER2"],
-      config,
-      25
-    );
+    const result = canMeetThreshold(["GSIGNER1", "GSIGNER2"], config, 25);
     expect(result).toBe(true);
   });
 
@@ -463,11 +459,7 @@ describe("canMeetThreshold", () => {
   });
 
   it("should handle non-existent signers", () => {
-    const result = canMeetThreshold(
-      ["GSIGNER1", "NONEXISTENT"],
-      config,
-      25
-    );
+    const result = canMeetThreshold(["GSIGNER1", "NONEXISTENT"], config, 25);
     expect(result).toBe(false);
   });
 

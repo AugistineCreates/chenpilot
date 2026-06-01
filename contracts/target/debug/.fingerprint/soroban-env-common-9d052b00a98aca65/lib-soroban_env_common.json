@@ -1,1 +1,32 @@
-{"rustc":11689572559507982127,"features":"[\"serde\", \"shallow-val-hash\", \"std\", \"testutils\", \"wasmi\"]","declared_features":"[\"next\", \"serde\", \"shallow-val-hash\", \"std\", \"testutils\", \"tracy\", \"wasmi\"]","target":8236493655205561077,"profile":2241668132362809309,"path":5013649440964449706,"deps":[[4877901010865624961,"arbitrary",false,4496747545757626363],[5027556215623624228,"stellar_xdr",false,2748319794496641312],[5157631553186200874,"num_traits",false,5310594193969349923],[7898571650830454567,"ethnum",false,4751301046369571530],[8652975363845047066,"wasmparser",false,9983906661532280005],[11263754829263059703,"num_derive",false,16573495152564620333],[12119939514882612004,"wasmi",false,9718428061396802382],[13548984313718623784,"serde",false,9127323607931371456],[13785866025199020095,"static_assertions",false,17498920046649995938],[14821007063543561306,"soroban_env_macros",false,1311307519446999299],[15493370609364094450,"build_script_build",false,791427677774733764]],"local":[{"CheckDepInfo":{"dep_info":"debug\\.fingerprint\\soroban-env-common-9d052b00a98aca65\\dep-lib-soroban_env_common","checksum":false}}],"rustflags":[],"config":8247474407144887393,"compile_kind":0}
+{
+  "rustc": 11689572559507982127,
+  "features": "[\"serde\", \"shallow-val-hash\", \"std\", \"testutils\", \"wasmi\"]",
+  "declared_features": "[\"next\", \"serde\", \"shallow-val-hash\", \"std\", \"testutils\", \"tracy\", \"wasmi\"]",
+  "target": 8236493655205561077,
+  "profile": 2241668132362809309,
+  "path": 5013649440964449706,
+  "deps": [
+    [4877901010865624961, "arbitrary", false, 4496747545757626363],
+    [5027556215623624228, "stellar_xdr", false, 2748319794496641312],
+    [5157631553186200874, "num_traits", false, 5310594193969349923],
+    [7898571650830454567, "ethnum", false, 4751301046369571530],
+    [8652975363845047066, "wasmparser", false, 9983906661532280005],
+    [11263754829263059703, "num_derive", false, 16573495152564620333],
+    [12119939514882612004, "wasmi", false, 9718428061396802382],
+    [13548984313718623784, "serde", false, 9127323607931371456],
+    [13785866025199020095, "static_assertions", false, 17498920046649995938],
+    [14821007063543561306, "soroban_env_macros", false, 1311307519446999299],
+    [15493370609364094450, "build_script_build", false, 791427677774733764]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug\\.fingerprint\\soroban-env-common-9d052b00a98aca65\\dep-lib-soroban_env_common",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 8247474407144887393,
+  "compile_kind": 0
+}

@@ -1,6 +1,6 @@
 /**
  * Performance Profiler for Bot Commands
- * 
+ *
  * This module provides utilities to measure and log the execution time
  * of bot command handlers to the backend for performance monitoring.
  */
@@ -9,7 +9,7 @@ const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3000";
 
 export interface CommandPerformanceMetrics {
   command: string;
-  platform: 'discord' | 'telegram';
+  platform: "discord" | "telegram";
   userId: string;
   executionTimeMs: number;
   success: boolean;
@@ -20,31 +20,35 @@ export interface CommandPerformanceMetrics {
 /**
  * Log command execution metrics to the backend
  */
-async function logCommandMetrics(metrics: CommandPerformanceMetrics): Promise<void> {
+async function logCommandMetrics(
+  metrics: CommandPerformanceMetrics
+): Promise<void> {
   try {
     await fetch(`${BACKEND_URL}/api/bot/metrics`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(metrics),
     });
   } catch (error) {
     // Fail silently - don't interrupt bot operation if logging fails
-    console.error('Failed to log command metrics:', error);
+    console.error("Failed to log command metrics:", error);
   }
 }
 
 /**
  * Wrap a command handler with performance profiling
- * 
+ *
  * @param command - The command name (e.g., '!help', '/start')
  * @param platform - The platform ('discord' or 'telegram')
  * @param userId - The user ID
  * @param handler - The command handler function to wrap
  * @returns A wrapped function that measures execution time
  */
-export function withPerformanceProfiling<T extends (...args: any[]) => Promise<any>>(
+export function withPerformanceProfiling<
+  T extends (...args: any[]) => Promise<any>,
+>(
   command: string,
-  platform: 'discord' | 'telegram',
+  platform: "discord" | "telegram",
   userId: string,
   handler: T
 ): T {
@@ -62,7 +66,7 @@ export function withPerformanceProfiling<T extends (...args: any[]) => Promise<a
       throw err; // Re-throw to maintain original error handling
     } finally {
       const executionTimeMs = Date.now() - startTime;
-      
+
       // Log metrics asynchronously (don't await)
       logCommandMetrics({
         command,
@@ -77,7 +81,9 @@ export function withPerformanceProfiling<T extends (...args: any[]) => Promise<a
       });
 
       // Also log to console for immediate visibility
-      console.log(`[Bot Performance] ${platform} ${command} by ${userId}: ${executionTimeMs}ms${success ? '' : ' (failed)'}`);
+      console.log(
+        `[Bot Performance] ${platform} ${command} by ${userId}: ${executionTimeMs}ms${success ? "" : " (failed)"}`
+      );
     }
   }) as T;
 }
@@ -85,10 +91,13 @@ export function withPerformanceProfiling<T extends (...args: any[]) => Promise<a
 /**
  * Extract command name from message content
  */
-export function extractCommandName(content: string, platform: 'discord' | 'telegram'): string {
-  const prefix = platform === 'discord' ? '!' : '/';
-  const parts = content.trim().split(' ');
-  return parts[0] || 'unknown';
+export function extractCommandName(
+  content: string,
+  platform: "discord" | "telegram"
+): string {
+  const prefix = platform === "discord" ? "!" : "/";
+  const parts = content.trim().split(" ");
+  return parts[0] || "unknown";
 }
 
 /**

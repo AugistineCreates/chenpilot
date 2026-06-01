@@ -10,8 +10,6 @@ export class AddRoleToUser1772000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `ALTER TABLE "user" DROP COLUMN IF EXISTS "role"`
-    );
+    await queryRunner.query(`ALTER TABLE "user" DROP COLUMN IF EXISTS "role"`);
   }
 }

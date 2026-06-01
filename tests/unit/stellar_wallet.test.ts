@@ -12,7 +12,7 @@ describe("Stellar Wallet Operations", () => {
   it("should retrieve balances for a Stellar account", async () => {
     // Note: We use the .Horizon namespace to match the latest SDK structure
     const server = new StellarSdk.Horizon.Server(
-      "https://horizon-testnet.stellar.org",
+      "https://horizon-testnet.stellar.org"
     );
     const account = await server.loadAccount("GD77MOCKPUBLICKEY1234567890");
 
@@ -20,10 +20,10 @@ describe("Stellar Wallet Operations", () => {
       expect.objectContaining({
         asset_type: "native",
         balance: "100.0000",
-      }),
+      })
     );
     expect(server.loadAccount).toHaveBeenCalledWith(
-      "GD77MOCKPUBLICKEY1234567890",
+      "GD77MOCKPUBLICKEY1234567890"
     );
   });
 });

@@ -1,6 +1,6 @@
 /**
  * Sequence Manager for Stellar Account Transactions
- * 
+ *
  * Handles sequence number tracking and prediction for highly concurrent
  * transaction submission scenarios. Prevents sequence number collisions
  * and transaction failures due to incorrect sequence numbers.
@@ -101,7 +101,7 @@ export class SequenceManager {
       if (cached && now - cached.lastFetched < this.config.cacheTTL) {
         // Increment the next sequence number
         const nextSeq = this.incrementSequence(cached.next);
-        
+
         const updated: SequenceInfo = {
           current: cached.current,
           next: nextSeq,
@@ -327,7 +327,7 @@ export class SequenceManager {
   clearAccount(accountId: string): void {
     this.sequences.delete(accountId);
     this.pending.delete(accountId);
-    
+
     const timer = this.refreshTimers.get(accountId);
     if (timer) {
       clearInterval(timer);
@@ -341,7 +341,7 @@ export class SequenceManager {
   clearAll(): void {
     this.sequences.clear();
     this.pending.clear();
-    
+
     for (const timer of this.refreshTimers.values()) {
       clearInterval(timer);
     }

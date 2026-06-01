@@ -4,7 +4,7 @@ exports.ProviderType = void 0;
 // Provider types enum
 var ProviderType;
 (function (ProviderType) {
-    ProviderType["MOCK"] = "mock";
-    ProviderType["LEDGER"] = "ledger";
-    ProviderType["ALBEDO"] = "albedo";
+  ProviderType["MOCK"] = "mock";
+  ProviderType["LEDGER"] = "ledger";
+  ProviderType["ALBEDO"] = "albedo";
 })(ProviderType || (exports.ProviderType = ProviderType = {}));

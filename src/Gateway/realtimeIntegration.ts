@@ -280,11 +280,7 @@ export class DeploymentUpdateHelper {
     reason: string,
     userId?: string
   ): void {
-    DeploymentEventBridge.notifyDeploymentFailed(
-      deploymentId,
-      reason,
-      userId
-    );
+    DeploymentEventBridge.notifyDeploymentFailed(deploymentId, reason, userId);
   }
 }
 

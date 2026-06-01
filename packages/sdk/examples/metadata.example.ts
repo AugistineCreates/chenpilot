@@ -3,10 +3,7 @@
  * Demonstrates storing and retrieving arbitrary key-value metadata on Stellar accounts
  */
 
-import {
-  StellarMetadataManager,
-  createMetadataManager,
-} from "../src/metadata";
+import { StellarMetadataManager, createMetadataManager } from "../src/metadata";
 
 /**
  * Example 1: Basic metadata storage and retrieval
@@ -47,7 +44,9 @@ async function basicMetadataExample() {
     console.log("Retrieved metadata:");
     console.log(JSON.parse(metadata.value));
     console.log(`Type: ${metadata.type}`);
-    console.log(`Created: ${new Date(metadata.createdAt * 1000).toISOString()}`);
+    console.log(
+      `Created: ${new Date(metadata.createdAt * 1000).toISOString()}`
+    );
   }
 }
 
@@ -83,7 +82,9 @@ async function metadataWithExpirationExample() {
   if (session) {
     const expiresDate = new Date(session.expiresAt! * 1000);
     console.log(`Session expires: ${expiresDate.toISOString()}`);
-    console.log(`Expires in: ${Math.round((session.expiresAt! - session.createdAt) / 3600)} hours`);
+    console.log(
+      `Expires in: ${Math.round((session.expiresAt! - session.createdAt) / 3600)} hours`
+    );
   }
 }
 
@@ -168,7 +169,9 @@ async function listMetadataExample() {
         `  Created: ${new Date(entry.createdAt * 1000).toISOString()}`
       );
       if (entry.expiresAt) {
-        console.log(`  Expires: ${new Date(entry.expiresAt * 1000).toISOString()}`);
+        console.log(
+          `  Expires: ${new Date(entry.expiresAt * 1000).toISOString()}`
+        );
       }
     });
   }
@@ -205,7 +208,10 @@ async function kycMetadataExample() {
 
   console.log("KYC Transaction ready:");
   console.log(JSON.stringify(kycData, null, 2));
-  console.log("\nTransaction XDR (first 100 chars):", txn.substring(0, 100) + "...");
+  console.log(
+    "\nTransaction XDR (first 100 chars):",
+    txn.substring(0, 100) + "..."
+  );
 
   // Later, retrieve and verify KYC status
   const savedKyc = await manager.getMetadata({
@@ -250,7 +256,10 @@ async function deleteMetadataExample() {
   );
 
   console.log("Delete transaction prepared");
-  console.log("Transaction XDR (first 50 chars):", deleteTxn.substring(0, 50) + "...");
+  console.log(
+    "Transaction XDR (first 50 chars):",
+    deleteTxn.substring(0, 50) + "..."
+  );
 
   // Verify it's deleted by trying to retrieve
   const deleted = await manager.getMetadata({
@@ -268,7 +277,8 @@ async function applicationStateExample() {
   console.log("\n=== Application State Example ===\n");
 
   const manager = createMetadataManager();
-  const appAccountId = "GADDM5YJRQYHCR46JQKKGV5JBHIIJ3IXVJ3BBQFN5PLMVFXXUTDBWZF";
+  const appAccountId =
+    "GADDM5YJRQYHCR46JQKKGV5JBHIIJ3IXVJ3BBQFN5PLMVFXXUTDBWZF";
 
   // Store application state/configuration
   const appState = {

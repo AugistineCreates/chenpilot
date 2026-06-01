@@ -97,7 +97,7 @@ describe("TransactionHistoryService", () => {
       mockUserRepository.findOne.mockResolvedValue(null);
 
       await expect(
-        service.getTransactionHistory("nonexistent", {}),
+        service.getTransactionHistory("nonexistent", {})
       ).rejects.toThrow("User not found");
     });
 
@@ -184,7 +184,7 @@ describe("TransactionHistoryService", () => {
       mockUserRepository.findOne.mockResolvedValue(mockUser);
 
       await expect(
-        service.getTransactionHistory("user1", { limit: 150 }),
+        service.getTransactionHistory("user1", { limit: 150 })
       ).rejects.toThrow("Limit cannot exceed 100");
     });
 

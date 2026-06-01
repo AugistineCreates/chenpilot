@@ -3,7 +3,7 @@ import { parseSorobanIntent } from "../../src/Agents/planner/sorobanIntent";
 describe("Soroban intent parsing", () => {
   it("detects Soroban intent and extracts fields", () => {
     const input =
-      "Invoke soroban contract CABC1234567890 method stake args [\"100\", 2] on mainnet";
+      'Invoke soroban contract CABC1234567890 method stake args ["100", 2] on mainnet';
 
     const plan = parseSorobanIntent(input);
 

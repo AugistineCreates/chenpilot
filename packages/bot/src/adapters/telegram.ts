@@ -1,32 +1,41 @@
-import { Telegraf } from "telegraf";
+import { Telegraf, Context } from "telegraf";
 import { TransactionNotificationData } from "../types";
 import { createTrustlineOperation } from "@chen-pilot/sdk-core";
 import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
-import { AssetVerificationService } from '../assetVerification';
-import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
-import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
-import { MultisigWizard } from '../multisigWizard';
+import { AssetVerificationService } from "../assetVerification";
+import {
+  RateLimiter,
+  DEFAULT_RATE_LIMIT,
+  STRICT_RATE_LIMIT,
+} from "../rateLimiter";
+import {
+  withPerformanceProfiling,
+  extractCommandName,
+} from "../performanceProfiler";
+import { botWorkflowManager } from "../services/workflowService";
 
-const BACKEND_URL = process.env.BACKEND_URL || process.env.API_BASE_URL || 'http://localhost:2333';
+const BACKEND_URL =
+  process.env.BACKEND_URL ||
+  process.env.API_BASE_URL ||
+  "http://localhost:2333";
 const DASHBOARD_URL = process.env.DASHBOARD_URL || `${BACKEND_URL}/dashboard`;
-const HORIZON_URL = process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
+const HORIZON_URL =
+  process.env.STELLAR_HORIZON_URL || "https://horizon-testnet.stellar.org";
 const DEBOUNCE_MS = 1000; // 1 second debounce between commands
 
-// Commands that involve personal account data and must only be used in DMs
-const DM_ONLY_COMMANDS = ['/balance'];
-
-// Commands that start a wizard
-const WIZARD_COMMANDS = ['/multisig'];
-
 // Commands that require stricter rate limiting
-const SENSITIVE_COMMANDS = ['/trustline', '/validate'];
+const SENSITIVE_COMMANDS = ["/trustline", "/validate"];
 
-function isDM(ctx: Parameters<Parameters<Telegraf['command']>[1]>[0]): boolean {
-  return ctx.chat?.type === 'private';
+function isDM(ctx: Parameters<Parameters<Telegraf["command"]>[1]>[0]): boolean {
+  return ctx.chat?.type === "private";
 }
 
-async function rejectPublicChannel(ctx: Parameters<Parameters<Telegraf['command']>[1]>[0]): Promise<void> {
-  await ctx.reply('🔒 This command contains sensitive account data and can only be used in a private message (DM) with the bot.');
+async function rejectPublicChannel(
+  ctx: Parameters<Parameters<Telegraf["command"]>[1]>[0]
+): Promise<void> {
+  await ctx.reply(
+    "🔒 This command contains sensitive account data and can only be used in a private message (DM) with the bot."
+  );
 }
 
 export class TelegramAdapter {
@@ -35,9 +44,7 @@ export class TelegramAdapter {
   private userChatIds: Map<string, string> = new Map(); // userId -> chatId
   // #145: Track last command timestamp per user
   private lastCommandTime: Map<number, number> = new Map();
-  // #125: Multisig wizard instance
-  private multisigWizard: MultisigWizard;
-  // #123: Rate limiters for bot commands
+  // #123: Rate limit limiters for bot commands
   private defaultRateLimiter: RateLimiter;
   private strictRateLimiter: RateLimiter;
   private verificationService: AssetVerificationService;
@@ -45,8 +52,6 @@ export class TelegramAdapter {
   constructor(token: string) {
     this.token = token;
     this.verificationService = new AssetVerificationService(HORIZON_URL);
-    // #125: Initialize multisig wizard
-    this.multisigWizard = new MultisigWizard();
     // #123: Initialize rate limiters
     this.defaultRateLimiter = new RateLimiter(DEFAULT_RATE_LIMIT);
     this.strictRateLimiter = new RateLimiter(STRICT_RATE_LIMIT);
@@ -62,21 +67,28 @@ export class TelegramAdapter {
   }
 
   // #123: Check rate limit for a user and command
-  private checkRateLimit(userId: number, command: string): { allowed: boolean; message?: string } {
+  private checkRateLimit(
+    userId: number,
+    command: string
+  ): { allowed: boolean; message?: string } {
     // Determine which rate limiter to use based on command
-    const isSensitive = SENSITIVE_COMMANDS.some(cmd => command.startsWith(cmd));
-    const rateLimiter = isSensitive ? this.strictRateLimiter : this.defaultRateLimiter;
-    
+    const isSensitive = SENSITIVE_COMMANDS.some((cmd) =>
+      command.startsWith(cmd)
+    );
+    const rateLimiter = isSensitive
+      ? this.strictRateLimiter
+      : this.defaultRateLimiter;
+
     const status = rateLimiter.check(String(userId));
-    
+
     if (!status.allowed) {
       const retryAfter = status.retryAfter || 60;
       return {
         allowed: false,
-        message: `⏳ Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`
+        message: `⏳ Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`,
       };
     }
-    
+
     return { allowed: true };
   }
 
@@ -89,88 +101,105 @@ export class TelegramAdapter {
     this.bot = new Telegraf(this.token);
 
     // #145: Middleware to debounce all incoming messages/commands
-    this.bot.use(async (ctx: any, next: () => Promise<void>) => {
+    this.bot.use(async (ctx: Context, next: () => Promise<void>) => {
       const userId: number | undefined = ctx.from?.id;
       if (userId && this.isFlooding(userId)) {
-        await ctx.reply("⏳ Please wait a moment before sending another command.");
+        await ctx.reply(
+          "⏳ Please wait a moment before sending another command."
+        );
         return;
       }
-      
+
       // #123: Rate limit check
-      const command = ctx.message?.text?.split(' ')[0] || '';
+      const text = ctx.message && "text" in ctx.message ? ctx.message.text : "";
+      const command = text.split(" ")[0] || "";
       if (userId) {
         const rateLimitResult = this.checkRateLimit(userId, command);
         if (!rateLimitResult.allowed) {
-          await ctx.reply(rateLimitResult.message);
+          await ctx.reply(rateLimitResult.message!);
           return;
         }
       }
-      
+
       return next();
     });
 
-    this.bot.start(async (ctx: any) => {
-      const userId = String(ctx.from?.id || 'unknown');
-      await withPerformanceProfiling('/start', 'telegram', userId, () => ctx.reply('Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant.'))();
+    this.bot.start(async (ctx: Context) => {
+      const userId = String(ctx.from?.id || "unknown");
+      await withPerformanceProfiling("/start", "telegram", userId, () =>
+        ctx.reply(
+          "Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant."
+        )
+      )();
     });
-    this.bot.help(async (ctx: any) => {
-      const userId = String(ctx.from?.id || 'unknown');
-      await withPerformanceProfiling('/help', 'telegram', userId, () => ctx.reply('Commands: /start, /balance, /swap, /trustline, /dashboard, /validate'))();
+    this.bot.help(async (ctx: Context) => {
+      const userId = String(ctx.from?.id || "unknown");
+      await withPerformanceProfiling("/help", "telegram", userId, () =>
+        ctx.reply(
+          "Commands: /start, /balance, /swap, /trustline, /dashboard, /validate"
+        )
+      )();
     });
 
-    this.bot.command('trustline', async (ctx: any) => {
-      const userId = String(ctx.from?.id || 'unknown');
-      const commandName = extractCommandName(ctx.message.text, 'telegram');
-      await withPerformanceProfiling(commandName, 'telegram', userId, async () => {
-        const args = ctx.message.text.split(' ').slice(1);
-        if (args.length < 1) {
-          return ctx.reply(
-            "Usage: /trustline <assetCode> [issuerDomain|issuerAddress]\nExample: /trustline USDC circle.com"
-          );
+    this.bot.command("trustline", async (ctx: Context) => {
+      const userId = String(ctx.from?.id || "unknown");
+      const text = ctx.message && "text" in ctx.message ? ctx.message.text : "";
+      const commandName = extractCommandName(text, "telegram");
+      await withPerformanceProfiling(
+        commandName,
+        "telegram",
+        userId,
+        async () => {
+          const args = text.split(" ").slice(1);
+          if (args.length < 1) {
+            return ctx.reply(
+              "Usage: /trustline <assetCode> [issuerDomain|issuerAddress]\nExample: /trustline USDC circle.com"
+            );
+          }
+
+          const assetCode = args[0];
+          const assetIssuer = args[1];
+
+          if (!assetIssuer) {
+            return ctx.reply(
+              `Please provide an issuer domain or address for ${assetCode}.`
+            );
+          }
+
+          try {
+            await ctx.reply(
+              `🔍 Looking up asset ${assetCode} from ${assetIssuer}...`
+            );
+            const op = await createTrustlineOperation(assetCode, assetIssuer);
+
+            // In a real scenario, we would generate a signing link (e.g., Albedo or Stellar Laboratory)
+            // For now, we'll return the operation details
+            let message = `✅ Found asset ${assetCode}!\n\n`;
+            message += `To add this trustline, you can use the following details in your wallet:\n`;
+            message += `<b>Asset:</b> ${assetCode}\n`;
+            message += `<b>Issuer:</b> <code>${(op as { asset: { issuer: string } }).asset.issuer}</code>\n\n`;
+            message += `<i>Note: In a future update, I will provide a direct signing link.</i>`;
+
+            await ctx.reply(message, { parse_mode: "HTML" });
+          } catch (error) {
+            await ctx.reply(
+              `❌ Error: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
         }
-
-        const assetCode = args[0];
-        const assetIssuer = args[1];
-
-        if (!assetIssuer) {
-          return ctx.reply(
-            `Please provide an issuer domain or address for ${assetCode}.`
-          );
-        }
-
-        try {
-          await ctx.reply(
-            `🔍 Looking up asset ${assetCode} from ${assetIssuer}...`
-          );
-          const op = await createTrustlineOperation(assetCode, assetIssuer);
-
-          // In a real scenario, we would generate a signing link (e.g., Albedo or Stellar Laboratory)
-          // For now, we'll return the operation details
-          let message = `✅ Found asset ${assetCode}!\n\n`;
-          message += `To add this trustline, you can use the following details in your wallet:\n`;
-          message += `<b>Asset:</b> ${assetCode}\n`;
-          message += `<b>Issuer:</b> <code>${(op as any).asset.issuer}</code>\n\n`;
-          message += `<i>Note: In a future update, I will provide a direct signing link.</i>`;
-
-          await ctx.reply(message, { parse_mode: "HTML" });
-        } catch (error) {
-          await ctx.reply(
-            `❌ Error: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      })();
+      )();
     });
 
     // #134: Ping command — measure end-to-end latency
-    this.bot.command('ping', async (ctx: any) => {
-      const userId = String(ctx.from?.id || 'unknown');
-      await withPerformanceProfiling('/ping', 'telegram', userId, async () => {
+    this.bot.command("ping", async (ctx: Context) => {
+      const userId = String(ctx.from?.id || "unknown");
+      await withPerformanceProfiling("/ping", "telegram", userId, async () => {
         const startTime = Date.now();
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 5000);
           const response = await fetch(`${BACKEND_URL}/api/health`, {
-            method: 'GET',
+            method: "GET",
             signal: controller.signal,
           });
           clearTimeout(timeout);
@@ -178,91 +207,156 @@ export class TelegramAdapter {
           if (response.ok) {
             await ctx.reply(
               `🏓 <b>Pong!</b>\n\n📡 <b>End-to-End Latency:</b> ${roundtripMs}ms\n✅ Backend: Online`,
-              { parse_mode: 'HTML' }
+              { parse_mode: "HTML" }
             );
           } else {
             await ctx.reply(
               `🏓 <b>Pong!</b>\n\n📡 <b>End-to-End Latency:</b> ${roundtripMs}ms\n⚠️ Backend: Returned HTTP ${response.status}`,
-              { parse_mode: 'HTML' }
+              { parse_mode: "HTML" }
             );
           }
         } catch {
           const roundtripMs = Date.now() - startTime;
           await ctx.reply(
             `🏓 <b>Pong!</b>\n\n📡 <b>End-to-End Latency:</b> ${roundtripMs}ms\n❌ Backend: Unreachable`,
-            { parse_mode: 'HTML' }
+            { parse_mode: "HTML" }
           );
         }
       })();
     });
 
     // #146: Dashboard command
-    this.bot.command('dashboard', async (ctx: any) => {
-      const userId = String(ctx.from?.id || 'unknown');
-      await withPerformanceProfiling('/dashboard', 'telegram', userId, async () => {
-        await ctx.reply(
-          `📊 <b>Chen Pilot Dashboard</b>\n\nAccess your admin dashboard here:\n🔗 <a href="${DASHBOARD_URL}">Open Dashboard</a>\n\n<i>Note: You must be logged in to view the dashboard.</i>`,
-          { parse_mode: 'HTML' }
-        );
-      })();
+    this.bot.command("dashboard", async (ctx: Context) => {
+      const userId = String(ctx.from?.id || "unknown");
+      await withPerformanceProfiling(
+        "/dashboard",
+        "telegram",
+        userId,
+        async () => {
+          await ctx.reply(
+            `📊 <b>Chen Pilot Dashboard</b>\n\nAccess your admin dashboard here:\n🔗 <a href="${DASHBOARD_URL}">Open Dashboard</a>\n\n<i>Note: You must be logged in to view the dashboard.</i>`,
+            { parse_mode: "HTML" }
+          );
+        }
+      )();
     });
 
     // #148: /validate command for Stellar asset verification
-    this.bot.command('validate', async (ctx: any) => {
-      const userId = String(ctx.from?.id || 'unknown');
-      const commandName = extractCommandName(ctx.message.text, 'telegram');
-      await withPerformanceProfiling(commandName, 'telegram', userId, async () => {
-        const args = ctx.message.text.split(' ').slice(1);
-        if (args.length < 2) {
-          return ctx.reply('Usage: /validate <assetCode> <issuerAddress>\nExample: /validate USDC GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5');
+    this.bot.command("validate", async (ctx: Context) => {
+      const userId = String(ctx.from?.id || "unknown");
+      const text = ctx.message && "text" in ctx.message ? ctx.message.text : "";
+      const commandName = extractCommandName(text, "telegram");
+      await withPerformanceProfiling(
+        commandName,
+        "telegram",
+        userId,
+        async () => {
+          const args = text.split(" ").slice(1);
+          if (args.length < 2) {
+            return ctx.reply(
+              "Usage: /validate <assetCode> <issuerAddress>\nExample: /validate USDC GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5"
+            );
+          }
+
+          const [assetCode, issuerAddress] = args;
+          await ctx.reply(
+            `🔍 Verifying asset <b>${assetCode}</b> from issuer <code>${issuerAddress.slice(0, 8)}...</code>`,
+            { parse_mode: "HTML" }
+          );
+
+          try {
+            const result = await this.verificationService.verifyAsset(
+              assetCode,
+              issuerAddress
+            );
+            const statusEmoji =
+              result.status === "VERIFIED"
+                ? "✅"
+                : result.status === "MALICIOUS"
+                  ? "🚨"
+                  : "⚠️";
+
+            let reply = `${statusEmoji} <b>Asset Verification: ${result.status}</b>\n\n`;
+            reply += `<b>Asset:</b> ${assetCode}\n`;
+            reply += `<b>Issuer:</b> <code>${issuerAddress}</code>\n`;
+            if (result.domain) reply += `<b>Domain:</b> ${result.domain}\n`;
+            if (result.details) reply += `<b>Details:</b> ${result.details}\n`;
+            reply += `\n<b>Safe to use:</b> ${result.isSafe ? "Yes ✅" : "No ❌"}`;
+
+            await ctx.reply(reply, { parse_mode: "HTML" });
+          } catch (error) {
+            await ctx.reply(
+              `❌ Verification error: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
         }
-
-        const [assetCode, issuerAddress] = args;
-        await ctx.reply(`🔍 Verifying asset <b>${assetCode}</b> from issuer <code>${issuerAddress.slice(0, 8)}...</code>`, { parse_mode: 'HTML' });
-
-        try {
-          const result = await this.verificationService.verifyAsset(assetCode, issuerAddress);
-          const statusEmoji = result.status === 'VERIFIED' ? '✅' : result.status === 'MALICIOUS' ? '🚨' : '⚠️';
-
-          let reply = `${statusEmoji} <b>Asset Verification: ${result.status}</b>\n\n`;
-          reply += `<b>Asset:</b> ${assetCode}\n`;
-          reply += `<b>Issuer:</b> <code>${issuerAddress}</code>\n`;
-          if (result.domain) reply += `<b>Domain:</b> ${result.domain}\n`;
-          if (result.details) reply += `<b>Details:</b> ${result.details}\n`;
-          reply += `\n<b>Safe to use:</b> ${result.isSafe ? 'Yes ✅' : 'No ❌'}`;
-
-          await ctx.reply(reply, { parse_mode: 'HTML' });
-        } catch (error) {
-          await ctx.reply(`❌ Verification error: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      })();
+      )();
     });
 
     // #125: Multisig wizard command
-    this.bot.command('multisig', async (ctx: any) => {
-      const userId = String(ctx.from?.id || 'unknown');
+    this.bot.command("multisig", async (ctx: Context) => {
+      const userId = String(ctx.from?.id || "unknown");
       if (!isDM(ctx)) {
         await rejectPublicChannel(ctx);
         return;
       }
 
-      const response = this.multisigWizard.startWizard(userId, 'telegram');
+      const response = await botWorkflowManager.startWorkflow(
+        userId,
+        "telegram",
+        "multisig_wizard"
+      );
       await ctx.reply(response.message);
     });
 
+    this.bot.command("swap", async (ctx: Context) => {
+      const userId = String(ctx.from?.id || "unknown");
+      if (!isDM(ctx)) {
+        await rejectPublicChannel(ctx);
+        return;
+      }
+
+      const response = await botWorkflowManager.startWorkflow(
+        userId,
+        "telegram",
+        "swap_wizard"
+      );
+      await ctx.reply(response.message);
+    });
+
+    this.bot.command("help", async (ctx: Context) => {
+      const userId = String(ctx.from?.id || "unknown");
+      const text = ctx.message && "text" in ctx.message ? ctx.message.text : "";
+      await withPerformanceProfiling("/help", "telegram", userId, async () => {
+        const args = text.split(" ").slice(1);
+        if (args.length > 0) {
+          const query = args.join(" ");
+          const features = searchFeatures(query);
+          const helpMsg = formatHelpMessage(features, query);
+          await ctx.reply(helpMsg, { parse_mode: "HTML" });
+        } else {
+          await ctx.reply(
+            "Commands: /start, /balance, /swap, /trustline, /dashboard, /validate, /multisig, /ping\n\nTry /help <feature> to learn more about a specific feature."
+          );
+        }
+      })();
+    });
+
     // #125: Handle wizard input (for active wizard sessions)
-    this.bot.use(async (ctx: any, next: () => Promise<void>) => {
-      const userId = String(ctx.from?.id || 'unknown');
-      const text = ctx.message?.text || '';
-      const command = text.split(' ')[0];
-      
-      const wizardState = this.multisigWizard.getWizardState(userId, 'telegram');
-      if (wizardState && !WIZARD_COMMANDS.includes(command)) {
-        const response = this.multisigWizard.processInput(userId, 'telegram', text);
+    this.bot.use(async (ctx: Context, next: () => Promise<void>) => {
+      const userId = String(ctx.from?.id || "unknown");
+      const text = ctx.message && "text" in ctx.message ? ctx.message.text : "";
+
+      const response = await botWorkflowManager.handleInput(
+        userId,
+        "telegram",
+        text
+      );
+      if (response) {
         await ctx.reply(response.message);
         return;
       }
-      
+
       return next();
     });
 
@@ -281,17 +375,24 @@ export class TelegramAdapter {
   }
 
   // #147: Announce a new GitHub release to a specific chat
-  async announceRelease(chatId: string, release: { tag_name: string; name: string; html_url: string; body?: string }): Promise<boolean> {
+  async announceRelease(
+    chatId: string,
+    release: { tag_name: string; name: string; html_url: string; body?: string }
+  ): Promise<boolean> {
     if (!this.bot) {
       console.warn("⚠️ Telegram bot not initialized");
       return false;
     }
 
-    const body = release.body ? `\n\n${release.body.slice(0, 500)}${release.body.length > 500 ? '...' : ''}` : '';
+    const body = release.body
+      ? `\n\n${release.body.slice(0, 500)}${release.body.length > 500 ? "..." : ""}`
+      : "";
     const message = `🚀 <b>New Release: ${release.name || release.tag_name}</b>${body}\n\n🔗 <a href="${release.html_url}">View on GitHub</a>`;
 
     try {
-      await this.bot.telegram.sendMessage(chatId, message, { parse_mode: 'HTML' });
+      await this.bot.telegram.sendMessage(chatId, message, {
+        parse_mode: "HTML",
+      });
       return true;
     } catch (error) {
       console.error("Error sending release announcement:", error);

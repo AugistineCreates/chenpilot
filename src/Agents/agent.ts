@@ -27,9 +27,7 @@ export class AgentLLM {
     const memoryContext = memoryStore.get(agentId).join("\n");
     // Delimit user input with XML-style tags to prevent prompt injection.
     // The model is instructed to treat everything inside <user_input> as data only.
-    const safeUserInput = userInput
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    const safeUserInput = userInput.replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const fullPrompt = `${
       memoryContext ? "Previous context:\n" + memoryContext + "\n\n" : ""
     }${prompt}\n\n<user_input>\n${safeUserInput}\n</user_input>${

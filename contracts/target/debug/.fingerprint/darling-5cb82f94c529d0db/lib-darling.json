@@ -1,1 +1,23 @@
-{"rustc":4643058173861170821,"features":"[\"default\", \"suggestions\"]","declared_features":"[\"default\", \"diagnostics\", \"suggestions\"]","target":10425393644641512883,"profile":4791074740661137825,"path":614820212957258917,"deps":[[391311489375721310,"darling_macro",false,17137555076612624415],[7492649247881633246,"darling_core",false,268884712088932418]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/darling-5cb82f94c529d0db/dep-lib-darling","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"default\", \"suggestions\"]",
+  "declared_features": "[\"default\", \"diagnostics\", \"suggestions\"]",
+  "target": 10425393644641512883,
+  "profile": 4791074740661137825,
+  "path": 614820212957258917,
+  "deps": [
+    [391311489375721310, "darling_macro", false, 17137555076612624415],
+    [7492649247881633246, "darling_core", false, 268884712088932418]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/darling-5cb82f94c529d0db/dep-lib-darling",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

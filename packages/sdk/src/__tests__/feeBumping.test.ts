@@ -1,10 +1,5 @@
-﻿import {
-  FeeBumpingEngine,
-  createFeeBumpingEngine,
-} from "../feeBumping";
-import {
-  ResourceLimits,
-} from "../types";
+﻿import { FeeBumpingEngine, createFeeBumpingEngine } from "../feeBumping";
+import { ResourceLimits } from "../types";
 
 describe("FeeBumpingEngine", () => {
   describe("constructor and configuration", () => {
@@ -58,9 +53,9 @@ describe("FeeBumpingEngine", () => {
       const engine = new FeeBumpingEngine();
       const limits = FeeBumpingEngine.getDefaultLimits();
       const error = "cpu instructions exceeded 150000000 limit 100000000";
-      
+
       const adjusted = engine.calculateAdjustment(error, limits);
-      
+
       expect(adjusted).not.toBeNull();
       expect(adjusted!.cpuInstructions).toBeGreaterThan(limits.cpuInstructions);
     });
@@ -70,9 +65,9 @@ describe("FeeBumpingEngine", () => {
     it("should succeed on first attempt", async () => {
       const engine = new FeeBumpingEngine();
       const mockTx = jest.fn().mockResolvedValue({ hash: "tx123" });
-      
+
       const result = await engine.bumpAndRetry(mockTx);
-      
+
       expect(result.success).toBe(true);
       expect(result.result).toEqual({ hash: "tx123" });
       expect(result.attempts).toHaveLength(0);
@@ -87,9 +82,9 @@ describe("FeeBumpingEngine", () => {
           new Error("cpu instructions exceeded 150000000 limit 100000000")
         )
         .mockResolvedValueOnce({ hash: "tx123" });
-      
+
       const result = await engine.bumpAndRetry(mockTx);
-      
+
       expect(result.success).toBe(true);
       expect(result.result).toEqual({ hash: "tx123" });
       expect(result.attempts).toHaveLength(1);
@@ -98,12 +93,14 @@ describe("FeeBumpingEngine", () => {
 
     it("should fail after max attempts", async () => {
       const engine = new FeeBumpingEngine({ maxAttempts: 2 });
-      const mockTx = jest.fn().mockRejectedValue(
-        new Error("cpu instructions exceeded 150000000 limit 100000000")
-      );
-      
+      const mockTx = jest
+        .fn()
+        .mockRejectedValue(
+          new Error("cpu instructions exceeded 150000000 limit 100000000")
+        );
+
       const result = await engine.bumpAndRetry(mockTx);
-      
+
       expect(result.success).toBe(false);
       expect(result.error).toContain("Max retry attempts");
       expect(result.attempts).toHaveLength(2);
@@ -112,12 +109,12 @@ describe("FeeBumpingEngine", () => {
 
     it("should not retry on non-resource errors", async () => {
       const engine = new FeeBumpingEngine();
-      const mockTx = jest.fn().mockRejectedValue(
-        new Error("Network error: connection timeout")
-      );
-      
+      const mockTx = jest
+        .fn()
+        .mockRejectedValue(new Error("Network error: connection timeout"));
+
       const result = await engine.bumpAndRetry(mockTx);
-      
+
       expect(result.success).toBe(false);
       expect(result.error).toBe("Network error: connection timeout");
       expect(result.attempts).toHaveLength(1);
@@ -130,9 +127,9 @@ describe("FeeBumpingEngine", () => {
         cpuInstructions: 50_000_000,
       };
       const mockTx = jest.fn().mockResolvedValue({ hash: "tx123" });
-      
+
       const result = await engine.bumpAndRetry(mockTx, customLimits);
-      
+
       expect(result.success).toBe(true);
       expect(mockTx).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -150,9 +147,9 @@ describe("FeeBumpingEngine", () => {
           new Error("cpu instructions exceeded 150000000 limit 100000000")
         )
         .mockResolvedValueOnce({ hash: "tx123" });
-      
+
       await engine.bumpAndRetry(mockTx);
-      
+
       expect(onBump).toHaveBeenCalledTimes(1);
       expect(onBump).toHaveBeenCalledWith(
         expect.objectContaining({

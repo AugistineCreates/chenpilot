@@ -55,25 +55,25 @@ MultiSigBuilder.createPreset("unanimous", master, signers);
 
 ## Builder Methods
 
-| Method | Description | Example |
-|--------|-------------|---------|
-| `addSigner(address, weight)` | Add single signer | `builder.addSigner("G...", 10)` |
-| `addSigners(signers)` | Add multiple signers | `builder.addSigners([{address, weight}])` |
-| `removeSigner(address)` | Remove signer | `builder.removeSigner("G...")` |
-| `updateSignerWeight(address, weight)` | Update weight | `builder.updateSignerWeight("G...", 20)` |
-| `setThreshold(category, value)` | Set threshold | `builder.setThreshold(ThresholdCategory.MEDIUM, 15)` |
-| `setThresholds(config)` | Set all thresholds | `builder.setThresholds({low: 10, medium: 20, high: 30})` |
-| `validate()` | Validate config | `const validation = builder.validate()` |
-| `build()` | Build final config | `const result = builder.build()` |
-| `reset()` | Reset builder | `builder.reset()` |
-| `getConfig()` | Get current config | `const config = builder.getConfig()` |
+| Method                                | Description          | Example                                                  |
+| ------------------------------------- | -------------------- | -------------------------------------------------------- |
+| `addSigner(address, weight)`          | Add single signer    | `builder.addSigner("G...", 10)`                          |
+| `addSigners(signers)`                 | Add multiple signers | `builder.addSigners([{address, weight}])`                |
+| `removeSigner(address)`               | Remove signer        | `builder.removeSigner("G...")`                           |
+| `updateSignerWeight(address, weight)` | Update weight        | `builder.updateSignerWeight("G...", 20)`                 |
+| `setThreshold(category, value)`       | Set threshold        | `builder.setThreshold(ThresholdCategory.MEDIUM, 15)`     |
+| `setThresholds(config)`               | Set all thresholds   | `builder.setThresholds({low: 10, medium: 20, high: 30})` |
+| `validate()`                          | Validate config      | `const validation = builder.validate()`                  |
+| `build()`                             | Build final config   | `const result = builder.build()`                         |
+| `reset()`                             | Reset builder        | `builder.reset()`                                        |
+| `getConfig()`                         | Get current config   | `const config = builder.getConfig()`                     |
 
 ## Threshold Categories
 
 ```typescript
-ThresholdCategory.LOW     // Basic operations
-ThresholdCategory.MEDIUM  // Standard operations
-ThresholdCategory.HIGH    // Critical operations
+ThresholdCategory.LOW; // Basic operations
+ThresholdCategory.MEDIUM; // Standard operations
+ThresholdCategory.HIGH; // Critical operations
 ```
 
 ## Validation
@@ -105,26 +105,23 @@ const validation = validateMultiSigConfig(config);
 const total = calculateTotalWeight(config);
 
 // Check if signers can meet threshold
-const canMeet = canMeetThreshold(
-  ["GSIGNER1", "GSIGNER2"],
-  config,
-  30
-);
+const canMeet = canMeetThreshold(["GSIGNER1", "GSIGNER2"], config, 30);
 ```
 
 ## Options
 
 ```typescript
 new MultiSigBuilder(master, {
-  autoValidate: true,      // Validate on build (default: true)
-  allowDuplicates: false,  // Allow duplicate signers (default: false)
-  maxSigners: 20,          // Max signers allowed (default: 20)
+  autoValidate: true, // Validate on build (default: true)
+  allowDuplicates: false, // Allow duplicate signers (default: false)
+  maxSigners: 20, // Max signers allowed (default: 20)
 });
 ```
 
 ## Common Patterns
 
 ### 2-of-3 Multi-Sig
+
 ```typescript
 const builder = new MultiSigBuilder(master)
   .addSigner(s1, 1)
@@ -134,6 +131,7 @@ const builder = new MultiSigBuilder(master)
 ```
 
 ### Weighted Governance
+
 ```typescript
 const builder = new MultiSigBuilder(master)
   .addSigner(founder, 50)
@@ -143,6 +141,7 @@ const builder = new MultiSigBuilder(master)
 ```
 
 ### Corporate Treasury
+
 ```typescript
 const builder = new MultiSigBuilder(master)
   .addSigner(treasurer, 40)
@@ -153,14 +152,14 @@ const builder = new MultiSigBuilder(master)
 
 ## Validation Rules
 
-| Rule | Description |
-|------|-------------|
-| Weight Range | 0-255 |
-| Threshold Range | 0-255 |
-| Threshold ≤ Total Weight | Threshold must be achievable |
-| No Duplicates | By default, no duplicate signers |
-| Max Signers | Default limit of 20 signers |
-| Master Account | Required and non-empty |
+| Rule                     | Description                      |
+| ------------------------ | -------------------------------- |
+| Weight Range             | 0-255                            |
+| Threshold Range          | 0-255                            |
+| Threshold ≤ Total Weight | Threshold must be achievable     |
+| No Duplicates            | By default, no duplicate signers |
+| Max Signers              | Default limit of 20 signers      |
+| Master Account           | Required and non-empty           |
 
 ## Fee Estimation
 

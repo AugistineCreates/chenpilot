@@ -29,6 +29,23 @@ export class PromptVersion {
   @Column({ default: 50 })
   weight!: number;
 
+  @Column("jsonb", { nullable: true })
+  compatibility!: {
+    minAgentVersion?: string;
+    requiredTools?: string[];
+    deprecatedTools?: string[];
+  };
+
+  @Column({ type: "varchar", nullable: true })
+  rollbackVersionId?: string;
+
+  @Column({ type: "jsonb", nullable: true })
+  rolloutPolicy!: {
+    autoRollbackThreshold?: number; // success rate threshold (0-100)
+    minExecutionsBeforePolicy?: number;
+    canaryWeight?: number;
+  };
+
   @CreateDateColumn()
   createdAt!: Date;
 

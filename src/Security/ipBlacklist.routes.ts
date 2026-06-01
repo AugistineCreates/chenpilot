@@ -58,12 +58,7 @@ router.get("/check/:ip", authenticate, async (req: Request, res: Response) => {
  */
 router.get("/", authenticate, isAdmin, async (req: Request, res: Response) => {
   try {
-    const {
-      limit = 50,
-      offset = 0,
-      activeOnly = "true",
-      reason,
-    } = req.query;
+    const { limit = 50, offset = 0, activeOnly = "true", reason } = req.query;
 
     const options = {
       limit: Math.min(parseInt(limit as string) || 50, 500),
@@ -186,8 +181,11 @@ router.post(
   isAdmin,
   async (req: Request, res: Response) => {
     try {
-      const { ips, reason = BlacklistReason.MALICIOUS_ACTIVITY, description } =
-        req.body;
+      const {
+        ips,
+        reason = BlacklistReason.MALICIOUS_ACTIVITY,
+        description,
+      } = req.body;
 
       // Validate input
       if (!Array.isArray(ips) || ips.length === 0) {

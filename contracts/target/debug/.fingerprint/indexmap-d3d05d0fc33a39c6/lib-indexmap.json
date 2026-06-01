@@ -1,1 +1,23 @@
-{"rustc":4643058173861170821,"features":"[\"default\", \"std\"]","declared_features":"[\"arbitrary\", \"borsh\", \"default\", \"quickcheck\", \"rayon\", \"serde\", \"std\", \"sval\", \"test_debug\"]","target":10391229881554802429,"profile":17770749724986273341,"path":10851636890035717397,"deps":[[5230392855116717286,"equivalent",false,13384610120822058069],[17037126617600641945,"hashbrown",false,9207846735475616827]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/indexmap-d3d05d0fc33a39c6/dep-lib-indexmap","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"default\", \"std\"]",
+  "declared_features": "[\"arbitrary\", \"borsh\", \"default\", \"quickcheck\", \"rayon\", \"serde\", \"std\", \"sval\", \"test_debug\"]",
+  "target": 10391229881554802429,
+  "profile": 17770749724986273341,
+  "path": 10851636890035717397,
+  "deps": [
+    [5230392855116717286, "equivalent", false, 13384610120822058069],
+    [17037126617600641945, "hashbrown", false, 9207846735475616827]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/indexmap-d3d05d0fc33a39c6/dep-lib-indexmap",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

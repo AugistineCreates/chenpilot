@@ -1,1 +1,24 @@
-{"rustc":4643058173861170821,"features":"[\"alloc\", \"default\", \"hex\", \"macros\", \"std\"]","declared_features":"[\"alloc\", \"base64\", \"chrono\", \"chrono_0_4\", \"default\", \"guide\", \"hashbrown_0_14\", \"hashbrown_0_15\", \"hashbrown_0_16\", \"hex\", \"indexmap\", \"indexmap_1\", \"indexmap_2\", \"json\", \"macros\", \"schemars_0_8\", \"schemars_0_9\", \"schemars_1\", \"smallvec_1\", \"std\", \"time_0_3\"]","target":10448421281463538527,"profile":511476171623209585,"path":2596630562711900691,"deps":[[530211389790465181,"hex",false,7999536871867162131],[6369760045084962894,"serde_with_macros",false,10329743749093471009],[11899261697793765154,"serde_core",false,6829770807401724358]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/serde_with-d6607ba03b1e2aca/dep-lib-serde_with","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"alloc\", \"default\", \"hex\", \"macros\", \"std\"]",
+  "declared_features": "[\"alloc\", \"base64\", \"chrono\", \"chrono_0_4\", \"default\", \"guide\", \"hashbrown_0_14\", \"hashbrown_0_15\", \"hashbrown_0_16\", \"hex\", \"indexmap\", \"indexmap_1\", \"indexmap_2\", \"json\", \"macros\", \"schemars_0_8\", \"schemars_0_9\", \"schemars_1\", \"smallvec_1\", \"std\", \"time_0_3\"]",
+  "target": 10448421281463538527,
+  "profile": 511476171623209585,
+  "path": 2596630562711900691,
+  "deps": [
+    [530211389790465181, "hex", false, 7999536871867162131],
+    [6369760045084962894, "serde_with_macros", false, 10329743749093471009],
+    [11899261697793765154, "serde_core", false, 6829770807401724358]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/serde_with-d6607ba03b1e2aca/dep-lib-serde_with",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

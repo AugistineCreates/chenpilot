@@ -1,5 +1,4 @@
-
-import { StellarErrorDetails } from './types';
+import { StellarErrorDetails } from "./types";
 
 export class StellarSdkError extends Error {
   public readonly code: string;
@@ -9,7 +8,7 @@ export class StellarSdkError extends Error {
   constructor(details: StellarErrorDetails) {
     super(details.message);
 
-    this.name = 'StellarSdkError';
+    this.name = "StellarSdkError";
     this.code = details.code;
     this.action = details.action;
     this.rawCode = details.rawCode;

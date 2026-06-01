@@ -13,7 +13,9 @@ import * as http from "http";
 async function runSimpleTest() {
   console.log("╔════════════════════════════════════════════════════════════╗");
   console.log("║   Socket.io Simple Test                                    ║");
-  console.log("╚════════════════════════════════════════════════════════════╝\n");
+  console.log(
+    "╚════════════════════════════════════════════════════════════╝\n"
+  );
 
   try {
     // Create a simple HTTP server
@@ -28,7 +30,9 @@ async function runSimpleTest() {
     const socketManager = getSocketManager();
 
     console.log("✓ Socket.io initialized");
-    console.log(`  Connected clients: ${socketManager.getConnectedClientsCount()}\n`);
+    console.log(
+      `  Connected clients: ${socketManager.getConnectedClientsCount()}\n`
+    );
 
     // Test emitting events
     console.log("✓ Testing event emissions...\n");
@@ -64,15 +68,23 @@ async function runSimpleTest() {
     );
     console.log(`     ✓ Event emitted: deployment:status`);
 
-    console.log("\n╔════════════════════════════════════════════════════════════╗");
-    console.log("║   ✓ All tests passed!                                     ║");
-    console.log("╚════════════════════════════════════════════════════════════╝\n");
+    console.log(
+      "\n╔════════════════════════════════════════════════════════════╗"
+    );
+    console.log(
+      "║   ✓ All tests passed!                                     ║"
+    );
+    console.log(
+      "╚════════════════════════════════════════════════════════════╝\n"
+    );
 
     console.log("Summary:");
     console.log("  • Socket.io initialized successfully");
     console.log("  • All event types working correctly");
     console.log("  • Type-safe helpers functioning");
-    console.log("\nNext: Start the server with 'npm run dev' for full testing\n");
+    console.log(
+      "\nNext: Start the server with 'npm run dev' for full testing\n"
+    );
 
     // Clean up
     await socketManager.close();

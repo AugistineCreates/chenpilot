@@ -42,14 +42,22 @@ async function main() {
     const botId = "bot-" + Date.now();
     const deploymentId = "deploy-" + Date.now();
 
-    console.log(`\n🚀 Emitting test events at ${new Date().toLocaleTimeString()}...\n`);
+    console.log(
+      `\n🚀 Emitting test events at ${new Date().toLocaleTimeString()}...\n`
+    );
 
     // Transaction
     TransactionUpdateHelper.notifyCreated(txId, "hash_123", userId);
     console.log("  💸 Transaction Created emitted");
 
     setTimeout(() => {
-      TransactionUpdateHelper.notifyConfirmed(txId, "hash_123", 12345, 1200, userId);
+      TransactionUpdateHelper.notifyConfirmed(
+        txId,
+        "hash_123",
+        12345,
+        1200,
+        userId
+      );
       console.log("  ✅ Transaction Confirmed emitted");
     }, 1000);
 
@@ -71,7 +79,12 @@ async function main() {
     }, 4000);
 
     setTimeout(() => {
-      DeploymentUpdateHelper.notifyProgress(deploymentId, 50, "Building...", userId);
+      DeploymentUpdateHelper.notifyProgress(
+        deploymentId,
+        50,
+        "Building...",
+        userId
+      );
       console.log("  🚀 Deployment Progress (50%) emitted");
     }, 5000);
 

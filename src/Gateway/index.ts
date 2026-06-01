@@ -35,10 +35,7 @@ export {
 } from "./realtimeIntegration";
 
 // Client-side APIs
-export {
-  RealtimeClient,
-  createRealtimeClient,
-} from "./realtimeClient";
+export { RealtimeClient, createRealtimeClient } from "./realtimeClient";
 
 /**
  * QUICK START GUIDE

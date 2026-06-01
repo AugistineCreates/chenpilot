@@ -16,10 +16,13 @@ import {
 } from "./transaction.service";
 import logger from "../config/logger";
 import authRoutes from "../Auth/auth.routes";
+import userPreferencesRoutes from "../Auth/userPreferences.routes";
 import dataExportRoutes from "../services/dataExport.routes";
 import horizonProxyRoutes from "./horizonProxy.routes";
 import auditLogRoutes from "../AuditLog/auditLog.routes";
 import adminAgentRoutes from "../Agents/admin/adminAgent.routes";
+import experimentRoutes from "../Agents/admin/experiment.routes";
+import simulationRoutes from "../Agents/admin/simulation.routes";
 import { stellarLiquidityTool } from "../Agents/tools/stellarLiquidityTool";
 import { authenticateToken } from "../Auth/auth.middleware";
 import {
@@ -28,7 +31,6 @@ import {
 } from "./middleware/rbac.middleware";
 import { auditLogService } from "../AuditLog/auditLog.service";
 import { AuditAction, AuditSeverity } from "../AuditLog/auditLog.entity";
-import { getSocketManager } from "./socketManager";
 import { BotSessionService } from "../Bot/botSession.service";
 import { BotSessionType, BotPlatform } from "../Bot/botSession.entity";
 
@@ -108,6 +110,9 @@ router.use(generalLimiter);
 // Mount auth routes
 router.use("/auth", authRoutes);
 
+// Mount user preferences routes
+router.use("/user/preferences", userPreferencesRoutes);
+
 // Mount data export routes
 router.use("/export", dataExportRoutes);
 
@@ -119,37 +124,52 @@ router.use("/audit", auditLogRoutes);
 // Mount admin agent management routes (requires admin role)
 router.use("/admin/agents", adminAgentRoutes);
 
+// Mount experiment management routes (requires admin role)
+router.use("/admin/experiments", experimentRoutes);
+
+// Mount simulation routes (requires admin role)
+router.use("/admin/simulation", simulationRoutes);
+
 // #149: Bot command performance metrics endpoint
 router.post("/bot/metrics", async (req: Request, res: Response) => {
   try {
-    const { command, platform, userId, executionTimeMs, success, error, timestamp } = req.body;
+    const {
+      command,
+      platform,
+      userId,
+      executionTimeMs,
+      success,
+      error,
+      timestamp,
+    } = req.body;
 
     // Validate required fields
     if (!command || !platform || !userId || executionTimeMs === undefined) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: command, platform, userId, executionTimeMs"
+        message:
+          "Missing required fields: command, platform, userId, executionTimeMs",
       });
     }
 
     // Map bot command to audit action
     const commandMap: Record<string, AuditAction> = {
-      '!start': AuditAction.BOT_COMMAND_START,
-      '/start': AuditAction.BOT_COMMAND_START,
-      '!help': AuditAction.BOT_COMMAND_HELP,
-      '/help': AuditAction.BOT_COMMAND_HELP,
-      '!thread': AuditAction.BOT_COMMAND_THREAD,
-      '!sponsor': AuditAction.BOT_COMMAND_SPONSOR,
-      '!trustline': AuditAction.BOT_COMMAND_TRUSTLINE,
-      '/trustline': AuditAction.BOT_COMMAND_TRUSTLINE,
-      '!dashboard': AuditAction.BOT_COMMAND_DASHBOARD,
-      '/dashboard': AuditAction.BOT_COMMAND_DASHBOARD,
-      '!validate': AuditAction.BOT_COMMAND_VALIDATE,
-      '/validate': AuditAction.BOT_COMMAND_VALIDATE,
-      '!balance': AuditAction.BOT_COMMAND_BALANCE,
-      '/balance': AuditAction.BOT_COMMAND_BALANCE,
-      '!swap': AuditAction.BOT_COMMAND_SWAP,
-      '/swap': AuditAction.BOT_COMMAND_SWAP,
+      "!start": AuditAction.BOT_COMMAND_START,
+      "/start": AuditAction.BOT_COMMAND_START,
+      "!help": AuditAction.BOT_COMMAND_HELP,
+      "/help": AuditAction.BOT_COMMAND_HELP,
+      "!thread": AuditAction.BOT_COMMAND_THREAD,
+      "!sponsor": AuditAction.BOT_COMMAND_SPONSOR,
+      "!trustline": AuditAction.BOT_COMMAND_TRUSTLINE,
+      "/trustline": AuditAction.BOT_COMMAND_TRUSTLINE,
+      "!dashboard": AuditAction.BOT_COMMAND_DASHBOARD,
+      "/dashboard": AuditAction.BOT_COMMAND_DASHBOARD,
+      "!validate": AuditAction.BOT_COMMAND_VALIDATE,
+      "/validate": AuditAction.BOT_COMMAND_VALIDATE,
+      "!balance": AuditAction.BOT_COMMAND_BALANCE,
+      "/balance": AuditAction.BOT_COMMAND_BALANCE,
+      "!swap": AuditAction.BOT_COMMAND_SWAP,
+      "/swap": AuditAction.BOT_COMMAND_SWAP,
     };
 
     const auditAction = commandMap[command] || AuditAction.BOT_COMMAND_START;
@@ -181,13 +201,13 @@ router.post("/bot/metrics", async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: "Metrics logged successfully"
+      message: "Metrics logged successfully",
     });
   } catch (error) {
     logger.error("Error logging bot metrics", { error, body: req.body });
     return res.status(500).json({
       success: false,
-      message: "Failed to log metrics"
+      message: "Failed to log metrics",
     });
   }
 });
@@ -198,13 +218,21 @@ const botSessionService = new BotSessionService();
 // Create or update a bot session
 router.post("/bot/session", async (req: Request, res: Response) => {
   try {
-    const { userId, platform, sessionType, step, sessionData, expiresAt } = req.body;
+    const { userId, platform, sessionType, step, sessionData, expiresAt } =
+      req.body;
 
     // Validate required fields
-    if (!userId || !platform || !sessionType || step === undefined || !sessionData) {
+    if (
+      !userId ||
+      !platform ||
+      !sessionType ||
+      step === undefined ||
+      !sessionData
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: userId, platform, sessionType, step, sessionData"
+        message:
+          "Missing required fields: userId, platform, sessionType, step, sessionData",
       });
     }
 
@@ -212,7 +240,7 @@ router.post("/bot/session", async (req: Request, res: Response) => {
     if (!Object.values(BotPlatform).includes(platform)) {
       return res.status(400).json({
         success: false,
-        message: `Invalid platform. Must be one of: ${Object.values(BotPlatform).join(', ')}`
+        message: `Invalid platform. Must be one of: ${Object.values(BotPlatform).join(", ")}`,
       });
     }
 
@@ -220,12 +248,14 @@ router.post("/bot/session", async (req: Request, res: Response) => {
     if (!Object.values(BotSessionType).includes(sessionType)) {
       return res.status(400).json({
         success: false,
-        message: `Invalid session type. Must be one of: ${Object.values(BotSessionType).join(', ')}`
+        message: `Invalid session type. Must be one of: ${Object.values(BotSessionType).join(", ")}`,
       });
     }
 
     // Set default expiration (24 hours from now) if not provided
-    const expiration = expiresAt ? new Date(expiresAt) : new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const expiration = expiresAt
+      ? new Date(expiresAt)
+      : new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     const session = await botSessionService.create({
       userId,
@@ -244,7 +274,7 @@ router.post("/bot/session", async (req: Request, res: Response) => {
     logger.error("Error creating bot session", { error, body: req.body });
     return res.status(500).json({
       success: false,
-      message: "Failed to create session"
+      message: "Failed to create session",
     });
   }
 });
@@ -257,7 +287,8 @@ router.get("/bot/session", async (req: Request, res: Response) => {
     if (!userId || !platform || !sessionType) {
       return res.status(400).json({
         success: false,
-        message: "Missing required query parameters: userId, platform, sessionType"
+        message:
+          "Missing required query parameters: userId, platform, sessionType",
       });
     }
 
@@ -270,7 +301,7 @@ router.get("/bot/session", async (req: Request, res: Response) => {
     if (!session) {
       return res.status(404).json({
         success: false,
-        message: "No active session found"
+        message: "No active session found",
       });
     }
 
@@ -282,7 +313,7 @@ router.get("/bot/session", async (req: Request, res: Response) => {
     logger.error("Error getting bot session", { error, query: req.query });
     return res.status(500).json({
       success: false,
-      message: "Failed to get session"
+      message: "Failed to get session",
     });
   }
 });
@@ -305,56 +336,72 @@ router.put("/bot/session/:sessionId", async (req: Request, res: Response) => {
       session,
     });
   } catch (error) {
-    logger.error("Error updating bot session", { error, params: req.params, body: req.body });
+    logger.error("Error updating bot session", {
+      error,
+      params: req.params,
+      body: req.body,
+    });
     return res.status(500).json({
       success: false,
-      message: "Failed to update session"
+      message: "Failed to update session",
     });
   }
 });
 
 // Deactivate a bot session
-router.delete("/bot/session/:sessionId", async (req: Request, res: Response) => {
-  try {
-    const { sessionId } = req.params;
-    await botSessionService.deactivateSession(sessionId);
+router.delete(
+  "/bot/session/:sessionId",
+  async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      await botSessionService.deactivateSession(sessionId);
 
-    return res.status(200).json({
-      success: true,
-      message: "Session deactivated"
-    });
-  } catch (error) {
-    logger.error("Error deactivating bot session", { error, params: req.params });
-    return res.status(500).json({
-      success: false,
-      message: "Failed to deactivate session"
-    });
+      return res.status(200).json({
+        success: true,
+        message: "Session deactivated",
+      });
+    } catch (error) {
+      logger.error("Error deactivating bot session", {
+        error,
+        params: req.params,
+      });
+      return res.status(500).json({
+        success: false,
+        message: "Failed to deactivate session",
+      });
+    }
   }
-});
+);
 
 // Deactivate all sessions for a user
-router.delete("/bot/sessions/user/:userId", async (req: Request, res: Response) => {
-  try {
-    const { userId } = req.params;
-    const { platform } = req.query;
+router.delete(
+  "/bot/sessions/user/:userId",
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      const { platform } = req.query;
 
-    const count = await botSessionService.deactivateUserSessions(
-      userId,
-      platform as BotPlatform
-    );
+      const count = await botSessionService.deactivateUserSessions(
+        userId,
+        platform as BotPlatform
+      );
 
-    return res.status(200).json({
-      success: true,
-      message: `${count} session(s) deactivated`
-    });
-  } catch (error) {
-    logger.error("Error deactivating user sessions", { error, params: req.params });
-    return res.status(500).json({
-      success: false,
-      message: "Failed to deactivate sessions"
-    });
+      return res.status(200).json({
+        success: true,
+        message: `${count} session(s) deactivated`,
+      });
+    } catch (error) {
+      logger.error("Error deactivating user sessions", {
+        error,
+        params: req.params,
+      });
+      return res.status(500).json({
+        success: false,
+        message: "Failed to deactivate sessions",
+      });
+    }
   }
-});
+);
 
 // Public webhook endpoint for Stellar funding notifications
 router.post(
@@ -860,14 +907,8 @@ router.get("/realtime/stats", (req: Request, res: Response) => {
   try {
     // Dynamic import to avoid circular dependency issues
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getSocketManager } = require("./socketManager");
-    const socketManager = getSocketManager();
-
-    interface SocketClient {
-      socketId: string;
-      userId?: string;
-      connectedAt: Date;
-    }
+    const { getSocketManager: getManager } = require("./socketManager");
+    const socketManager = getManager();
 
     const stats = {
       success: true,
@@ -919,13 +960,8 @@ router.get("/realtime/user/:userId/clients", (req: Request, res: Response) => {
     const { userId } = req.params;
     // Dynamic import to avoid circular dependency issues
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getSocketManager } = require("./socketManager");
-    const socketManager = getSocketManager();
-
-    interface SocketClient {
-      socketId: string;
-      connectedAt: Date;
-    }
+    const { getSocketManager: getManager } = require("./socketManager");
+    const socketManager = getManager();
 
     const clients = socketManager.getUserClients(userId);
 
@@ -978,12 +1014,10 @@ router.post(
 
       const sponsorSecret = process.env.SPONSOR_SECRET_KEY;
       if (!sponsorSecret) {
-        return res
-          .status(503)
-          .json({
-            success: false,
-            message: "Sponsorship service not configured",
-          });
+        return res.status(503).json({
+          success: false,
+          message: "Sponsorship service not configured",
+        });
       }
 
       const networkPassphrase =

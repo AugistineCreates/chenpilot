@@ -1,6 +1,6 @@
 /**
  * Stellar Sequence Helper
- * 
+ *
  * Integration layer between SequenceManager and Stellar SDK
  * Provides convenient methods for building transactions with managed sequences
  */
@@ -60,11 +60,9 @@ export class StellarSequenceHelper {
     const sequenceInfo = await this.getNextSequence(accountId);
 
     // Reserve the sequence number
-    await this.sequenceManager.reserveSequence(
-      accountId,
-      sequenceInfo.next,
-      { timestamp: Date.now() }
-    );
+    await this.sequenceManager.reserveSequence(accountId, sequenceInfo.next, {
+      timestamp: Date.now(),
+    });
 
     // Create account with the next sequence
     const account = new AccountClass(accountId, sequenceInfo.next);

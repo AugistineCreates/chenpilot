@@ -39,14 +39,14 @@ function presetExample() {
   console.log("=== Preset Example ===\n");
 
   const masterAccount = "GMASTER_ACCOUNT_ADDRESS";
-  const signers = [
-    "GSIGNER1_ADDRESS",
-    "GSIGNER2_ADDRESS",
-    "GSIGNER3_ADDRESS",
-  ];
+  const signers = ["GSIGNER1_ADDRESS", "GSIGNER2_ADDRESS", "GSIGNER3_ADDRESS"];
 
   // Create a 2-of-3 configuration
-  const builder = MultiSigBuilder.createPreset("2-of-3", masterAccount, signers);
+  const builder = MultiSigBuilder.createPreset(
+    "2-of-3",
+    masterAccount,
+    signers
+  );
 
   const result = builder.build();
 

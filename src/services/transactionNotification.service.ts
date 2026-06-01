@@ -2,7 +2,10 @@ import * as StellarSdk from "@stellar/stellar-sdk";
 import config from "../config/config";
 import { TelegramAdapter } from "../../packages/bot/src/adapters/telegram";
 import { DiscordAdapter } from "../../packages/bot/src/adapters/discord";
-import { TransactionNotificationData, BotNotificationConfig } from "../../packages/bot/src/types";
+import {
+  TransactionNotificationData,
+  BotNotificationConfig,
+} from "../../packages/bot/src/types";
 import logger from "../config/logger";
 
 /**
@@ -13,17 +16,17 @@ export interface TransactionMonitorConfig {
    * Horizon server URL
    */
   horizonUrl: string;
-  
+
   /**
    * Poll interval in milliseconds
    */
   pollInterval: number;
-  
+
   /**
    * Confirmation threshold
    */
   confirmations: number;
-  
+
   /**
    * Notification config
    */
@@ -60,7 +63,7 @@ export class TransactionNotificationService {
   constructor(config?: Partial<TransactionMonitorConfig>) {
     const horizonUrl = config?.horizonUrl || "https://horizon.stellar.org";
     this.server = new StellarSdk.Horizon.Server(horizonUrl);
-    
+
     this.config = {
       horizonUrl: config?.horizonUrl || "https://horizon.stellar.org",
       pollInterval: config?.pollInterval || 10000, // 10 seconds
@@ -69,7 +72,7 @@ export class TransactionNotificationService {
         telegramEnabled: true,
         discordEnabled: true,
         minConfirmations: 1,
-        template: 'standard',
+        template: "standard",
       },
     };
   }
@@ -95,7 +98,7 @@ export class TransactionNotificationService {
 
     // Start polling for transaction confirmations
     this.startPolling();
-    
+
     logger.info("Transaction notification service initialized");
   }
 
@@ -140,7 +143,7 @@ export class TransactionNotificationService {
       submittedAt: Date.now(),
       notificationSent: false,
     });
-    
+
     logger.info(`Monitoring transaction ${txHash} for user ${userId}`);
   }
 
@@ -153,7 +156,7 @@ export class TransactionNotificationService {
     for (const [hash, pending] of this.pendingTransactions.entries()) {
       try {
         const tx = await this.server.transactions().transaction(hash).call();
-        
+
         if (tx.successful) {
           // Transaction confirmed - send notification
           await this.sendTransactionNotification(pending, true);
@@ -221,8 +224,10 @@ export class TransactionNotificationService {
 
     // Mark as notified
     pending.notificationSent = true;
-    
-    logger.info(`Sent ${successful ? 'success' : 'failure'} notification for tx ${pending.hash}`);
+
+    logger.info(
+      `Sent ${successful ? "success" : "failure"} notification for tx ${pending.hash}`
+    );
   }
 
   /**
@@ -245,10 +250,7 @@ export class TransactionNotificationService {
   /**
    * Send a custom notification to a user
    */
-  async sendCustomNotification(
-    userId: string,
-    message: string
-  ): Promise<void> {
+  async sendCustomNotification(userId: string, message: string): Promise<void> {
     if (this.telegramAdapter) {
       await this.telegramAdapter.sendNotification(userId, message);
     }
@@ -281,4 +283,5 @@ export class TransactionNotificationService {
 }
 
 // Export singleton instance
-export const transactionNotificationService = new TransactionNotificationService();
+export const transactionNotificationService =
+  new TransactionNotificationService();

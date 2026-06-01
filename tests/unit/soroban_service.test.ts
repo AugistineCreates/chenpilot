@@ -11,7 +11,8 @@ describe("Soroban Service invokeContract", () => {
 
   it("uses default testnet RPC URL and passphrase", async () => {
     process.env.SOROBAN_RPC_URL_TESTNET = "https://rpc-testnet.example";
-    const { invokeContract } = await import("../../src/services/sorobanService");
+    const { invokeContract } =
+      await import("../../src/services/sorobanService");
 
     await invokeContract({
       network: "testnet",
@@ -32,7 +33,8 @@ describe("Soroban Service invokeContract", () => {
 
   it("uses default mainnet RPC URL and passphrase", async () => {
     process.env.SOROBAN_RPC_URL_MAINNET = "https://rpc-mainnet.example";
-    const { invokeContract } = await import("../../src/services/sorobanService");
+    const { invokeContract } =
+      await import("../../src/services/sorobanService");
 
     await invokeContract({
       network: "mainnet",
@@ -52,7 +54,8 @@ describe("Soroban Service invokeContract", () => {
   });
 
   it("rejects missing contractId", async () => {
-    const { invokeContract } = await import("../../src/services/sorobanService");
+    const { invokeContract } =
+      await import("../../src/services/sorobanService");
 
     await expect(
       invokeContract({
@@ -64,7 +67,8 @@ describe("Soroban Service invokeContract", () => {
   });
 
   it("rejects missing method", async () => {
-    const { invokeContract } = await import("../../src/services/sorobanService");
+    const { invokeContract } =
+      await import("../../src/services/sorobanService");
 
     await expect(
       invokeContract({
@@ -76,7 +80,8 @@ describe("Soroban Service invokeContract", () => {
   });
 
   it("returns expected result shape", async () => {
-    const { invokeContract } = await import("../../src/services/sorobanService");
+    const { invokeContract } =
+      await import("../../src/services/sorobanService");
 
     const result = await invokeContract({
       network: "testnet",

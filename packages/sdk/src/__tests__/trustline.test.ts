@@ -34,7 +34,12 @@ describe("trustline helper functions", () => {
 
     it("handles missing trustline", async () => {
       mockCall.mockResolvedValueOnce({ balances: [] });
-      const res = await hasValidStellarTrustline(undefined, "GABC123", "TOKEN", "GISSUER");
+      const res = await hasValidStellarTrustline(
+        undefined,
+        "GABC123",
+        "TOKEN",
+        "GISSUER"
+      );
       expect(res.exists).toBe(false);
       expect(res.authorized).toBe(false);
     });
@@ -50,7 +55,12 @@ describe("trustline helper functions", () => {
           },
         ],
       });
-      const res = await hasValidStellarTrustline(undefined, "GABC123", "TOKEN", "GISSUER");
+      const res = await hasValidStellarTrustline(
+        undefined,
+        "GABC123",
+        "TOKEN",
+        "GISSUER"
+      );
       expect(res.exists).toBe(true);
       expect(res.authorized).toBe(false);
       expect(res.details).toBeDefined();
@@ -86,7 +96,12 @@ describe("trustline helper functions", () => {
     it("returns empty array when no zero-balance trustlines", async () => {
       mockCall.mockResolvedValueOnce({
         balances: [
-          { asset_type: "credit_alphanum4", asset_code: "FOO", asset_issuer: "ISS", balance: "1" },
+          {
+            asset_type: "credit_alphanum4",
+            asset_code: "FOO",
+            asset_issuer: "ISS",
+            balance: "1",
+          },
         ],
       });
       const result = await findZeroBalanceTrustlines(undefined, "G123");

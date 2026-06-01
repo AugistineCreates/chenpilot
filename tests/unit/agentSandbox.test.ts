@@ -26,7 +26,9 @@ jest.mock("../../src/Agents/agent", () => ({
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Build a minimal ExecutionPlan for executor-only tests */
-function buildPlan(steps: Array<{ action: string; payload?: Record<string, unknown> }>) {
+function buildPlan(
+  steps: Array<{ action: string; payload?: Record<string, unknown> }>
+) {
   return {
     planId: "plan_test_001",
     steps: steps.map((s, i) => ({
@@ -118,7 +120,11 @@ describe("MockToolRegistry", () => {
       }),
     });
 
-    const result = await registry.execute("dynamic_tool", { input: "hello" }, "u");
+    const result = await registry.execute(
+      "dynamic_tool",
+      { input: "hello" },
+      "u"
+    );
 
     expect(result.status).toBe("success");
     expect((result.data as Record<string, unknown>).echo).toBe("hello");
@@ -206,7 +212,9 @@ describe("AgentSandbox – executePlan", () => {
   it("executes a single-step plan with a success mock", async () => {
     sandbox.mockSuccess("wallet_tool", { balance: "500 XLM" });
 
-    const plan = buildPlan([{ action: "wallet_tool", payload: { operation: "get_balance" } }]);
+    const plan = buildPlan([
+      { action: "wallet_tool", payload: { operation: "get_balance" } },
+    ]);
     const { executionResult, assertions } = await sandbox.executePlan(plan);
 
     expect(executionResult.status).toBe("success");
@@ -222,7 +230,10 @@ describe("AgentSandbox – executePlan", () => {
 
     const plan = buildPlan([
       { action: "wallet_tool", payload: { operation: "get_balance" } },
-      { action: "swap_tool", payload: { from: "XLM", to: "USDC", amount: 100 } },
+      {
+        action: "swap_tool",
+        payload: { from: "XLM", to: "USDC", amount: 100 },
+      },
     ]);
 
     const { assertions } = await sandbox.executePlan(plan);
@@ -243,7 +254,11 @@ describe("AgentSandbox – executePlan", () => {
 
     const call = assertions.getNthCall("swap_tool", 0);
     expect(call).toBeDefined();
-    expect(call!.payload).toMatchObject({ from: "XLM", to: "USDC", amount: 50 });
+    expect(call!.payload).toMatchObject({
+      from: "XLM",
+      to: "USDC",
+      amount: 50,
+    });
   });
 
   it("handles a failing tool step", async () => {
@@ -284,8 +299,12 @@ describe("AgentSandbox – executePlan", () => {
     // Both steps complete (mock returns result, not exception)
     expect(executionResult.completedSteps).toBe(2);
     // Tool-level error is captured in the call record
-    expect(assertions.getNthCall("wallet_tool", 0)!.result.status).toBe("error");
-    expect(assertions.getNthCall("swap_tool", 0)!.result.status).toBe("success");
+    expect(assertions.getNthCall("wallet_tool", 0)!.result.status).toBe(
+      "error"
+    );
+    expect(assertions.getNthCall("swap_tool", 0)!.result.status).toBe(
+      "success"
+    );
   });
 
   it("preserves a snapshot of the plan before execution", async () => {
@@ -395,7 +414,9 @@ describe("AgentSandbox – run()", () => {
   });
 
   it("runs plan-and-execute end-to-end", async () => {
-    const { executionResult, assertions } = await sandbox.run("Check my XLM balance");
+    const { executionResult, assertions } = await sandbox.run(
+      "Check my XLM balance"
+    );
 
     expect(executionResult.status).toMatch(/success|partial/);
     expect(assertions.allCalls().length).toBeGreaterThan(0);

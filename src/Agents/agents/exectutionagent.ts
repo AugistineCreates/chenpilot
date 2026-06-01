@@ -8,6 +8,9 @@ import logger from "../../config/logger";
 import { withTimeout, TimeoutError } from "../../utils/timeout";
 import config from "../../config/config";
 import { randomUUID } from "crypto";
+import { agentMetricsService } from "../agentMetrics.service";
+import { AgentType, ExecutionStatus } from "../agentExecutionMetrics.entity";
+
 export class ExecutionAgent {
   async run(
     plan: WorkflowPlan,
@@ -137,10 +140,33 @@ export class ExecutionAgent {
       input,
       traceId
     )) as { response: string };
+
+    const duration = Date.now() - startTime;
+
+    // Record metrics
+    await agentMetricsService.recordExecution({
+      agentType: AgentType.EXECUTION,
+      userId,
+      status: results.every((r) => r.status === "success")
+        ? ExecutionStatus.SUCCESS
+        : results.some((r) => r.status === "success")
+          ? ExecutionStatus.PARTIAL
+          : ExecutionStatus.FAILED,
+      executionTimeMs: duration,
+      stepsCompleted: results.filter((r) => r.status === "success").length,
+      totalSteps: plan.workflow.length,
+      sessionId: traceId,
+      outputMetadata: {
+        lastTool:
+          results.length > 0 ? results[results.length - 1].action : null,
+        toolCount: results.length,
+      },
+    });
+
     logger.info("Workflow execution completed", {
       userId,
       hasResponse: !!res?.response,
-      duration: Date.now() - startTime,
+      duration: duration,
     });
     return { success: true, data: res?.response };
   }

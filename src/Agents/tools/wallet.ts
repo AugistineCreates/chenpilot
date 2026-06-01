@@ -149,10 +149,17 @@ export class WalletTool extends BaseTool {
         token: contractAddress,
         address: accountData.precalculatedAddress,
       });
-      logger.info("Balance retrieved successfully", { token: payload.token, userId });
+      logger.info("Balance retrieved successfully", {
+        token: payload.token,
+        userId,
+      });
       return result;
     } catch (error) {
-      logger.error("Failed to get balance", { error, token: payload.token, userId });
+      logger.error("Failed to get balance", {
+        error,
+        token: payload.token,
+        userId,
+      });
       return this.createErrorResult(
         "wallet_balance",
         `Failed to get balance: ${
@@ -167,7 +174,12 @@ export class WalletTool extends BaseTool {
     userId: string
   ): Promise<ToolResult> {
     try {
-      logger.info("Initiating transfer", { to: payload.to, amount: payload.amount, token: payload.token, userId });
+      logger.info("Initiating transfer", {
+        to: payload.to,
+        amount: payload.amount,
+        token: payload.token,
+        userId,
+      });
       const starkAccount = this.getStarkAccount(userId);
       const tokenAddress = payload.token
         ? tokensMap[payload.token]
@@ -195,11 +207,16 @@ export class WalletTool extends BaseTool {
         to: payload.to,
         amount: payload.amount,
         txHash: tx.transaction_hash,
-        userId
+        userId,
       });
       return result;
     } catch (error) {
-      logger.error("Transfer failed", { error, to: payload.to, amount: payload.amount, userId });
+      logger.error("Transfer failed", {
+        error,
+        to: payload.to,
+        amount: payload.amount,
+        userId,
+      });
       return this.createErrorResult(
         "transfer",
         `Transfer failed: ${

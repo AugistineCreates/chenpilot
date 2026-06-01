@@ -195,7 +195,9 @@ describe("IPBlacklist Entity and Service", () => {
       });
 
       expect(entries.length).toBeGreaterThan(0);
-      expect(entries.every((e) => e.reason === BlacklistReason.BRUTE_FORCE)).toBe(true);
+      expect(
+        entries.every((e) => e.reason === BlacklistReason.BRUTE_FORCE)
+      ).toBe(true);
 
       // Cleanup
       await ipBlacklistService.removeFromBlacklist(ip1);
@@ -341,7 +343,8 @@ describe("IPBlacklist Entity and Service", () => {
     });
 
     it("should handle IPv6 mapped IPv4 addresses", async () => {
-      const result = await ipBlacklistService.isBlacklisted("::ffff:192.168.1.1");
+      const result =
+        await ipBlacklistService.isBlacklisted("::ffff:192.168.1.1");
       expect(typeof result).toBe("boolean");
     });
 
@@ -351,9 +354,7 @@ describe("IPBlacklist Entity and Service", () => {
     });
 
     it("should handle whitespace in IP addresses", async () => {
-      const result = await ipBlacklistService.isBlacklisted(
-        " 192.168.1.1 "
-      );
+      const result = await ipBlacklistService.isBlacklisted(" 192.168.1.1 ");
       expect(typeof result).toBe("boolean");
     });
 

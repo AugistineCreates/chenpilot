@@ -280,10 +280,7 @@ export class DeploymentEventBridge {
   /**
    * Notify deployment started
    */
-  static notifyDeploymentStarted(
-    deploymentId: string,
-    userId?: string
-  ): void {
+  static notifyDeploymentStarted(deploymentId: string, userId?: string): void {
     this.notifyDeploymentStatus(
       deploymentId,
       "in-progress",

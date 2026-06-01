@@ -1,5 +1,5 @@
-import crypto from 'crypto';
-import http from 'http';
+import crypto from "crypto";
+import http from "http";
 
 export interface GitHubRelease {
   tag_name: string;
@@ -11,7 +11,10 @@ export interface GitHubRelease {
 }
 
 export interface ReleaseAnnouncer {
-  announceRelease(channelOrChatId: string, release: GitHubRelease): Promise<boolean>;
+  announceRelease(
+    channelOrChatId: string,
+    release: GitHubRelease
+  ): Promise<boolean>;
 }
 
 /**
@@ -20,33 +23,39 @@ export interface ReleaseAnnouncer {
  */
 export function createReleaseWebhookHandler(
   announcers: { id: string; announcer: ReleaseAnnouncer }[],
-  secret: string = process.env.GITHUB_WEBHOOK_SECRET || ''
+  secret: string = process.env.GITHUB_WEBHOOK_SECRET || ""
 ): http.RequestListener {
   return (req, res) => {
-    if (req.method !== 'POST' || req.url !== '/github/release') {
+    if (req.method !== "POST" || req.url !== "/github/release") {
       res.writeHead(404).end();
       return;
     }
 
-    let body = '';
-    req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
-    req.on('end', () => {
+    let body = "";
+    req.on("data", (chunk: Buffer) => {
+      body += chunk.toString();
+    });
+    req.on("end", () => {
       // Verify GitHub HMAC signature
       if (secret) {
-        const sig = req.headers['x-hub-signature-256'] as string | undefined;
+        const sig = req.headers["x-hub-signature-256"] as string | undefined;
         if (!sig) {
-          res.writeHead(401).end(JSON.stringify({ error: 'Missing signature' }));
+          res
+            .writeHead(401)
+            .end(JSON.stringify({ error: "Missing signature" }));
           return;
         }
-        const expected = `sha256=${crypto.createHmac('sha256', secret).update(body).digest('hex')}`;
+        const expected = `sha256=${crypto.createHmac("sha256", secret).update(body).digest("hex")}`;
         if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
-          res.writeHead(401).end(JSON.stringify({ error: 'Invalid signature' }));
+          res
+            .writeHead(401)
+            .end(JSON.stringify({ error: "Invalid signature" }));
           return;
         }
       }
 
-      const event = req.headers['x-github-event'];
-      if (event !== 'release') {
+      const event = req.headers["x-github-event"];
+      if (event !== "release") {
         res.writeHead(200).end(JSON.stringify({ ignored: true }));
         return;
       }
@@ -55,23 +64,26 @@ export function createReleaseWebhookHandler(
       try {
         payload = JSON.parse(body);
       } catch {
-        res.writeHead(400).end(JSON.stringify({ error: 'Invalid JSON' }));
+        res.writeHead(400).end(JSON.stringify({ error: "Invalid JSON" }));
         return;
       }
 
       const { action, release } = payload;
-      if (action !== 'published' || release.draft || release.prerelease) {
+      if (action !== "published" || release.draft || release.prerelease) {
         res.writeHead(200).end(JSON.stringify({ ignored: true }));
         return;
       }
 
       for (const { id, announcer } of announcers) {
-        announcer.announceRelease(id, release).catch((err) =>
-          console.error(`Release announcement failed for ${id}:`, err)
-        );
+        announcer
+          .announceRelease(id, release)
+          .catch((err) =>
+            console.error(`Release announcement failed for ${id}:`, err)
+          );
       }
 
-      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res
+        .writeHead(200, { "Content-Type": "application/json" })
         .end(JSON.stringify({ announced: true, tag: release.tag_name }));
     });
   };

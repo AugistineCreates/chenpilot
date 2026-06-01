@@ -83,15 +83,21 @@ export class BotSessionService {
   /**
    * Update an existing bot session
    */
-  async update(sessionId: string, params: UpdateBotSessionParams): Promise<BotSession> {
+  async update(
+    sessionId: string,
+    params: UpdateBotSessionParams
+  ): Promise<BotSession> {
     try {
-      const session = await this.botSessionRepository.findOne({ where: { id: sessionId } });
+      const session = await this.botSessionRepository.findOne({
+        where: { id: sessionId },
+      });
       if (!session) {
         throw new Error(`Session with id ${sessionId} not found`);
       }
 
       if (params.step !== undefined) session.step = params.step;
-      if (params.sessionData !== undefined) session.sessionData = params.sessionData;
+      if (params.sessionData !== undefined)
+        session.sessionData = params.sessionData;
       if (params.expiresAt !== undefined) session.expiresAt = params.expiresAt;
       if (params.isActive !== undefined) session.isActive = params.isActive;
 
@@ -137,7 +143,12 @@ export class BotSessionService {
 
       return session || null;
     } catch (error) {
-      logger.error("Error finding active bot session", { error, userId, platform, sessionType });
+      logger.error("Error finding active bot session", {
+        error,
+        userId,
+        platform,
+        sessionType,
+      });
       throw error;
     }
   }
@@ -147,8 +158,10 @@ export class BotSessionService {
    */
   async getById(sessionId: string): Promise<BotSession | null> {
     try {
-      const session = await this.botSessionRepository.findOne({ where: { id: sessionId } });
-      
+      const session = await this.botSessionRepository.findOne({
+        where: { id: sessionId },
+      });
+
       // Check if session has expired
       if (session && session.expiresAt && session.expiresAt < new Date()) {
         await this.deactivateSession(session.id);
@@ -233,7 +246,9 @@ export class BotSessionService {
 
       const affectedCount = result.affected || 0;
       if (affectedCount > 0) {
-        logger.info("Expired bot sessions cleaned up", { count: affectedCount });
+        logger.info("Expired bot sessions cleaned up", {
+          count: affectedCount,
+        });
       }
 
       return affectedCount;
@@ -246,18 +261,31 @@ export class BotSessionService {
   /**
    * Deactivate all active sessions for a user
    */
-  async deactivateUserSessions(userId: string, platform?: BotPlatform): Promise<number> {
+  async deactivateUserSessions(
+    userId: string,
+    platform?: BotPlatform
+  ): Promise<number> {
     try {
       const where: any = { userId, isActive: true };
       if (platform) where.platform = platform;
 
-      const result = await this.botSessionRepository.update(where, { isActive: false });
+      const result = await this.botSessionRepository.update(where, {
+        isActive: false,
+      });
       const affectedCount = result.affected || 0;
 
-      logger.info("User bot sessions deactivated", { userId, platform, count: affectedCount });
+      logger.info("User bot sessions deactivated", {
+        userId,
+        platform,
+        count: affectedCount,
+      });
       return affectedCount;
     } catch (error) {
-      logger.error("Error deactivating user bot sessions", { error, userId, platform });
+      logger.error("Error deactivating user bot sessions", {
+        error,
+        userId,
+        platform,
+      });
       throw error;
     }
   }

@@ -1,1 +1,24 @@
-{"rustc":4643058173861170821,"features":"[\"use_core\"]","declared_features":"[\"use_core\"]","target":17152450499921367471,"profile":2225463790103693989,"path":4926188934745760152,"deps":[[2713742371683562785,"syn",false,5937618036613787678],[4289358735036141001,"proc_macro2",false,11781682634645666361],[13111758008314797071,"quote",false,46692176628791793]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/derivative-96655e748ab76341/dep-lib-derivative","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"use_core\"]",
+  "declared_features": "[\"use_core\"]",
+  "target": 17152450499921367471,
+  "profile": 2225463790103693989,
+  "path": 4926188934745760152,
+  "deps": [
+    [2713742371683562785, "syn", false, 5937618036613787678],
+    [4289358735036141001, "proc_macro2", false, 11781682634645666361],
+    [13111758008314797071, "quote", false, 46692176628791793]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/derivative-96655e748ab76341/dep-lib-derivative",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

@@ -60,9 +60,7 @@ export function requireAnyRole(...roles: UserRole[]) {
 
     const userRole = req.user.role as UserRole;
 
-    const hasPermission = roles.some((role) =>
-      hasRequiredRole(userRole, role)
-    );
+    const hasPermission = roles.some((role) => hasRequiredRole(userRole, role));
 
     if (!hasPermission) {
       res.status(403).json({
@@ -99,10 +97,7 @@ export function requireOwnerOrElevated(userIdParam: string = "userId") {
     const isOwner = req.user.userId === requestedUserId;
 
     // Allow if user has moderator or admin role
-    const hasElevatedPermission = hasRequiredRole(
-      userRole,
-      UserRole.MODERATOR
-    );
+    const hasElevatedPermission = hasRequiredRole(userRole, UserRole.MODERATOR);
 
     if (!isOwner && !hasElevatedPermission) {
       res.status(403).json({

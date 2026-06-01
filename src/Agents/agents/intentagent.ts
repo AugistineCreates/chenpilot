@@ -11,6 +11,8 @@ import logger from "../../config/logger";
 import { randomUUID } from "crypto";
 import { userPreferencesService } from "../../Auth/userPreferences.service";
 import { RiskLevel } from "../../Auth/userPreferences.entity";
+import { experimentService } from "../experiment/experiment.service";
+import { ExperimentType } from "../experiment/experiment.entity";
 
 export class IntentAgent {
   private initialized = false;
@@ -74,6 +76,8 @@ export class IntentAgent {
   ): Promise<WorkflowPlan> {
     const startTime = Date.now();
     let promptVersionId: string | undefined;
+    let experimentId: string | undefined;
+    let variantId: string | undefined;
 
     try {
       const sorobanWorkflow = parseSorobanIntent(input);
@@ -83,7 +87,29 @@ export class IntentAgent {
         return sorobanWorkflow;
       }
 
-      const promptVersion = await promptGenerator.generateIntentPrompt();
+      // Check for active experiments
+      const activeExperiments = await experimentService.getActiveExperiments(
+        ExperimentType.AB_PROMPT
+      );
+      let selectedPrompt;
+
+      if (activeExperiments.length > 0) {
+        const experiment = activeExperiments[0];
+        experimentId = experiment.id;
+        variantId =
+          (await experimentService.selectVariant(experimentId, userId)) ||
+          undefined;
+
+        const variant = experiment.variants.find((v) => v.id === variantId);
+        if (variant?.promptVersionId) {
+          selectedPrompt = await AppDataSource.getRepository(
+            PromptVersion
+          ).findOne({ where: { id: variant.promptVersionId } });
+        }
+      }
+
+      const promptVersion =
+        selectedPrompt || (await promptGenerator.generateIntentPrompt());
       promptVersionId = (promptVersion as Record<string, unknown>).id as string;
 
       // Build user preferences context for the prompt
@@ -121,6 +147,19 @@ export class IntentAgent {
           userId,
           Date.now() - startTime
         );
+
+        // Record experiment metric if applicable
+        if (experimentId && variantId) {
+          await experimentService.recordMetric({
+            experimentId,
+            variantId,
+            userId,
+            traceId,
+            success: steps.length > 0,
+            responseTimeMs: Date.now() - startTime,
+            metrics: { stepsCount: steps.length },
+          });
+        }
       }
 
       memoryStore.add(userId, `User: ${input}`);

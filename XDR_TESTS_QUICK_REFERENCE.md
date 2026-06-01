@@ -3,12 +3,14 @@
 ## 📁 Files Created
 
 ### Test File
+
 - **`tests/unit/xdr_envelope_builder.test.ts`** (26 KB, 699 lines)
   - Comprehensive test suite for XDR envelope building
   - 30+ test cases covering all scenarios
   - Real Stellar SDK usage for authentic validation
 
 ### Documentation Files
+
 - **`XDR_ENVELOPE_TESTS.md`** (5.6 KB)
   - Detailed test coverage documentation
   - Test architecture and patterns
@@ -37,32 +39,35 @@
 ## 🚀 Quick Start
 
 ### One Command to Run Tests
+
 ```bash
 npm test tests/unit/xdr_envelope_builder.test.ts
 ```
 
 ### Prerequisites
+
 ```bash
 npm install
 ```
 
 ## 📊 Test Coverage Summary
 
-| Category | Tests | Description |
-|----------|-------|-------------|
-| Multi-Operation Building | 3 | Multiple payments, mixed ops, path payments |
-| Signature Handling | 2 | Single and multi-sig scenarios |
-| Memos | 3 | Text, hash, and ID memos |
-| Complex Scenarios | 5 | Account creation, swaps, liquidity pools, offers |
-| Fee & Timeout | 3 | Custom fees, timeouts, proportional fees |
-| Validation | 3 | Decode/encode, hash consistency, max ops |
-| Claimable Balances | 1 | Balance creation with predicates |
-| Network Compatibility | 2 | Testnet and mainnet |
-| **TOTAL** | **30+** | **Comprehensive XDR validation** |
+| Category                 | Tests   | Description                                      |
+| ------------------------ | ------- | ------------------------------------------------ |
+| Multi-Operation Building | 3       | Multiple payments, mixed ops, path payments      |
+| Signature Handling       | 2       | Single and multi-sig scenarios                   |
+| Memos                    | 3       | Text, hash, and ID memos                         |
+| Complex Scenarios        | 5       | Account creation, swaps, liquidity pools, offers |
+| Fee & Timeout            | 3       | Custom fees, timeouts, proportional fees         |
+| Validation               | 3       | Decode/encode, hash consistency, max ops         |
+| Claimable Balances       | 1       | Balance creation with predicates                 |
+| Network Compatibility    | 2       | Testnet and mainnet                              |
+| **TOTAL**                | **30+** | **Comprehensive XDR validation**                 |
 
 ## 🎯 Key Test Scenarios
 
 ### 1. Multiple Payment Operations
+
 ```typescript
 // Tests 3+ payment operations in single transaction
 TransactionBuilder
@@ -73,26 +78,27 @@ TransactionBuilder
 ```
 
 ### 2. Mixed Operation Types
+
 ```typescript
 // Tests different operation types together
-TransactionBuilder
-  .addOperation(payment)
+TransactionBuilder.addOperation(payment)
   .addOperation(changeTrust)
   .addOperation(payment)
-  .build()
+  .build();
 ```
 
 ### 3. Account Creation Flow
+
 ```typescript
 // Tests complete account setup
-TransactionBuilder
-  .addOperation(createAccount)
+TransactionBuilder.addOperation(createAccount)
   .addOperation(changeTrust)
   .addOperation(payment)
-  .build()
+  .build();
 ```
 
 ### 4. Atomic Swap
+
 ```typescript
 // Tests bidirectional payments
 TransactionBuilder
@@ -102,24 +108,27 @@ TransactionBuilder
 ```
 
 ### 5. Multi-Signature
+
 ```typescript
 // Tests multiple signers
-transaction.sign(signer1)
-transaction.sign(signer2)
-transaction.sign(signer3)
+transaction.sign(signer1);
+transaction.sign(signer2);
+transaction.sign(signer3);
 ```
 
 ### 6. Maximum Operations
+
 ```typescript
 // Tests Stellar limit (100 operations)
 for (let i = 0; i < 100; i++) {
-  builder.addOperation(payment)
+  builder.addOperation(payment);
 }
 ```
 
 ## ✅ What Gets Validated
 
 For each test:
+
 1. ✅ XDR string is generated
 2. ✅ XDR is non-empty and valid format
 3. ✅ Transaction can be reconstructed from XDR
@@ -132,26 +141,31 @@ For each test:
 ## 🔧 Common Commands
 
 ### Run all XDR tests
+
 ```bash
 npm test tests/unit/xdr_envelope_builder.test.ts
 ```
 
 ### Run with verbose output
+
 ```bash
 npm test -- tests/unit/xdr_envelope_builder.test.ts --verbose
 ```
 
 ### Run with coverage
+
 ```bash
 npm test -- tests/unit/xdr_envelope_builder.test.ts --coverage
 ```
 
 ### Run specific test suite
+
 ```bash
 npm test -- tests/unit/xdr_envelope_builder.test.ts -t "Multi-Operation"
 ```
 
 ### Run in watch mode
+
 ```bash
 npm run test:watch -- tests/unit/xdr_envelope_builder.test.ts
 ```
@@ -187,7 +201,6 @@ XDR_TESTS_QUICK_REFERENCE.md (this file)
 
 ```typescript
 describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
-  
   beforeEach(() => {
     // Fresh keypairs for each test
   });
@@ -210,6 +223,7 @@ describe("XDR Envelope Builder - Complex Multi-Operation Transactions", () => {
 ## 🔍 Key Validations
 
 ### XDR Generation
+
 ```typescript
 const xdr = transaction.toXDR();
 expect(xdr).toBeDefined();
@@ -217,17 +231,20 @@ expect(typeof xdr).toBe("string");
 ```
 
 ### XDR Reconstruction
+
 ```typescript
 const reconstructed = new StellarSdk.Transaction(xdr, networkPassphrase);
 expect(reconstructed.operations).toHaveLength(expectedCount);
 ```
 
 ### Signature Verification
+
 ```typescript
 expect(reconstructed.signatures).toHaveLength(expectedSignerCount);
 ```
 
 ### Hash Consistency
+
 ```typescript
 const originalHash = transaction.hash().toString("hex");
 const reconstructedHash = reconstructed.hash().toString("hex");
@@ -236,12 +253,12 @@ expect(reconstructedHash).toBe(originalHash);
 
 ## 🐛 Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| "Cannot find module" | `npm install` |
-| "jest not recognized" | Use `npm test` not `jest` |
-| Tests timeout | Increase timeout in jest.config.js |
-| Import errors | Check @stellar/stellar-sdk is installed |
+| Issue                 | Solution                                |
+| --------------------- | --------------------------------------- |
+| "Cannot find module"  | `npm install`                           |
+| "jest not recognized" | Use `npm test` not `jest`               |
+| Tests timeout         | Increase timeout in jest.config.js      |
+| Import errors         | Check @stellar/stellar-sdk is installed |
 
 ## 📈 Expected Results
 

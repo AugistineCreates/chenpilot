@@ -1,1 +1,28 @@
-{"rustc":4643058173861170821,"features":"[]","declared_features":"[\"next\"]","target":6080406339952264636,"profile":2225463790103693989,"path":4319088529697529760,"deps":[[4289358735036141001,"proc_macro2",false,11781682634645666361],[5027556215623624228,"stellar_xdr",false,16475629390571696654],[10420560437213941093,"syn",false,2239188020272299838],[11903278875415370753,"itertools",false,15860789076363467152],[13111758008314797071,"quote",false,46692176628791793],[13548984313718623784,"serde",false,16841118874900358109],[13795362694956882968,"serde_json",false,6357004744167018762]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/soroban-env-macros-7af75cb597a8710d/dep-lib-soroban_env_macros","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[]",
+  "declared_features": "[\"next\"]",
+  "target": 6080406339952264636,
+  "profile": 2225463790103693989,
+  "path": 4319088529697529760,
+  "deps": [
+    [4289358735036141001, "proc_macro2", false, 11781682634645666361],
+    [5027556215623624228, "stellar_xdr", false, 16475629390571696654],
+    [10420560437213941093, "syn", false, 2239188020272299838],
+    [11903278875415370753, "itertools", false, 15860789076363467152],
+    [13111758008314797071, "quote", false, 46692176628791793],
+    [13548984313718623784, "serde", false, 16841118874900358109],
+    [13795362694956882968, "serde_json", false, 6357004744167018762]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/soroban-env-macros-7af75cb597a8710d/dep-lib-soroban_env_macros",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

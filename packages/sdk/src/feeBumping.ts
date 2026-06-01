@@ -129,7 +129,8 @@ function estimateResourceFee(limits: ResourceLimits): number {
  * ```
  */
 export class FeeBumpingEngine {
-  private config: Required<Omit<FeeBumpConfig, "onBump">> & Pick<FeeBumpConfig, "onBump">;
+  private config: Required<Omit<FeeBumpConfig, "onBump">> &
+    Pick<FeeBumpConfig, "onBump">;
 
   constructor(config?: FeeBumpConfig) {
     this.config = {
@@ -174,7 +175,8 @@ export class FeeBumpingEngine {
           estimatedFee: estimateResourceFee(currentLimits),
         };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         attempts.push({
           attempt,
           limits: { ...currentLimits },

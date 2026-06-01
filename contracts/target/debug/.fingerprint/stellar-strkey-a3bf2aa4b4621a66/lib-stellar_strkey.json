@@ -1,1 +1,24 @@
-{"rustc":4643058173861170821,"features":"[\"default\"]","declared_features":"[\"cli\", \"default\"]","target":12349729108854158803,"profile":2225463790103693989,"path":3877935135618548434,"deps":[[557536748061756522,"data_encoding",false,13382810002010863938],[8008191657135824715,"thiserror",false,14575540736497357517],[10445999912041431769,"build_script_build",false,8456251235147652270]],"local":[{"CheckDepInfo":{"dep_info":"debug/.fingerprint/stellar-strkey-a3bf2aa4b4621a66/dep-lib-stellar_strkey","checksum":false}}],"rustflags":[],"config":2069994364910194474,"compile_kind":0}
+{
+  "rustc": 4643058173861170821,
+  "features": "[\"default\"]",
+  "declared_features": "[\"cli\", \"default\"]",
+  "target": 12349729108854158803,
+  "profile": 2225463790103693989,
+  "path": 3877935135618548434,
+  "deps": [
+    [557536748061756522, "data_encoding", false, 13382810002010863938],
+    [8008191657135824715, "thiserror", false, 14575540736497357517],
+    [10445999912041431769, "build_script_build", false, 8456251235147652270]
+  ],
+  "local": [
+    {
+      "CheckDepInfo": {
+        "dep_info": "debug/.fingerprint/stellar-strkey-a3bf2aa4b4621a66/dep-lib-stellar_strkey",
+        "checksum": false
+      }
+    }
+  ],
+  "rustflags": [],
+  "config": 2069994364910194474,
+  "compile_kind": 0
+}

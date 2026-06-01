@@ -66,9 +66,9 @@ Each signer has a weight (0-255) representing their authorization power. Multipl
 
 ```typescript
 builder
-  .addSigner("GCEO_ADDRESS", 50)      // CEO has 50 weight
-  .addSigner("GCFO_ADDRESS", 30)      // CFO has 30 weight
-  .addSigner("GBOARD_ADDRESS", 10);   // Board member has 10 weight
+  .addSigner("GCEO_ADDRESS", 50) // CEO has 50 weight
+  .addSigner("GCFO_ADDRESS", 30) // CFO has 30 weight
+  .addSigner("GBOARD_ADDRESS", 10); // Board member has 10 weight
 ```
 
 ### Threshold Categories
@@ -81,9 +81,9 @@ Three threshold levels control different operation types:
 
 ```typescript
 builder.setThresholds({
-  low: 10,    // Any board member
+  low: 10, // Any board member
   medium: 50, // CEO alone
-  high: 80,   // CEO + CFO or CEO + multiple board members
+  high: 80, // CEO + CFO or CEO + multiple board members
 });
 ```
 
@@ -123,6 +123,7 @@ new MultiSigBuilder(
 ```
 
 **Options:**
+
 - `autoValidate`: Validate on build (default: true)
 - `allowDuplicates`: Allow duplicate signers (default: false)
 - `maxSigners`: Maximum signers allowed (default: 20)
@@ -138,6 +139,7 @@ builder.addSigner("GSIGNER_ADDRESS", 25);
 ```
 
 **Parameters:**
+
 - `address` (string): Signer's public key
 - `weight` (number): Weight 0-255
 
@@ -235,14 +237,15 @@ const config = builder.getConfig();
 Create preset configuration.
 
 ```typescript
-const builder = MultiSigBuilder.createPreset(
-  "2-of-3",
-  "GMASTER_ADDRESS",
-  ["GSIGNER1", "GSIGNER2", "GSIGNER3"]
-);
+const builder = MultiSigBuilder.createPreset("2-of-3", "GMASTER_ADDRESS", [
+  "GSIGNER1",
+  "GSIGNER2",
+  "GSIGNER3",
+]);
 ```
 
 **Presets:**
+
 - `"2-of-3"`: Requires 2 of 3 signers
 - `"3-of-5"`: Requires 3 of 5 signers
 - `"majority"`: Requires majority of signers
@@ -277,11 +280,7 @@ Check if signers can meet a threshold.
 ```typescript
 import { canMeetThreshold } from "@chen-pilot/sdk-core";
 
-const canMeet = canMeetThreshold(
-  ["GSIGNER1", "GSIGNER2"],
-  config,
-  30
-);
+const canMeet = canMeetThreshold(["GSIGNER1", "GSIGNER2"], config, 30);
 ```
 
 ## Examples
@@ -294,9 +293,9 @@ const builder = new MultiSigBuilder("GTREASURY_MASTER")
   .addSigner("GFINANCE1", 20)
   .addSigner("GFINANCE2", 20)
   .setThresholds({
-    low: 20,   // Any finance member
+    low: 20, // Any finance member
     medium: 40, // Treasurer or both finance members
-    high: 60,   // Treasurer + at least one finance member
+    high: 60, // Treasurer + at least one finance member
   });
 
 const result = builder.build();
@@ -312,9 +311,9 @@ const builder = new MultiSigBuilder("GDAO_MASTER")
   .addSigner("GCOMMUNITY1", 10)
   .addSigner("GCOMMUNITY2", 10)
   .setThresholds({
-    low: 10,    // Any community member
-    medium: 50,  // Founder or both core team
-    high: 75,    // Founder + core team or core team + community
+    low: 10, // Any community member
+    medium: 50, // Founder or both core team
+    high: 75, // Founder + core team or core team + community
   });
 ```
 
@@ -353,7 +352,7 @@ const validation = builder.validate();
 if (!validation.valid) {
   console.error("Configuration errors:");
   validation.errors.forEach((error) => console.error(`- ${error}`));
-  
+
   // Fix the issues
   builder.setThreshold(ThresholdCategory.HIGH, 20);
 }
@@ -385,6 +384,7 @@ if (canAuthorize) {
 ### Security
 
 1. **Use High Thresholds for Critical Operations**
+
    ```typescript
    builder.setThresholds({
      low: 10,
@@ -406,12 +406,14 @@ if (canAuthorize) {
 ### Configuration
 
 1. **Start with Presets**
+
    ```typescript
    // Use presets for common scenarios
    const builder = MultiSigBuilder.createPreset("2-of-3", master, signers);
    ```
 
 2. **Validate Before Deployment**
+
    ```typescript
    const validation = builder.validate();
    if (!validation.valid) {
@@ -451,6 +453,7 @@ if (canAuthorize) {
 **Problem:** Threshold higher than sum of all signer weights.
 
 **Solution:**
+
 ```typescript
 // Check total weight
 const total = calculateTotalWeight(config);
@@ -465,6 +468,7 @@ builder.setThreshold(ThresholdCategory.HIGH, total - 10);
 **Problem:** Attempting to add duplicate signer.
 
 **Solution:**
+
 ```typescript
 // Option 1: Update existing signer
 builder.updateSignerWeight("GSIGNER", 30);
@@ -480,6 +484,7 @@ const builder = new MultiSigBuilder(master, {
 **Problem:** Exceeded maximum signer limit.
 
 **Solution:**
+
 ```typescript
 // Increase limit or reduce signers
 const builder = new MultiSigBuilder(master, {
@@ -494,11 +499,12 @@ const builder = new MultiSigBuilder(master, {
 **Issue:** Threshold ordering doesn't follow expected pattern.
 
 **Fix:**
+
 ```typescript
 builder.setThresholds({
   low: 10,
-  medium: 20,  // Should be >= low
-  high: 30,    // Should be >= medium
+  medium: 20, // Should be >= low
+  high: 30, // Should be >= medium
 });
 ```
 
@@ -523,10 +529,11 @@ builder.setThresholds({
    - Use round numbers when possible
 
 3. **Batch Updates**
+
    ```typescript
    // Add multiple signers at once
    builder.addSigners([...signers]);
-   
+
    // Set all thresholds together
    builder.setThresholds({ low, medium, high });
    ```

@@ -354,14 +354,31 @@ export type VaultEvent =
 
 // ─── Typed data shapes decoded from XDR ─────────────────────────────────────
 
-interface EvtInitData { admin: string }
-interface EvtUpgPropData { admin: string; new_wasm_hash: string; unlock_ledger: number }
-interface EvtUpgCnclData { admin: string }
-interface EvtUpgDoneData { new_wasm_hash: string }
-interface EvtAdmXferData { old_admin: string; new_admin: string }
+interface EvtInitData {
+  admin: string;
+}
+interface EvtUpgPropData {
+  admin: string;
+  new_wasm_hash: string;
+  unlock_ledger: number;
+}
+interface EvtUpgCnclData {
+  admin: string;
+}
+interface EvtUpgDoneData {
+  new_wasm_hash: string;
+}
+interface EvtAdmXferData {
+  old_admin: string;
+  new_admin: string;
+}
 
-function str(v: unknown): string { return typeof v === "string" ? v : String(v ?? ""); }
-function num(v: unknown): number { return typeof v === "number" ? v : Number(v ?? 0); }
+function str(v: unknown): string {
+  return typeof v === "string" ? v : String(v ?? "");
+}
+function num(v: unknown): number {
+  return typeof v === "number" ? v : Number(v ?? 0);
+}
 
 /**
  * Parse a raw SorobanEvent from core_vault into a typed VaultEvent.
@@ -382,11 +399,13 @@ export function parseVaultEvent(event: SorobanEvent): VaultEvent | null {
     case "upg_prop": {
       const data = d as EvtUpgPropData | null;
       return {
-        topic, contractId,
+        topic,
+        contractId,
         admin: str(data?.admin),
         newWasmHash: str(data?.new_wasm_hash),
         unlockLedger: num(data?.unlock_ledger),
-        ledger, txHash,
+        ledger,
+        txHash,
       };
     }
     case "upg_cncl": {
@@ -395,15 +414,23 @@ export function parseVaultEvent(event: SorobanEvent): VaultEvent | null {
     }
     case "upg_done": {
       const data = d as EvtUpgDoneData | null;
-      return { topic, contractId, newWasmHash: str(data?.new_wasm_hash), ledger, txHash };
+      return {
+        topic,
+        contractId,
+        newWasmHash: str(data?.new_wasm_hash),
+        ledger,
+        txHash,
+      };
     }
     case "adm_xfer": {
       const data = d as EvtAdmXferData | null;
       return {
-        topic, contractId,
+        topic,
+        contractId,
         oldAdmin: str(data?.old_admin),
         newAdmin: str(data?.new_admin),
-        ledger, txHash,
+        ledger,
+        txHash,
       };
     }
     default:
@@ -424,7 +451,11 @@ export interface VaultState {
  * No ledger queries needed — the event stream is the source of truth.
  */
 export function reconstructVaultState(events: VaultEvent[]): VaultState {
-  const state: VaultState = { admin: null, pendingUpgrade: null, currentWasmHash: null };
+  const state: VaultState = {
+    admin: null,
+    pendingUpgrade: null,
+    currentWasmHash: null,
+  };
 
   for (const e of events) {
     switch (e.topic) {
@@ -432,7 +463,10 @@ export function reconstructVaultState(events: VaultEvent[]): VaultState {
         state.admin = e.admin;
         break;
       case "upg_prop":
-        state.pendingUpgrade = { newWasmHash: e.newWasmHash, unlockLedger: e.unlockLedger };
+        state.pendingUpgrade = {
+          newWasmHash: e.newWasmHash,
+          unlockLedger: e.unlockLedger,
+        };
         break;
       case "upg_cncl":
         state.pendingUpgrade = null;

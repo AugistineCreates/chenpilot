@@ -20,7 +20,8 @@ export class StrategyRegistryTool extends BaseTool<StrategyRegistryPayload> {
     parameters: {
       action: {
         type: "string",
-        description: "Action to perform: 'vote', 'get_strategy', or 'is_verified'",
+        description:
+          "Action to perform: 'vote', 'get_strategy', or 'is_verified'",
         required: true,
       },
       poolId: {
@@ -31,7 +32,8 @@ export class StrategyRegistryTool extends BaseTool<StrategyRegistryPayload> {
       },
       aiAgent: {
         type: "string",
-        description: "The public key of the AI agent casting the vote (required for 'vote')",
+        description:
+          "The public key of the AI agent casting the vote (required for 'vote')",
         required: false,
       },
     },
@@ -44,7 +46,10 @@ export class StrategyRegistryTool extends BaseTool<StrategyRegistryPayload> {
     version: "1.0.0",
   };
 
-  validate(payload: StrategyRegistryPayload): { valid: boolean; errors: string[] } {
+  validate(payload: StrategyRegistryPayload): {
+    valid: boolean;
+    errors: string[];
+  } {
     const errors: string[] = [];
 
     if (!payload.action) {
@@ -66,14 +71,21 @@ export class StrategyRegistryTool extends BaseTool<StrategyRegistryPayload> {
   async execute(payload: StrategyRegistryPayload): Promise<ToolResult> {
     const validation = this.validate(payload);
     if (!validation.valid) {
-      return this.createErrorResult("strategy_registry", validation.errors.join(", "));
+      return this.createErrorResult(
+        "strategy_registry",
+        validation.errors.join(", ")
+      );
     }
 
     const { action, poolId, aiAgent } = payload;
-    const contractId = process.env.STRATEGY_REGISTRY_CONTRACT_ID || "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"; // Mock or default
+    const contractId =
+      process.env.STRATEGY_REGISTRY_CONTRACT_ID ||
+      "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"; // Mock or default
 
     try {
-      const server = new StellarSdk.SorobanRpc.Server(config.stellar.horizonUrl.replace("horizon", "soroban-rpc")); // Heuristic for RPC URL
+      const server = new StellarSdk.SorobanRpc.Server(
+        config.stellar.horizonUrl.replace("horizon", "soroban-rpc")
+      ); // Heuristic for RPC URL
 
       if (action === "is_verified") {
         // Mocking the call for now as we don't have a live contract yet
@@ -91,7 +103,8 @@ export class StrategyRegistryTool extends BaseTool<StrategyRegistryPayload> {
         return {
           success: true,
           data: {
-            currentStrategy: "0101010101010101010101010101010101010101010101010101010101010101",
+            currentStrategy:
+              "0101010101010101010101010101010101010101010101010101010101010101",
             message: "Current winning strategy retrieved from registry.",
           },
         };

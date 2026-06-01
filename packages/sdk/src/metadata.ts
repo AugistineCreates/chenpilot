@@ -116,7 +116,10 @@ export class StellarMetadataManager {
 
     try {
       // Fetch current account sequence
-      const account = await this.server.accounts().accountId(params.accountId).call();
+      const account = await this.server
+        .accounts()
+        .accountId(params.accountId)
+        .call();
       const stellarAccount = new StellarAccount(
         params.accountId,
         String(account.sequence)
@@ -171,7 +174,9 @@ export class StellarMetadataManager {
       const transaction = builder.setTimeout(300).build();
       return transaction.toXDR();
     } catch (error) {
-      throw new Error(`Failed to prepare metadata transaction: ${String(error)}`);
+      throw new Error(
+        `Failed to prepare metadata transaction: ${String(error)}`
+      );
     }
   }
 
@@ -193,7 +198,10 @@ export class StellarMetadataManager {
         const entry = cached.find((e) => e.key === params.key);
         if (entry) {
           // Check expiration
-          if (entry.expiresAt && entry.expiresAt < Math.floor(Date.now() / 1000)) {
+          if (
+            entry.expiresAt &&
+            entry.expiresAt < Math.floor(Date.now() / 1000)
+          ) {
             return null;
           }
           return entry;
@@ -330,10 +338,7 @@ export class StellarMetadataManager {
    * @param key - Metadata key to delete
    * @returns Transaction XDR for signing
    */
-  async prepareDeleteMetadata(
-    accountId: string,
-    key: string
-  ): Promise<string> {
+  async prepareDeleteMetadata(accountId: string, key: string): Promise<string> {
     if (!accountId || !key) {
       throw new Error("accountId and key are required");
     }
@@ -366,7 +371,9 @@ export class StellarMetadataManager {
 
       return transaction.toXDR();
     } catch (error) {
-      throw new Error(`Failed to prepare delete metadata transaction: ${String(error)}`);
+      throw new Error(
+        `Failed to prepare delete metadata transaction: ${String(error)}`
+      );
     }
   }
 

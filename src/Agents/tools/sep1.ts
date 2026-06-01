@@ -82,7 +82,8 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
       },
       asset: {
         type: "string",
-        description: "Asset code:issuer (e.g., USDC:GA...Z46) or code only for XLM",
+        description:
+          "Asset code:issuer (e.g., USDC:GA...Z46) or code only for XLM",
         required: false,
       },
       domain: {
@@ -135,7 +136,9 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
   /**
    * Get asset metadata by resolving the issuing domain from the asset issuer
    */
-  private async getAssetMetadata(payload: AssetMetadataPayload): Promise<ToolResult> {
+  private async getAssetMetadata(
+    payload: AssetMetadataPayload
+  ): Promise<ToolResult> {
     if (!payload.asset) {
       return {
         action: "sep1",
@@ -145,7 +148,7 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
     }
 
     const asset = payload.asset.toUpperCase();
-    
+
     // Handle XLM specially
     if (asset === "XLM" || asset === "XLM:NATIVE") {
       return {
@@ -181,7 +184,7 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
     // This is a simplified approach - in production, we'd need to look up the issuing account
     // For now, we'll try common domains based on the issuer
     const domain = await this.resolveIssuerDomain(assetIssuer);
-    
+
     if (!domain) {
       return {
         action: "sep1",
@@ -192,7 +195,7 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
 
     // Fetch and parse stellar.toml
     const toml = await this.fetchStellarToml(domain);
-    
+
     if (!toml) {
       return {
         action: "sep1",
@@ -237,7 +240,9 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
   /**
    * Get all metadata from a domain's stellar.toml
    */
-  private async getDomainMetadata(payload: AssetMetadataPayload): Promise<ToolResult> {
+  private async getDomainMetadata(
+    payload: AssetMetadataPayload
+  ): Promise<ToolResult> {
     if (!payload.domain) {
       return {
         action: "sep1",
@@ -294,12 +299,13 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
       };
     }
 
-    const assets = toml.currencies?.map((c) => ({
-      code: c.code,
-      issuer: c.issuer,
-      display_name: c.display_name,
-      status: c.status,
-    })) || [];
+    const assets =
+      toml.currencies?.map((c) => ({
+        code: c.code,
+        issuer: c.issuer,
+        display_name: c.display_name,
+        status: c.status,
+      })) || [];
 
     return {
       action: "sep1",
@@ -319,13 +325,13 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
   private async fetchStellarToml(domain: string): Promise<StellarToml | null> {
     try {
       // Handle potential .well-known path
-      const url = domain.includes(".well-known") 
+      const url = domain.includes(".well-known")
         ? `https://${domain}/stellar.toml`
         : `https://${domain}/.well-known/stellar.toml`;
 
       const response = await this.fetch(url, {
         headers: {
-          "Accept": "text/plain",
+          Accept: "text/plain",
         },
       });
 
@@ -334,12 +340,14 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
         const altUrl = `https://${domain}/stellar.toml`;
         const altResponse = await this.fetch(altUrl, {
           headers: {
-            "Accept": "text/plain",
+            Accept: "text/plain",
           },
         });
 
         if (!altResponse.ok) {
-          logger.warn(`Failed to fetch stellar.toml from ${domain}: ${response.status}`);
+          logger.warn(
+            `Failed to fetch stellar.toml from ${domain}: ${response.status}`
+          );
           return null;
         }
 
@@ -369,7 +377,7 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
 
     for (const line of lines) {
       const trimmed = line.trim();
-      
+
       // Skip comments and empty lines
       if (!trimmed || trimmed.startsWith("#")) {
         continue;
@@ -397,8 +405,10 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
       let value = trimmed.slice(equalIndex + 1).trim();
 
       // Remove quotes from value
-      if ((value.startsWith('"') && value.endsWith('"')) ||
-          (value.startsWith("'") && value.endsWith("'"))) {
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
         value = value.slice(1, -1);
       }
 
@@ -436,7 +446,9 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
           } else if (key === "image") {
             currentCurrency.image = value;
           } else if (key === "fixed_addresses") {
-            currentCurrency.fixed_addresses = value.split(",").map((a) => a.trim());
+            currentCurrency.fixed_addresses = value
+              .split(",")
+              .map((a) => a.trim());
           } else if (key === "anchoring_asset") {
             currentCurrency.anchoring_asset = value;
           } else if (key === "redemption") {
@@ -448,13 +460,16 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
         case "client":
           if (!result.client) result.client = {};
           if (key === "version") result.client.version = value;
-          if (key === "current_protocol_version") result.client.currentProtocolVersion = value;
-          if (key === "required_protocol_version") result.client.requiredProtocolVersion = value;
+          if (key === "current_protocol_version")
+            result.client.currentProtocolVersion = value;
+          if (key === "required_protocol_version")
+            result.client.requiredProtocolVersion = value;
           break;
         case "issuer":
           if (!result.issuer) result.issuer = {};
           if (key === "distribute") result.issuer.distribute = value === "true";
-          if (key === "allow_addl_issuance") result.issuer.allow_addl_issuance = value === "true";
+          if (key === "allow_addl_issuance")
+            result.issuer.allow_addl_issuance = value === "true";
           if (key === "seed") result.issuer.seed = value;
           if (key === "signature") result.issuer.signature = value;
           break;
@@ -481,12 +496,9 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
   private async resolveIssuerDomain(issuer: string): Promise<string | null> {
     // Common domain mappings for known issuers
     const knownIssuers: Record<string, string> = {
-      "GA5ZSEJYJ37T4D2R2F4VRTQ4M2H7DYN9VLQOXRK7GZ3S3L3L3L3L3L3":
-        "stellar.org",
-      "GA7JTBKKR5EVW3DBL4P3D4S3V3K5J2P3D4S3V3K5J2P3D4S3V3K5J":
-        "stellar.org",
-      "GBGDUZBKVXY23P3IL4YBPMD5M5JWH3M4HRU42BC4JUL5V6A6Q6Q6Q":
-        "bitstamp.com",
+      GA5ZSEJYJ37T4D2R2F4VRTQ4M2H7DYN9VLQOXRK7GZ3S3L3L3L3L3L3: "stellar.org",
+      GA7JTBKKR5EVW3DBL4P3D4S3V3K5J2P3D4S3V3K5J2P3D4S3V3K5J: "stellar.org",
+      GBGDUZBKVXY23P3IL4YBPMD5M5JWH3M4HRU42BC4JUL5V6A6Q6Q6Q: "bitstamp.com",
     };
 
     // For now, return a placeholder domain

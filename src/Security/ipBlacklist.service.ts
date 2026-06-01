@@ -170,12 +170,7 @@ class IPBlacklistService {
     options: BlacklistSearchOptions = {}
   ): Promise<{ entries: IPBlacklist[]; total: number }> {
     try {
-      const {
-        limit = 50,
-        offset = 0,
-        activeOnly = true,
-        reason,
-      } = options;
+      const { limit = 50, offset = 0, activeOnly = true, reason } = options;
 
       const query = this.repository.createQueryBuilder("blacklist");
 

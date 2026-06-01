@@ -1,4 +1,3 @@
-
 # Chen Pilot SDK - SignatureProvider System
 
 A comprehensive TypeScript SDK for managing signature providers across multiple blockchain networks including Bitcoin, Stellar, and Starknet.
@@ -26,7 +25,6 @@ Core SDK for Chen Pilot cross-chain operations with Stellar/Soroban support.
 - **Plan Verification**: Verify and validate transaction plans
 - **TypeScript Support**: Full type definitions included
 
-
 ## Installation
 
 ```bash
@@ -34,7 +32,6 @@ npm install @chen-pilot/sdk-core
 ```
 
 ## Quick Start
-
 
 ### Basic Usage
 
@@ -616,4 +613,3 @@ ISC
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for contribution guidelines.
-
