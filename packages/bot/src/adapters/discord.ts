@@ -7,6 +7,7 @@ import {
   ChannelType,
   TextBasedChannel,
   ActivityType,
+  GuildMember,
 } from "discord.js";
 import { TransactionNotificationData, PriceAlert, TrendingAsset } from "../types";
 import {
@@ -92,6 +93,7 @@ export class DiscordAdapter {
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
       ],
     });
     this.verificationService = new AssetVerificationService(HORIZON_URL);
@@ -260,6 +262,15 @@ export class DiscordAdapter {
     this.client.once("ready", () => {
       console.log(`✅ Discord bot logged in as ${this.client.user?.tag}`);
       this.startStatusUpdates();
+
+      // #117: Automated welcome flow for new server members
+      this.client.on('guildMemberAdd', async (member: GuildMember) => {
+        try {
+          await this.sendWelcomeMessage(member);
+        } catch (error) {
+          console.error('❌ Error sending welcome message:', error);
+        }
+      });
     });
 
     this.client.on("messageCreate", withPerformanceProfiling(
@@ -846,5 +857,123 @@ export class DiscordAdapter {
         type: ActivityType.Custom,
       });
     }
+  }
+
+  // #117: Send interactive welcome message to new server members
+  private async sendWelcomeMessage(member: GuildMember): Promise<void> {
+    const username = member.user.username;
+    const welcomeChannel = member.guild.systemChannel;
+
+    // Try to DM the member first, fall back to the server's system channel
+    const sendMessage = async (content: string) => {
+      try {
+        await member.send(content);
+        return 'dm';
+      } catch {
+        // Cannot DM — member likely has DMs disabled
+        if (welcomeChannel) {
+          await welcomeChannel.send({ content, allowedMentions: { users: [member.id] } });
+          return 'channel';
+        }
+        return null;
+      }
+    };
+
+    // Step 1: Initial welcome greeting
+    const greeting = `🎉 **Welcome to the Chen Pilot Community, ${username}!** 🎉
+
+I'm **Chen Pilot**, your AI-powered Stellar DeFi assistant! I'm here to help you navigate the Stellar ecosystem, manage your assets, and discover decentralized finance opportunities.
+
+Let me walk you through everything you can do with me! 🚀`;
+
+    const sentVia = await sendMessage(greeting);
+    if (!sentVia) {
+      console.warn(`⚠️ Could not send welcome message to ${member.id}: no DM access and no system channel`);
+      return;
+    }
+
+    // Log welcome event
+    await this.logAuditAction({
+      action: 'WELCOME_MESSAGE_SENT',
+      triggeredBy: member.id,
+      details: `Username: ${username}, Sent via: ${sentVia === 'dm' ? 'DM' : 'system channel'}`,
+      success: true,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Small delay between messages for readability
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    await delay(1000);
+
+    // Step 2: Wallet connection guide
+    const walletGuide = `**🔗 Step 1: Connect Your Stellar Wallet**
+
+To get started with DeFi on Stellar, you need a wallet. Here's how:
+
+1️⃣ **Get a Wallet**: Download *Freighter* (Stellar's official browser extension) from \`freighter.app\`
+2️⃣ **Fund Your Account**: Use \`!sponsor\` to request free account sponsorship (covers minimum balance)
+3️⃣ **Trustlines**: Use \`!trustline <assetCode> <issuer>\` to add assets like **USDC**, **XLM**, etc.
+4️⃣ **Verify**: Use \`!validate <assetCode> <issuer>\` to check if an asset is safe before interacting
+
+> 💡 *Tip: Always verify unknown assets with \`!validate\` to avoid scams!*`;
+
+    await sendMessage(walletGuide);
+    await delay(1000);
+
+    // Step 3: Essential commands overview
+    const commandsOverview = `**📋 Step 2: Essential Commands**
+
+Here are the key commands to get started:
+
+• **!help** — List all available features
+• **!balance** — Check your wallet balance (DM only)
+• **!report** — Portfolio summary in your chosen currency
+• **!currency <USD|XLM|BTC>** — Set your preferred reporting currency
+• **!ping** — Check bot latency and backend health
+• **!alert <asset> <above|below> <price>** — Set price alerts
+• **!alerts** — View your active alerts
+• **!discover** — Explore trending Stellar assets (requires role)
+• **!dashboard** — Open the admin dashboard
+
+> 🔒 *Commands marked "DM only" must be sent in a private message for security.*`;
+
+    await sendMessage(commandsOverview);
+    await delay(1000);
+
+    // Step 4: Advanced features teaser
+    const advancedTeaser = `**⚡ Step 3: Advanced Features**
+
+Ready to level up? Here's what else I can do:
+
+• **🔐 Multi-Sig Wallets**: Use \`!multisig\` in DMs to set up multi-signature security
+• **🧵 Support Threads**: Type \`!thread\` to create a dedicated support session
+• **📊 Price Alerts**: Stay on top of market movements with \`!alert\`
+• **🔍 Asset Verification**: Protect yourself with \`!validate\`
+• **📈 Market Overview**: Get daily market digests (if configured)
+
+New features are constantly being added — type **!help** anytime to see what's new!
+
+---
+
+**🚀 Ready to dive in?** Start by setting your reporting currency with \`!currency\`, then use \`!sponsor\` to fund your account, and you're on your way!`;
+
+    await sendMessage(advancedTeaser);
+    await delay(1000);
+
+    // Step 5: Final tips
+    const finalTips = `**💡 Pro Tips**
+
+✅ **Use DMs for sensitive commands** — Commands like \`!balance\` and \`!sponsor\` only work in DMs for your safety
+✅ **Rate limits apply** — Please wait 2 seconds between commands to avoid flooding
+✅ **Report scams** — Suspicious links are automatically detected and flagged
+✅ **Stay updated** — Type \`!help\` anytime for the latest features
+
+If you ever need help, just send \`!help\` or type \`!thread\` to start a support conversation.
+
+**Welcome aboard, ${username}! Let's build the future of DeFi on Stellar together! 🌟**
+
+— *Chen Pilot Team*`;
+
+    await sendMessage(finalTips);
   }
 }
