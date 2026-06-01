@@ -1,112 +1,154 @@
 #![cfg(test)]
 
 extern crate std;
-use std::println;
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, vec, Env, Address};
+use soroban_sdk::{testutils::Address as _, vec, Env, Address, contract, contractimpl, token::{Client as TokenClient, StellarAssetClient}};
 
-const CPU_LIMIT: u64 = 100_000_000;
-const MEM_LIMIT: u64 = 40 * 1024 * 1024;
+// Mock pool contract for testing
+#[contract]
+pub struct MockPool;
 
-fn setup(env: &Env) -> MultiHopSwapClient<'_> {
-    let id = env.register(MultiHopSwap, ());
-    MultiHopSwapClient::new(env, &id)
-}
-
-fn seed_pools(env: &Env, client: &MultiHopSwapClient<'_>, n: u32) -> soroban_sdk::Vec<Address> {
-    let mut pools = vec![env];
-    for _ in 0..n {
-        let pool = Address::generate(env);
-        client.seed_pool(&pool, &2, &1);
-        pools.push_back(pool);
+#[contractimpl]
+impl MockPool {
+    pub fn initialize(env: Env, numer: i128, denom: i128) {
+        env.storage().instance().set(&symbol_short!("numer"), &numer);
+        env.storage().instance().set(&symbol_short!("denom"), &denom);
     }
-    pools
-}
 
-fn build_hops(env: &Env, pools: &soroban_sdk::Vec<Address>) -> soroban_sdk::Vec<Hop> {
-    let mut hops = vec![env];
-    for pool in pools.iter() {
-        hops.push_back(Hop { pool, amount_in: 100, min_amount_out: 1 });
+    pub fn swap(env: Env, to: Address, _token_in: Address, token_out: Address, amount_in: i128, min_amount_out: i128) -> i128 {
+        let numer: i128 = env.storage().instance().get(&symbol_short!("numer")).unwrap_or(1);
+        let denom: i128 = env.storage().instance().get(&symbol_short!("denom")).unwrap_or(1);
+        let amount_out = amount_in * numer / denom;
+
+        if amount_out < min_amount_out {
+            panic!("slippage exceeded");
+        }
+
+        // Transfer tokens to recipient from pool
+        TokenClient::new(&env, &token_out).transfer(&env.current_contract_address(), &to, &amount_out);
+
+        amount_out
     }
-    hops
 }
 
-/// Run n hops under unlimited budget, return (cpu, mem).
-fn measure(n: u32) -> (u64, u64) {
+#[test]
+fn test_single_hop_swap() {
     let env = Env::default();
     env.mock_all_auths();
-    env.cost_estimate().budget().reset_unlimited();
-    let client = setup(&env);
-    let pools = seed_pools(&env, &client, n);
-    let hops = build_hops(&env, &pools);
+
+    // Deploy mock tokens
+    let token_admin = Address::generate(&env);
+    let token_a = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+    let token_b = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+
+    // Deploy mock pool
+    let pool_id = env.register(MockPool, ());
+    let pool_client = MockPoolClient::new(&env, &pool_id);
+    pool_client.initialize(&2, &1); // 1 A = 2 B
+
+    // Pre-mint tokens to pool
+    StellarAssetClient::new(&env, &token_b).mint(&pool_id, &1000);
+
+    // Deploy multi-hop swap contract
+    let multi_hop_id = env.register(MultiHopSwap, ());
+    let multi_hop_client = MultiHopSwapClient::new(&env, &multi_hop_id);
+
+    // Mint some tokens to caller
     let caller = Address::generate(&env);
-    client.swap(&caller, &hops);
-    (
-        env.cost_estimate().budget().cpu_instruction_cost(),
-        env.cost_estimate().budget().memory_bytes_cost(),
-    )
+    StellarAssetClient::new(&env, &token_a).mint(&caller, &100);
+
+    // Execute single hop swap
+    let hops = vec![&env, Hop {
+        pool: pool_id,
+        token_in: token_a.clone(),
+        token_out: token_b.clone(),
+        amount_in: 100,
+        min_amount_out: 199,
+    }];
+    let results = multi_hop_client.swap(&caller, &hops);
+
+    // Check results
+    assert_eq!(results.len(), 1);
+    assert_eq!(results.get(0).unwrap().amount_in, 100);
+    assert_eq!(results.get(0).unwrap().amount_out, 200);
+
+    // Check caller has received tokens
+    assert_eq!(TokenClient::new(&env, &token_b).balance(&caller), 200);
+
+    // Check last out
+    assert_eq!(multi_hop_client.get_last_out(), Some(200));
 }
 
 #[test]
-fn test_single_hop_cost() {
-    let (cpu, mem) = measure(1);
-    println!("[1 hop] cpu={cpu}  mem={mem}");
-    assert!(cpu > 0);
-    assert!(cpu < CPU_LIMIT / 10, "single hop used {cpu}, expected < {}", CPU_LIMIT / 10);
-    assert!(mem < MEM_LIMIT);
+fn test_multi_hop_swap() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Deploy mock tokens
+    let token_admin = Address::generate(&env);
+    let token_a = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+    let token_b = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+    let token_c = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+
+    // Deploy mock pools
+    let pool1_id = env.register(MockPool, ());
+    let pool1_client = MockPoolClient::new(&env, &pool1_id);
+    pool1_client.initialize(&2, &1); // A -> B: 1 A = 2 B
+    StellarAssetClient::new(&env, &token_b).mint(&pool1_id, &1000); // Pre-mint B to pool 1
+
+    let pool2_id = env.register(MockPool, ());
+    let pool2_client = MockPoolClient::new(&env, &pool2_id);
+    pool2_client.initialize(&3, &1); // B -> C: 1 B = 3 C
+    StellarAssetClient::new(&env, &token_c).mint(&pool2_id, &2000); // Pre-mint C to pool 2
+
+    // Deploy multi-hop swap contract
+    let multi_hop_id = env.register(MultiHopSwap, ());
+    let multi_hop_client = MultiHopSwapClient::new(&env, &multi_hop_id);
+
+    // Mint some tokens to caller
+    let caller = Address::generate(&env);
+    StellarAssetClient::new(&env, &token_a).mint(&caller, &100);
+
+    // Execute multi-hop swap
+    let hops = vec![
+        &env,
+        Hop {
+            pool: pool1_id,
+            token_in: token_a.clone(),
+            token_out: token_b.clone(),
+            amount_in: 100,
+            min_amount_out: 199,
+        },
+        Hop {
+            pool: pool2_id,
+            token_in: token_b,
+            token_out: token_c.clone(),
+            amount_in: 200,
+            min_amount_out: 599,
+        },
+    ];
+    let results = multi_hop_client.swap(&caller, &hops);
+
+    // Check results
+    assert_eq!(results.len(), 2);
+    assert_eq!(results.get(0).unwrap().amount_out, 200);
+    assert_eq!(results.get(1).unwrap().amount_out, 600);
+
+    // Check caller has received tokens
+    assert_eq!(TokenClient::new(&env, &token_c).balance(&caller), 600);
 }
 
 #[test]
-fn test_hop_cost_scales() {
-    let (cpu1, _) = measure(1);
-    let (cpu5, _) = measure(5);
-    let (cpu10, _) = measure(10);
-    println!("[1 hop]  cpu={cpu1}");
-    println!("[5 hops] cpu={cpu5}");
-    println!("[10 hops] cpu={cpu10}");
-    assert!(cpu5 > cpu1);
-    assert!(cpu10 > cpu5);
-}
+#[should_panic(expected = "no hops provided")]
+fn test_empty_hops() {
+    let env = Env::default();
+    env.mock_all_auths();
 
-#[test]
-fn test_find_gas_breaking_point() {
-    let mut lo: u32 = 1;
-    let mut hi: u32 = 512;
-
-    let (cpu_hi, _) = measure(hi);
-    println!("[{hi} hops] cpu={cpu_hi}  limit={CPU_LIMIT}");
-
-    if cpu_hi < CPU_LIMIT {
-        println!("512 hops still under limit — raise hi");
-        return;
-    }
-
-    while lo + 1 < hi {
-        let mid = (lo + hi) / 2;
-        let (cpu, mem) = measure(mid);
-        println!("[{mid} hops] cpu={cpu}  mem={mem}");
-        if cpu < CPU_LIMIT { lo = mid; } else { hi = mid; }
-    }
-
-    let (cpu_safe, mem_safe) = measure(lo);
-    let (cpu_break, mem_break) = measure(hi);
-
-    println!("SAFE:   {lo} hops  cpu={cpu_safe}  mem={mem_safe}");
-    println!("BREAKS: {hi} hops  cpu={cpu_break}  mem={mem_break}");
-    println!("CPU limit: {CPU_LIMIT}");
-
-    assert!(cpu_safe < CPU_LIMIT);
-    assert!(cpu_break >= CPU_LIMIT);
-}
-
-#[test]
-fn test_memory_at_50_hops() {
-    let (cpu, mem) = measure(50);
-    let cpu_pct = cpu * 100 / CPU_LIMIT;
-    let mem_pct = mem * 100 / MEM_LIMIT;
-    println!("[50 hops] cpu={cpu} ({cpu_pct}%)  mem={mem} ({mem_pct}%)");
-    assert!(mem <= MEM_LIMIT, "50 hops exceeded memory limit");
+    let multi_hop_id = env.register(MultiHopSwap, ());
+    let multi_hop_client = MultiHopSwapClient::new(&env, &multi_hop_id);
+    let caller = Address::generate(&env);
+    multi_hop_client.swap(&caller, &vec![&env]);
 }
 
 #[test]
@@ -114,10 +156,28 @@ fn test_memory_at_50_hops() {
 fn test_slippage_guard() {
     let env = Env::default();
     env.mock_all_auths();
-    env.cost_estimate().budget().reset_unlimited();
-    let client = setup(&env);
-    let pool = Address::generate(&env);
-    client.seed_pool(&pool, &1, &2); // out < in
+
+    let token_admin = Address::generate(&env);
+    let token_a = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+    let token_b = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+
+    let pool_id = env.register(MockPool, ());
+    let pool_client = MockPoolClient::new(&env, &pool_id);
+    pool_client.initialize(&1, &2); // 1 A = 0.5 B
+    StellarAssetClient::new(&env, &token_b).mint(&pool_id, &1000);
+
+    let multi_hop_id = env.register(MultiHopSwap, ());
+    let multi_hop_client = MultiHopSwapClient::new(&env, &multi_hop_id);
+
     let caller = Address::generate(&env);
-    client.swap(&caller, &vec![&env, Hop { pool, amount_in: 100, min_amount_out: 999 }]);
+    StellarAssetClient::new(&env, &token_a).mint(&caller, &100);
+
+    let hops = vec![&env, Hop {
+        pool: pool_id,
+        token_in: token_a,
+        token_out: token_b,
+        amount_in: 100,
+        min_amount_out: 999, // Too high
+    }];
+    multi_hop_client.swap(&caller, &hops);
 }

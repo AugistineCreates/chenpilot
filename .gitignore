@@ -10,3 +10,5 @@ coverage/
 .agents/
 issue.md
 COMMIT.md
+contracts/target
+target
