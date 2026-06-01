@@ -1,7 +1,7 @@
 export interface LockOptions {
-  ttl?: number; // Lock TTL in milliseconds
-  retryDelay?: number; // Delay between retries in milliseconds
-  maxRetries?: number; // Maximum number of retries
+  ttl?: number;
+  retryDelay?: number;
+  maxRetries?: number;
 }
 
 export interface LockResult {
@@ -9,12 +9,14 @@ export interface LockResult {
   lockKey: string;
   lockValue?: string;
   ttl?: number;
+  acquiredAt?: number;
   error?: string;
 }
 
 export interface LockInfo {
   key: string;
   value: string;
+  ownerId: string;
   ttl: number;
   createdAt: number;
 }
@@ -27,6 +29,8 @@ export interface LockService {
   ): Promise<LockResult>;
 
   releaseLock(resourceKey: string, identifier: string): Promise<boolean>;
+
+  forceReleaseLock(resourceKey: string): Promise<boolean>;
 
   extendLock(
     resourceKey: string,
