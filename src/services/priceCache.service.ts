@@ -8,9 +8,19 @@ export interface PriceData {
   source: string;
 }
 
+/** Maximum age in ms a cached price is considered fresh enough to act on. */
+export const PRICE_MAX_AGE_MS = 60_000;
+
+export interface CachedPriceResult {
+  data: PriceData;
+  /** True when the entry is within PRICE_MAX_AGE_MS. */
+  fresh: boolean;
+  ageMs: number;
+}
+
 export class PriceCacheService {
   private redis: Redis;
-  private readonly DEFAULT_TTL = 60; // 60 seconds default cache TTL
+  private readonly DEFAULT_TTL = 60;
 
   constructor() {
     this.redis = new Redis({
@@ -18,56 +28,52 @@ export class PriceCacheService {
       port: config.redis.port,
       password: config.redis.password,
       db: config.redis.db,
-      retryStrategy: (times: number) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
+      retryStrategy: (times: number) => Math.min(times * 50, 2000),
       maxRetriesPerRequest: 3,
     });
 
-    this.redis.on("connect", () => {
-      logger.info("Redis connected successfully");
-    });
-
-    this.redis.on("error", (err) => {
-      logger.error("Redis connection error:", err);
-    });
+    this.redis.on("connect", () => logger.info("Redis connected successfully"));
+    this.redis.on("error", (err) =>
+      logger.error("Redis connection error:", err)
+    );
   }
 
-  /**
-   * Generate cache key for asset pair
-   */
   private getCacheKey(fromAsset: string, toAsset: string): string {
     return `price:${fromAsset.toUpperCase()}:${toAsset.toUpperCase()}`;
   }
 
   /**
-   * Get cached price for asset pair
+   * Returns the cached entry with an explicit freshness flag.
+   * Callers must check `fresh` before using the price for decisions.
    */
   async getPrice(
     fromAsset: string,
     toAsset: string
-  ): Promise<PriceData | null> {
+  ): Promise<CachedPriceResult | null> {
     try {
       const key = this.getCacheKey(fromAsset, toAsset);
       const cached = await this.redis.get(key);
+      if (!cached) return null;
 
-      if (!cached) {
-        return null;
-      }
+      const data: PriceData = JSON.parse(cached);
+      const ageMs = Date.now() - data.timestamp;
+      const fresh = ageMs <= PRICE_MAX_AGE_MS;
 
-      const priceData: PriceData = JSON.parse(cached);
-      logger.debug(`Cache hit for ${fromAsset}/${toAsset}: ${priceData.price}`);
-      return priceData;
+      logger.debug(
+        `Cache ${fresh ? "hit" : "stale"} for ${fromAsset}/${toAsset}`,
+        {
+          ageMs,
+          price: data.price,
+        }
+      );
+
+      return { data, fresh, ageMs };
     } catch (error) {
       logger.error("Error getting cached price:", error);
       return null;
     }
   }
 
-  /**
-   * Set price in cache with TTL
-   */
   async setPrice(
     fromAsset: string,
     toAsset: string,
@@ -77,12 +83,7 @@ export class PriceCacheService {
   ): Promise<void> {
     try {
       const key = this.getCacheKey(fromAsset, toAsset);
-      const priceData: PriceData = {
-        price,
-        timestamp: Date.now(),
-        source,
-      };
-
+      const priceData: PriceData = { price, timestamp: Date.now(), source };
       await this.redis.setex(key, ttl, JSON.stringify(priceData));
       logger.debug(
         `Cached price for ${fromAsset}/${toAsset}: ${price} (TTL: ${ttl}s)`
@@ -92,24 +93,24 @@ export class PriceCacheService {
     }
   }
 
-  /**
-   * Get multiple prices at once
-   */
   async getPrices(
     pairs: Array<{ from: string; to: string }>
-  ): Promise<Map<string, PriceData | null>> {
-    const results = new Map<string, PriceData | null>();
-
+  ): Promise<Map<string, CachedPriceResult | null>> {
+    const results = new Map<string, CachedPriceResult | null>();
     try {
-      const keys = pairs.map((pair) => this.getCacheKey(pair.from, pair.to));
+      const keys = pairs.map((p) => this.getCacheKey(p.from, p.to));
       const values = await this.redis.mget(...keys);
-
-      pairs.forEach((pair, index) => {
+      pairs.forEach((pair, i) => {
         const pairKey = `${pair.from}/${pair.to}`;
-        const value = values[index];
-
+        const value = values[i];
         if (value) {
-          results.set(pairKey, JSON.parse(value));
+          const data: PriceData = JSON.parse(value);
+          const ageMs = Date.now() - data.timestamp;
+          results.set(pairKey, {
+            data,
+            fresh: ageMs <= PRICE_MAX_AGE_MS,
+            ageMs,
+          });
         } else {
           results.set(pairKey, null);
         }
@@ -117,26 +118,18 @@ export class PriceCacheService {
     } catch (error) {
       logger.error("Error getting multiple cached prices:", error);
     }
-
     return results;
   }
 
-  /**
-   * Invalidate cached price
-   */
   async invalidatePrice(fromAsset: string, toAsset: string): Promise<void> {
     try {
-      const key = this.getCacheKey(fromAsset, toAsset);
-      await this.redis.del(key);
+      await this.redis.del(this.getCacheKey(fromAsset, toAsset));
       logger.debug(`Invalidated cache for ${fromAsset}/${toAsset}`);
     } catch (error) {
       logger.error("Error invalidating cached price:", error);
     }
   }
 
-  /**
-   * Clear all price cache
-   */
   async clearAll(): Promise<void> {
     try {
       const keys = await this.redis.keys("price:*");
@@ -149,50 +142,30 @@ export class PriceCacheService {
     }
   }
 
-  /**
-   * Get cache statistics
-   */
-  async getStats(): Promise<{
-    totalKeys: number;
-    memoryUsage: string;
-    hitRate?: number;
-  }> {
+  async getStats(): Promise<{ totalKeys: number; memoryUsage: string }> {
     try {
       const keys = await this.redis.keys("price:*");
       const info = await this.redis.info("memory");
       const memoryMatch = info.match(/used_memory_human:(.+)/);
-      const memoryUsage = memoryMatch ? memoryMatch[1].trim() : "unknown";
-
       return {
         totalKeys: keys.length,
-        memoryUsage,
+        memoryUsage: memoryMatch ? memoryMatch[1].trim() : "unknown",
       };
-    } catch (error) {
-      logger.error("Error getting cache stats:", error);
-      return {
-        totalKeys: 0,
-        memoryUsage: "unknown",
-      };
+    } catch {
+      return { totalKeys: 0, memoryUsage: "unknown" };
     }
   }
 
-  /**
-   * Close Redis connection
-   */
   async disconnect(): Promise<void> {
     await this.redis.quit();
     logger.info("Redis disconnected");
   }
 
-  /**
-   * Health check
-   */
   async healthCheck(): Promise<boolean> {
     try {
       await this.redis.ping();
       return true;
-    } catch (error) {
-      logger.error("Redis health check failed:", error);
+    } catch {
       return false;
     }
   }
