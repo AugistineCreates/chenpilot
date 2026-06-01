@@ -13,8 +13,9 @@ import { TransactionNotificationData, PriceAlert, TrendingAsset } from "../types
 import {
   createTrustlineOperation,
   getNetworkStatus,
+  AgentClient,
 } from "@chen-pilot/sdk-core";
-import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
+import { searchFeatures, formatHelpMessage, formatAiHelpMessage } from "../services/helpProvider";
 import { AssetVerificationService } from '../assetVerification';
 import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
 import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
@@ -84,6 +85,8 @@ export class DiscordAdapter {
   private alertCheckInterval?: ReturnType<typeof setInterval>;
   // #128: Market overview digest interval
   private marketOverviewInterval?: ReturnType<typeof setInterval>;
+  // #114: AI agent client
+  private agentClient: AgentClient;
 
   constructor(token: string, auditLogChannelId?: string) {
     this.token = token;
@@ -106,6 +109,8 @@ export class DiscordAdapter {
     this.scamDetectionService = new ScamDetectionService();
     // #128: Initialize market overview service
     this.marketOverviewService = new MarketOverviewService();
+    // #114: Initialize AI agent client
+    this.agentClient = new AgentClient({ baseUrl: BACKEND_URL });
   }
 
   // #145: Returns true if the user is flooding (within debounce window)
@@ -347,13 +352,41 @@ export class DiscordAdapter {
         }
 
         if (message.content.startsWith("!help")) {
-          await withPerformanceProfiling(commandName, 'discord', userId, async () => {
-            const query = message.content.replace("!help", "").trim();
+      await withPerformanceProfiling(commandName, 'discord', userId, async () => {
+        const query = message.content.replace("!help", "").trim();
+        
+        if (query.length > 0) {
+          // Check if it's a natural language question vs keyword search
+          const isNaturalLanguage = query.includes(" ") && !["swap", "balance", "trustline", "sponsor", "notify", "status", "price", "help"].includes(query.toLowerCase());
+          
+          if (isNaturalLanguage) {
+            try {
+              await message.reply("🤖 Thinking... Let me get you some help with that.");
+              const response = await this.agentClient.query({
+                userId,
+                query,
+              });
+              // Assume AgentResponse has a message field, or use result directly
+              const aiResponse = typeof response.result === 'string' ? response.result : (response.result as any).message || "Sorry, I couldn't help with that.";
+              await message.reply(formatAiHelpMessage(aiResponse, "markdown"));
+            } catch (error) {
+              // Fallback to keyword search if AI fails
+              console.error("AI help failed, falling back to keyword search:", error);
+              const results = searchFeatures(query);
+              await message.reply(formatHelpMessage(results, true, "markdown"));
+            }
+          } else {
+            // Keyword search
             const results = searchFeatures(query);
-            const isSearch = query.length > 0;
-            await message.reply(formatHelpMessage(results, isSearch, "markdown"));
-          })();
+            await message.reply(formatHelpMessage(results, true, "markdown"));
+          }
+        } else {
+          // Show all commands
+          const results = searchFeatures(query);
+          await message.reply(formatHelpMessage(results, false, "markdown"));
         }
+      })();
+    }
 
         if (message.content === "!thread") {
           await withPerformanceProfiling('!thread', 'discord', userId, async () => {

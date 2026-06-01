@@ -1,7 +1,7 @@
 import { Telegraf } from "telegraf";
 import { TransactionNotificationData } from "../types";
-import { createTrustlineOperation } from "@chen-pilot/sdk-core";
-import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
+import { createTrustlineOperation, AgentClient } from "@chen-pilot/sdk-core";
+import { searchFeatures, formatHelpMessage, formatAiHelpMessage } from "../services/helpProvider";
 import { AssetVerificationService } from '../assetVerification';
 import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
 import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
@@ -41,6 +41,8 @@ export class TelegramAdapter {
   private defaultRateLimiter: RateLimiter;
   private strictRateLimiter: RateLimiter;
   private verificationService: AssetVerificationService;
+  // #114: AI agent client
+  private agentClient: AgentClient;
 
   constructor(token: string) {
     this.token = token;
@@ -50,6 +52,8 @@ export class TelegramAdapter {
     // #123: Initialize rate limiters
     this.defaultRateLimiter = new RateLimiter(DEFAULT_RATE_LIMIT);
     this.strictRateLimiter = new RateLimiter(STRICT_RATE_LIMIT);
+    // #114: Initialize AI agent client
+    this.agentClient = new AgentClient({ baseUrl: BACKEND_URL });
   }
 
   // #145: Returns true if the user is flooding (within debounce window)
@@ -115,7 +119,41 @@ export class TelegramAdapter {
     });
     this.bot.help(async (ctx: any) => {
       const userId = String(ctx.from?.id || 'unknown');
-      await withPerformanceProfiling('/help', 'telegram', userId, () => ctx.reply('Commands: /start, /balance, /swap, /trustline, /dashboard, /validate'))();
+      await withPerformanceProfiling('/help', 'telegram', userId, async () => {
+        // Extract query after /help command
+        const messageText = ctx.message?.text || '';
+        const query = messageText.replace(/^\/help\s*/i, '').trim();
+        
+        if (query.length > 0) {
+          // Check if it's a natural language question vs keyword search
+          const isNaturalLanguage = query.includes(" ") && !["swap", "balance", "trustline", "sponsor", "notify", "status", "price", "help"].includes(query.toLowerCase());
+          
+          if (isNaturalLanguage) {
+            try {
+              await ctx.reply("🤖 Thinking... Let me get you some help with that.");
+              const response = await this.agentClient.query({
+                userId,
+                query,
+              });
+              const aiResponse = typeof response.result === 'string' ? response.result : (response.result as any).message || "Sorry, I couldn't help with that.";
+              await ctx.reply(formatAiHelpMessage(aiResponse, "html"), { parse_mode: "HTML" });
+            } catch (error) {
+              // Fallback to keyword search if AI fails
+              console.error("AI help failed, falling back to keyword search:", error);
+              const results = searchFeatures(query);
+              await ctx.reply(formatHelpMessage(results, true, "html"), { parse_mode: "HTML" });
+            }
+          } else {
+            // Keyword search
+            const results = searchFeatures(query);
+            await ctx.reply(formatHelpMessage(results, true, "html"), { parse_mode: "HTML" });
+          }
+        } else {
+          // Show all commands
+          const results = searchFeatures(query);
+          await ctx.reply(formatHelpMessage(results, false, "html"), { parse_mode: "HTML" });
+        }
+      })();
     });
 
     this.bot.command('trustline', async (ctx: any) => {
