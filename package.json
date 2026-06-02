@@ -18,6 +18,13 @@
     "cleanup:tokens": "ts-node src/scripts/cleanupTokens.ts",
     "test:webhooks": "ts-node src/scripts/testWebhookIdempotency.ts",
     "build": "tsc",
+    "build:check": "tsc --noEmit",
+    "build:sdk": "npm --prefix packages/sdk run build",
+    "test:sdk": "npm --prefix packages/sdk test -- --runInBand",
+    "contracts:check": "cargo check --manifest-path contracts/Cargo.toml --workspace",
+    "contracts:test": "cargo test --manifest-path contracts/Cargo.toml --workspace",
+    "release:artifact-check": "npm pack --dry-run && npm --prefix packages/sdk pack --dry-run",
+    "release:gates": "npm run build:check && npm test -- --runInBand && npm run build:sdk && npm run test:sdk && npm run contracts:check && npm run contracts:test && npm run release:artifact-check",
     "prepare": "husky",
     "gen:docs": "node scripts/generateToolDocs.mjs"
   },
@@ -57,7 +64,8 @@
     "swagger-ui-express": "^5.0.1",
     "ts-node": "^10.9.2",
     "tsyringe": "^4.10.0",
-    "typeorm": "^0.3.26"
+    "typeorm": "^0.3.26",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.4.0",

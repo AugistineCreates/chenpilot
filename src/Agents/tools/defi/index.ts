@@ -23,6 +23,14 @@ export {
 export { EquilibreAdapter, equilibreAdapter } from "./EquilibreAdapter";
 export { YieldBloxAdapter, yieldBloxAdapter } from "./YieldBloxAdapter";
 
+// Export resilience and capability contracts
+export * from "./CapabilityContract";
+export { CircuitBreaker, CircuitState, CircuitBreakerConfig } from "./resilience/CircuitBreaker";
+export { FallbackProvider, IFallbackProvider } from "./resilience/FallbackProvider";
+export { ResilienceEngine, resilienceEngine, ResilienceConfig } from "./resilience/ResilienceEngine";
+export { executeWithRetry, RetryConfig } from "./resilience/Retry";
+export * from "./resilience/Schemas";
+
 // Re-export configuration utilities
 export {
   generateDeFiAdapterConfigs,

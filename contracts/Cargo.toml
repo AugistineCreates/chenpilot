@@ -6,6 +6,7 @@ members = [
     "fee_distribution",
     "flash_loan_guard",
     "htlc",
+    "intent_market_validator",
     "lending_liquidation",
     "liquidity_vault",
     "multi_hop_swap",

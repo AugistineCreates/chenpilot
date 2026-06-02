@@ -51,6 +51,9 @@ export class RiskAnalysisTool extends BaseTool<RiskAnalysisPayload> {
     ],
     category: "security",
     version: "1.0.0",
+    riskLevel: "low",
+    capabilities: ["risk_analysis"],
+    permissions: [],
   };
 
   async execute(payload: RiskAnalysisPayload, userId: string): Promise<ToolResult> {

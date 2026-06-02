@@ -10,9 +10,14 @@ import {
   PromptVersion,
   PromptMetric,
 } from "../Agents/registry/PromptVersion.entity";
+import { DurableExecution } from "../Agents/planner/DurableExecution.entity";
+import { DurableStep } from "../Agents/planner/DurableStep.entity";
+import { DurableOperation } from "../Reliability/DurableOperation.entity";
 import { WebhookIdempotency } from "../Gateway/webhookIdempotency.entity";
 import { AuditLog } from "../AuditLog/auditLog.entity";
+import { DeployedContract } from "../ContractRegistry/contractRegistry.entity";
 import { BotSession } from "../Bot/botSession.entity";
+import { IndexerCursor } from "../services/stellarIndexer/indexerCursor.entity";
 
 const isDev = config.env === "development";
 
@@ -33,11 +38,18 @@ const dbOptions: DataSourceOptions = {
     AgentExecutionMetrics,
     PromptVersion,
     PromptMetric,
+    DurableExecution,
+    DurableStep,
+    DurableOperation,
     WebhookIdempotency,
     AuditLog,
+    DeployedContract,
     BotSession,
+    IndexerCursor,
   ],
-  migrations: [isDev ? "src/migrations/**/*.ts" : "dist/migrations/**/*.js"],
+  migrations: [
+    isDev ? "src/migrations/**/*.ts" : "dist/migrations/**/*.js",
+  ],
   subscribers: [],
 };
 

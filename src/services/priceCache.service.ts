@@ -1,5 +1,4 @@
-import Redis from "ioredis";
-import config from "../config/config";
+import { getRedisClient, healthCheckRedis } from "./redis/client";
 import logger from "../config/logger";
 
 export interface PriceData {
@@ -18,58 +17,57 @@ export interface CachedPriceResult {
   ageMs: number;
 }
 
+interface CacheStats {
+  totalKeys: number;
+  memoryUsage: string;
+  hitRate?: number;
+}
+
 export class PriceCacheService {
-  private redis: Redis;
   private readonly DEFAULT_TTL = 60;
-
-  constructor() {
-    this.redis = new Redis({
-      host: config.redis.host,
-      port: config.redis.port,
-      password: config.redis.password,
-      db: config.redis.db,
-      retryStrategy: (times: number) => Math.min(times * 50, 2000),
-      maxRetriesPerRequest: 3,
-    });
-
-    this.redis.on("connect", () => logger.info("Redis connected successfully"));
-    this.redis.on("error", (err) =>
-      logger.error("Redis connection error:", err)
-    );
-  }
+  private hits = 0;
+  private misses = 0;
 
   private getCacheKey(fromAsset: string, toAsset: string): string {
     return `price:${fromAsset.toUpperCase()}:${toAsset.toUpperCase()}`;
   }
 
-  /**
-   * Returns the cached entry with an explicit freshness flag.
-   * Callers must check `fresh` before using the price for decisions.
-   */
   async getPrice(
     fromAsset: string,
     toAsset: string
   ): Promise<CachedPriceResult | null> {
+    const start = Date.now();
+
     try {
       const key = this.getCacheKey(fromAsset, toAsset);
-      const cached = await this.redis.get(key);
-      if (!cached) return null;
+      const redis = getRedisClient();
+      const cached = await redis.get(key);
+
+      if (!cached) {
+        this.misses++;
+        return null;
+      }
+
+      this.hits++;
 
       const data: PriceData = JSON.parse(cached);
       const ageMs = Date.now() - data.timestamp;
       const fresh = ageMs <= PRICE_MAX_AGE_MS;
 
-      logger.debug(
-        `Cache ${fresh ? "hit" : "stale"} for ${fromAsset}/${toAsset}`,
-        {
-          ageMs,
-          price: data.price,
-        }
-      );
+      logger.debug("Cache hit for price", {
+        pair: `${fromAsset}/${toAsset}`,
+        price: data.price,
+        ageMs,
+        fresh,
+        latencyMs: Date.now() - start,
+      });
 
       return { data, fresh, ageMs };
     } catch (error) {
-      logger.error("Error getting cached price:", error);
+      logger.error("Error getting cached price", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        latencyMs: Date.now() - start,
+      });
       return null;
     }
   }
@@ -81,15 +79,30 @@ export class PriceCacheService {
     source: string,
     ttl: number = this.DEFAULT_TTL
   ): Promise<void> {
+    const start = Date.now();
+
     try {
       const key = this.getCacheKey(fromAsset, toAsset);
-      const priceData: PriceData = { price, timestamp: Date.now(), source };
-      await this.redis.setex(key, ttl, JSON.stringify(priceData));
-      logger.debug(
-        `Cached price for ${fromAsset}/${toAsset}: ${price} (TTL: ${ttl}s)`
-      );
+      const priceData: PriceData = {
+        price,
+        timestamp: Date.now(),
+        source,
+      };
+
+      const redis = getRedisClient();
+      await redis.setex(key, ttl, JSON.stringify(priceData));
+
+      logger.debug("Cached price", {
+        pair: `${fromAsset}/${toAsset}`,
+        price,
+        ttl,
+        latencyMs: Date.now() - start,
+      });
     } catch (error) {
-      logger.error("Error setting cached price:", error);
+      logger.error("Error setting cached price", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        latencyMs: Date.now() - start,
+      });
     }
   }
 
@@ -97,78 +110,157 @@ export class PriceCacheService {
     pairs: Array<{ from: string; to: string }>
   ): Promise<Map<string, CachedPriceResult | null>> {
     const results = new Map<string, CachedPriceResult | null>();
+    const start = Date.now();
+
     try {
       const keys = pairs.map((p) => this.getCacheKey(p.from, p.to));
-      const values = await this.redis.mget(...keys);
-      pairs.forEach((pair, i) => {
+      const redis = getRedisClient();
+      const values = await redis.mget(...keys);
+
+      pairs.forEach((pair, index) => {
         const pairKey = `${pair.from}/${pair.to}`;
-        const value = values[i];
+        const value = values[index];
+
         if (value) {
           const data: PriceData = JSON.parse(value);
           const ageMs = Date.now() - data.timestamp;
+
+          this.hits++;
+
           results.set(pairKey, {
             data,
             fresh: ageMs <= PRICE_MAX_AGE_MS,
             ageMs,
           });
         } else {
+          this.misses++;
           results.set(pairKey, null);
         }
       });
+
+      logger.debug("Batch price retrieval", {
+        pairs: pairs.length,
+        latencyMs: Date.now() - start,
+      });
     } catch (error) {
-      logger.error("Error getting multiple cached prices:", error);
+      logger.error("Error getting multiple cached prices", {
+        error: error instanceof Error ? error.message : "Unknown error",
+        latencyMs: Date.now() - start,
+      });
     }
+
     return results;
   }
 
   async invalidatePrice(fromAsset: string, toAsset: string): Promise<void> {
     try {
-      await this.redis.del(this.getCacheKey(fromAsset, toAsset));
-      logger.debug(`Invalidated cache for ${fromAsset}/${toAsset}`);
+      const key = this.getCacheKey(fromAsset, toAsset);
+      const redis = getRedisClient();
+      await redis.del(key);
+
+      logger.debug("Invalidated price cache", {
+        pair: `${fromAsset}/${toAsset}`,
+      });
     } catch (error) {
-      logger.error("Error invalidating cached price:", error);
+      logger.error("Error invalidating cached price", {
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 
   async clearAll(): Promise<void> {
+    const start = Date.now();
+
     try {
-      const keys = await this.redis.keys("price:*");
-      if (keys.length > 0) {
-        await this.redis.del(...keys);
-        logger.info(`Cleared ${keys.length} cached prices`);
+      const redis = getRedisClient();
+      let cursor = "0";
+      let deletedCount = 0;
+
+      do {
+        const result = await redis.scan(cursor, "MATCH", "price:*", "COUNT", 100);
+        cursor = result[0];
+        const keys = result[1];
+
+        if (keys.length > 0) {
+          await redis.del(...keys);
+          deletedCount += keys.length;
+        }
+      } while (cursor !== "0");
+
+      if (deletedCount > 0) {
+        logger.info("Cleared price cache", {
+          keysDeleted: deletedCount,
+          latencyMs: Date.now() - start,
+        });
       }
     } catch (error) {
-      logger.error("Error clearing price cache:", error);
+      logger.error("Error clearing price cache", {
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 
-  async getStats(): Promise<{ totalKeys: number; memoryUsage: string }> {
+  async getStats(): Promise<CacheStats> {
     try {
-      const keys = await this.redis.keys("price:*");
-      const info = await this.redis.info("memory");
+      const redis = getRedisClient();
+
+      let totalKeys = 0;
+      let cursor = "0";
+
+      do {
+        const result = await redis.scan(cursor, "MATCH", "price:*", "COUNT", 500);
+        cursor = result[0];
+        totalKeys += result[1].length;
+      } while (cursor !== "0");
+
+      const info = await redis.info("memory");
       const memoryMatch = info.match(/used_memory_human:(.+)/);
+      const memoryUsage = memoryMatch ? memoryMatch[1].trim() : "unknown";
+
+      const totalAccesses = this.hits + this.misses;
+      const hitRate =
+        totalAccesses > 0
+          ? parseFloat(((this.hits / totalAccesses) * 100).toFixed(1))
+          : undefined;
+
       return {
-        totalKeys: keys.length,
-        memoryUsage: memoryMatch ? memoryMatch[1].trim() : "unknown",
+        totalKeys,
+        memoryUsage,
+        hitRate,
       };
-    } catch {
-      return { totalKeys: 0, memoryUsage: "unknown" };
+    } catch (error) {
+      logger.error("Error getting cache stats", {
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+
+      return {
+        totalKeys: 0,
+        memoryUsage: "unknown",
+      };
     }
   }
 
-  async disconnect(): Promise<void> {
-    await this.redis.quit();
-    logger.info("Redis disconnected");
+  getHitRate(): {
+    hits: number;
+    misses: number;
+    hitRate: number | undefined;
+  } {
+    const total = this.hits + this.misses;
+
+    return {
+      hits: this.hits,
+      misses: this.misses,
+      hitRate:
+        total > 0 ? parseFloat(((this.hits / total) * 100).toFixed(1)) : undefined,
+    };
+  }
+
+  resetHitRate(): void {
+    this.hits = 0;
+    this.misses = 0;
   }
 
   async healthCheck(): Promise<boolean> {
-    try {
-      await this.redis.ping();
-      return true;
-    } catch {
-      return false;
-    }
+    return healthCheckRedis();
   }
 }
-
-export default new PriceCacheService();

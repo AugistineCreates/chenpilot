@@ -15,6 +15,8 @@ export interface ParameterDefinition {
   pattern?: string;
 }
 
+export type ToolRiskLevel = "low" | "medium" | "high";
+
 export interface ToolMetadata {
   name: string;
   description: string;
@@ -22,6 +24,14 @@ export interface ToolMetadata {
   examples: string[];
   category: string;
   version: string;
+  // Governance & Lifecycle
+  deprecated?: boolean;
+  deprecationDate?: string;
+  replacementTool?: string; // name@version
+  permissions?: string[];
+  riskLevel: ToolRiskLevel;
+  capabilities: string[];
+  author?: string;
 }
 
 export interface ToolDefinition<T = Record<string, unknown>> {
@@ -48,7 +58,10 @@ export type ToolPayload = Record<string, unknown>;
 
 export interface ToolRegistryEntry {
   name: string;
+  version: string;
   definition: ToolDefinition;
   enabled: boolean;
+  registeredAt: Date;
   lastUsed?: Date;
+  governanceMetadata?: Record<string, any>;
 }

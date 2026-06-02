@@ -42,6 +42,9 @@ export class StrategyRegistryTool extends BaseTool<StrategyRegistryPayload> {
     ],
     category: "stellar",
     version: "1.0.0",
+    riskLevel: "medium",
+    capabilities: ["governance"],
+    permissions: ["user"],
   };
 
   validate(payload: StrategyRegistryPayload): { valid: boolean; errors: string[] } {

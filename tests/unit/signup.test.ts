@@ -25,6 +25,26 @@ describe("POST /signup", () => {
     expect(response.body.data).not.toHaveProperty("encryptedPrivateKey");
   });
 
+  it("should create a new user through /api/signup without sending raw pk", async () => {
+    const response = await request(app)
+      .post("/api/signup")
+      .send({ name: "testuser_api" })
+      .expect(201);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.userId).toBeDefined();
+
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOne({
+      where: { name: "testuser_api" },
+      select: ["encryptedPrivateKey"],
+    });
+
+    expect(user).not.toBeNull();
+    expect(user?.address).toMatch(/^G/);
+    expect(user?.encryptedPrivateKey).toBeDefined();
+  });
+
   it("should return 400 when name is missing", async () => {
     const response = await request(app).post("/signup").send({}).expect(400);
 

@@ -1,152 +1,50 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
 import config from "../config/config";
-import AppDataSource from "../config/Datasource";
 import logger from "../config/logger";
+import { durableOperationService } from "../Reliability/DurableOperationService";
 
 /**
  * Delay strategy for transaction submission
  */
 export type DelayStrategy = 
-  /**
-   * Submit at a specific time
-   */
   | "scheduled"
-  /**
-   * Submit when network fees are below threshold
-   */
   | "fee_based"
-  /**
-   * Submit when network is less congested
-   */
   | "congestion_based";
 
 /**
  * Configuration for delayed transaction submission
  */
 export interface DelayedTransactionConfig {
-  /**
-   * Delay strategy to use
-   */
   strategy: DelayStrategy;
-  
-  /**
-   * Unix timestamp (in milliseconds) to submit at (for 'scheduled' strategy)
-   */
   scheduledAt?: number;
-  
-  /**
-   * Maximum fee willing to pay (in stroops) for 'fee_based' strategy
-   */
   maxFee?: number;
-  
-  /**
-   * Target fee (stroops) for 'fee_based' strategy
-   */
   targetFee?: number;
-  
-  /**
-   * Maximum number of retries
-   */
   maxRetries?: number;
-  
-  /**
-   * Retry delay in milliseconds
-   */
   retryDelay?: number;
 }
 
 /**
- * Status of a delayed transaction
- */
-export type DelayedTransactionStatus = 
-  | "pending"
-  | "waiting_for_fee"
-  | "waiting_for_congestion"
-  | "submitting"
-  | "submitted"
-  | "failed"
-  | "cancelled";
-
-/**
- * Delayed transaction record
- */
-export interface DelayedTransaction {
-  id: string;
-  userId: string;
-  transactionXdr: string;
-  config: DelayedTransactionConfig;
-  status: DelayedTransactionStatus;
-  createdAt: number;
-  submittedAt?: number;
-  txHash?: string;
-  error?: string;
-  retries: number;
-}
-
-/**
- * Network fee info
- */
-export interface NetworkFeeInfo {
-  /**
-   * Current fee in stroops per operation
-   */
-  fee: number;
-  
-  /**
-   * Last updated timestamp
-   */
-  lastUpdated: number;
-  
-  /**
-   * Number of pending transactions in the network
-   */
-  pendingTxCount?: number;
-}
-
-/**
- * Service for managing delayed transaction submission
+ * Service for managing delayed transaction submission using Durable Operations
  */
 export class DelayedTransactionService {
   private server: StellarSdk.Horizon.Server;
-  private pendingDelayedTxs: Map<string, DelayedTransaction> = new Map();
-  private checkInterval: ReturnType<typeof setInterval> | null = null;
-  private lastFeeInfo: NetworkFeeInfo | null = null;
-  private readonly FEE_CACHE_TTL = 60000; // 1 minute
-  private readonly DEFAULT_MAX_FEE = 100000; // 0.01 XLM
-  private readonly DEFAULT_TARGET_FEE = 5000; // 0.0005 XLM
-  private readonly DEFAULT_RETRY_DELAY = 30000; // 30 seconds
+  private readonly DEFAULT_MAX_FEE = 100000;
+  private readonly DEFAULT_TARGET_FEE = 5000;
 
   constructor() {
     this.server = new StellarSdk.Horizon.Server(config.stellar.horizonUrl);
+    
+    // Register handler for delayed transactions
+    durableOperationService.registerHandler("delayed_transaction", async (payload) => {
+      return this.executeTransaction(payload.transactionXdr);
+    });
   }
 
   /**
    * Initialize the delayed transaction service
    */
   async initialize(): Promise<void> {
-    // Start background checking for delayed transactions
-    this.startChecking();
-    
-    logger.info("Delayed transaction service initialized");
-  }
-
-  /**
-   * Start periodic checking of delayed transactions
-   */
-  private startChecking(): void {
-    this.checkInterval = setInterval(async () => {
-      await this.processDelayedTransactions();
-    }, 10000); // Check every 10 seconds
-  }
-
-  /**
-   * Stop periodic checking
-   */
-  stopChecking(): void {
-    if (this.checkInterval) {
-      clearInterval(this.checkInterval);
-      this.checkInterval = null;
-    }
+    logger.info("Delayed transaction service initialized with durable framework");
   }
 
   /**
@@ -156,146 +54,48 @@ export class DelayedTransactionService {
     userId: string,
     transactionXdr: string,
     config: DelayedTransactionConfig
-  ): Promise<DelayedTransaction> {
-    // Validate config based on strategy
+  ): Promise<any> {
     this.validateConfig(config);
 
-    // Validate the XDR
     try {
-      const _tx = StellarSdk.Transaction.fromXDR(transactionXdr, "Test SDF Network ; September 2015");
+      StellarSdk.Transaction.fromXDR(transactionXdr, StellarSdk.Networks.TESTNET);
     } catch (error) {
       throw new Error(`Invalid transaction XDR: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
 
-    const delayedTx: DelayedTransaction = {
-      id: this.generateId(),
-      userId,
-      transactionXdr,
-      config,
-      status: "pending",
-      createdAt: Date.now(),
-      retries: 0,
-    };
-
-    // Set initial status based on strategy
-    if (config.strategy === "scheduled" && config.scheduledAt) {
-      if (config.scheduledAt <= Date.now()) {
-        // Already past scheduled time, submit now
-        delayedTx.status = "submitting";
-      } else {
-        delayedTx.status = "pending";
-      }
-    } else if (config.strategy === "fee_based") {
-      delayedTx.status = "waiting_for_fee";
-    } else if (config.strategy === "congestion_based") {
-      delayedTx.status = "waiting_for_congestion";
-    }
-
-    this.pendingDelayedTxs.set(delayedTx.id, delayedTx);
-    
-    logger.info(`Created delayed transaction ${delayedTx.id} with strategy ${config.strategy}`);
-    
-    // If already ready to submit, try immediately
-    if (delayedTx.status === "submitting") {
-      this.submitTransaction(delayedTx.id);
-    }
-
-    return delayedTx;
+    return durableOperationService.execute({
+      category: "delayed_transaction",
+      payload: { userId, transactionXdr },
+      scheduledAt: config.strategy === "scheduled" ? new Date(config.scheduledAt!) : undefined,
+      conditions: config.strategy !== "scheduled" ? config : undefined,
+      maxRetries: config.maxRetries,
+    });
   }
 
-  /**
-   * Validate delay configuration
-   */
+  private async executeTransaction(xdr: string): Promise<any> {
+    const tx = StellarSdk.Transaction.fromXDR(xdr, StellarSdk.Networks.TESTNET);
+    const result = await this.server.submitTransaction(tx);
+    return {
+      hash: result.hash,
+      ledger: result.ledger,
+      envelopeXdr: result.envelope_xdr,
+    };
+  }
+
   private validateConfig(config: DelayedTransactionConfig): void {
     if (!config.strategy) {
       throw new Error("Delay strategy is required");
     }
 
-    switch (config.strategy) {
-      case "scheduled":
-        if (!config.scheduledAt) {
-          throw new Error("scheduledAt is required for 'scheduled' strategy");
-        }
-        if (config.scheduledAt < Date.now()) {
-          throw new Error("scheduledAt must be in the future");
-        }
-        break;
-        
-      case "fee_based":
-        if (!config.targetFee && !config.maxFee) {
-          config.targetFee = this.DEFAULT_TARGET_FEE;
-          config.maxFee = this.DEFAULT_MAX_FEE;
-        }
-        break;
-        
-      case "congestion_based":
-        // No specific validation needed
-        break;
+    if (config.strategy === "scheduled") {
+      if (!config.scheduledAt) throw new Error("scheduledAt is required for 'scheduled' strategy");
+      if (config.scheduledAt < Date.now()) throw new Error("scheduledAt must be in the future");
     }
   }
+}
 
-  /**
-   * Process all pending delayed transactions
-   */
-  private async processDelayedTransactions(): Promise<void> {
-    const txsToRemove: string[] = [];
+export const delayedTransactionService = new DelayedTransactionService();
 
-    for (const [id, delayedTx] of this.pendingDelayedTxs.entries()) {
-      if (delayedTx.status === "submitted" || delayedTx.status === "failed" || delayedTx.status === "cancelled") {
-        txsToRemove.push(id);
-        continue;
-      }
-
-      // Check if ready to submit based on strategy
-      const shouldSubmit = await this.checkShouldSubmit(delayedTx);
-      
-      if (shouldSubmit) {
-        await this.submitTransaction(id);
-      }
-    }
-
-    // Clean up processed transactions
-    for (const id of txsToRemove) {
-      this.pendingDelayedTxs.delete(id);
-    }
-  }
-
-  /**
-   * Check if a delayed transaction should be submitted
-   */
-  private async checkShouldSubmit(delayedTx: DelayedTransaction): Promise<boolean> {
-    const { config } = delayedTx;
-
-    switch (config.strategy) {
-      case "scheduled":
-        // Submit if scheduled time has passed
-        return config.scheduledAt ? Date.now() >= config.scheduledAt : false;
-
-      case "fee_based":
-        // Submit if current fee is below target
-        return await this.isFeeAcceptable(config);
-
-      case "congestion_based":
-        // Submit if network is not congested
-        return await this.isNetworkCongestionAcceptable();
-
-      default:
-        return false;
-    }
-  }
-
-  /**
-   * Check if current fee is acceptable
-   */
-  private async isFeeAcceptable(config: DelayedTransactionConfig): Promise<boolean> {
-    const feeInfo = await this.getCurrentFee();
-    
-    const targetFee = config.targetFee || this.DEFAULT_TARGET_FEE;
-    const maxFee = config.maxFee || this.DEFAULT_MAX_FEE;
-
-    // If current fee is within range, submit
-    return feeInfo.fee <= maxFee;
-  }
 
   /**
    * Check if network congestion is acceptable

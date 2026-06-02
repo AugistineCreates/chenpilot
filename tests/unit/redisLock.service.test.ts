@@ -1,6 +1,5 @@
 import { RedisLockService } from "../../src/services/lock/redisLock.service";
 
-// Mock Redis for testing
 const mockRedis = {
   set: jest.fn(),
   get: jest.fn(),
@@ -12,12 +11,13 @@ const mockRedis = {
   ping: jest.fn(),
   quit: jest.fn(),
   on: jest.fn(),
+  scan: jest.fn(),
 };
 
-// Mock the Redis module
-jest.mock("ioredis", () => {
-  return jest.fn().mockImplementation(() => mockRedis);
-});
+jest.mock("../../src/services/redis/client", () => ({
+  getRedisClient: jest.fn(() => mockRedis),
+  healthCheckRedis: jest.fn(),
+}));
 
 describe("RedisLockService", () => {
   let lockService: RedisLockService;
@@ -25,10 +25,6 @@ describe("RedisLockService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     lockService = new RedisLockService();
-  });
-
-  afterEach(async () => {
-    await lockService.disconnect();
   });
 
   describe("acquireLock", () => {
@@ -41,6 +37,7 @@ describe("RedisLockService", () => {
       expect(result.lockKey).toBe("lock:resource1");
       expect(result.lockValue).toBeDefined();
       expect(result.ttl).toBe(30000);
+      expect(result.acquiredAt).toBeGreaterThan(0);
       expect(mockRedis.set).toHaveBeenCalledWith(
         "lock:resource1",
         expect.stringMatching(/^user1:[a-f0-9-]+:\d+$/),
@@ -128,6 +125,33 @@ describe("RedisLockService", () => {
     });
   });
 
+  describe("forceReleaseLock", () => {
+    it("should force release a lock", async () => {
+      mockRedis.del.mockResolvedValue(1);
+
+      const result = await lockService.forceReleaseLock("resource1");
+
+      expect(result).toBe(true);
+      expect(mockRedis.del).toHaveBeenCalledWith("lock:resource1");
+    });
+
+    it("should return false when lock does not exist", async () => {
+      mockRedis.del.mockResolvedValue(0);
+
+      const result = await lockService.forceReleaseLock("resource1");
+
+      expect(result).toBe(false);
+    });
+
+    it("should handle Redis errors during force release", async () => {
+      mockRedis.del.mockRejectedValue(new Error("Redis error"));
+
+      const result = await lockService.forceReleaseLock("resource1");
+
+      expect(result).toBe(false);
+    });
+  });
+
   describe("extendLock", () => {
     it("should extend lock successfully when owned by identifier", async () => {
       mockRedis.eval.mockResolvedValue(1);
@@ -206,6 +230,7 @@ describe("RedisLockService", () => {
       expect(result).toEqual({
         key: "resource1",
         value: mockValue,
+        ownerId: "user1",
         ttl: 45000,
         createdAt: 1640995200000,
       });
@@ -239,38 +264,69 @@ describe("RedisLockService", () => {
     });
   });
 
-  describe("healthCheck", () => {
-    it("should return true when Redis is healthy", async () => {
-      mockRedis.ping.mockResolvedValue("PONG");
+  describe("cleanupStaleLocks", () => {
+    it("should clean up locks without TTL", async () => {
+      mockRedis.scan
+        .mockResolvedValueOnce(["0", ["lock:stale1", "lock:stale2"]])
+        .mockResolvedValueOnce(["0", []]);
+      mockRedis.ttl.mockResolvedValue(-1);
 
-      const result = await lockService.healthCheck();
+      const cleaned = await lockService.cleanupStaleLocks();
 
-      expect(result).toBe(true);
-      expect(mockRedis.ping).toHaveBeenCalled();
+      expect(cleaned).toBe(2);
+      expect(mockRedis.del).toHaveBeenCalledTimes(2);
     });
 
-    it("should return false when Redis is unhealthy", async () => {
-      mockRedis.ping.mockRejectedValue(new Error("Redis down"));
+    it("should not clean locks with valid TTL", async () => {
+      mockRedis.scan
+        .mockResolvedValueOnce(["0", ["lock:active1"]])
+        .mockResolvedValueOnce(["0", []]);
+      mockRedis.ttl.mockResolvedValue(25);
 
-      const result = await lockService.healthCheck();
+      const cleaned = await lockService.cleanupStaleLocks();
 
-      expect(result).toBe(false);
+      expect(cleaned).toBe(0);
+      expect(mockRedis.del).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("instrumentation counters", () => {
+    it("should track acquire success counter", async () => {
+      mockRedis.set.mockResolvedValue("OK");
+      await lockService.acquireLock("r1", "u1");
+      const counters = lockService.getCounters();
+      expect(counters.acquireSuccess).toBe(1);
+    });
+
+    it("should track acquire failure counter", async () => {
+      mockRedis.set.mockResolvedValue(null);
+      await lockService.acquireLock("r1", "u1", {
+        maxRetries: 1,
+        retryDelay: 10,
+      });
+      const counters = lockService.getCounters();
+      expect(counters.acquireFailure).toBe(1);
+    });
+
+    it("should reset counters", async () => {
+      mockRedis.set.mockResolvedValue("OK");
+      await lockService.acquireLock("r1", "u1");
+      lockService.resetCounters();
+      const counters = lockService.getCounters();
+      expect(counters.acquireSuccess).toBe(0);
     });
   });
 
   describe("integration scenarios", () => {
     it("should handle complete lock lifecycle", async () => {
-      // Acquire lock
       mockRedis.set.mockResolvedValue("OK");
       const acquireResult = await lockService.acquireLock("resource1", "user1");
       expect(acquireResult.acquired).toBe(true);
 
-      // Check if locked
       mockRedis.exists.mockResolvedValue(1);
       const isLocked = await lockService.isLocked("resource1");
       expect(isLocked).toBe(true);
 
-      // Extend lock
       mockRedis.eval.mockResolvedValue(1);
       const extended = await lockService.extendLock(
         "resource1",
@@ -279,19 +335,16 @@ describe("RedisLockService", () => {
       );
       expect(extended).toBe(true);
 
-      // Release lock
       mockRedis.eval.mockResolvedValue(1);
       const released = await lockService.releaseLock("resource1", "user1");
       expect(released).toBe(true);
 
-      // Check if unlocked
       mockRedis.exists.mockResolvedValue(0);
       const isStillLocked = await lockService.isLocked("resource1");
       expect(isStillLocked).toBe(false);
     });
 
     it("should prevent concurrent access to same resource", async () => {
-      // First user acquires lock
       mockRedis.set.mockResolvedValueOnce("OK").mockResolvedValueOnce(null);
 
       const user1Result = await lockService.acquireLock("resource1", "user1", {
@@ -300,7 +353,6 @@ describe("RedisLockService", () => {
       });
       expect(user1Result.acquired).toBe(true);
 
-      // Second user fails to acquire same lock
       const user2Result = await lockService.acquireLock("resource1", "user2", {
         maxRetries: 1,
         retryDelay: 10,

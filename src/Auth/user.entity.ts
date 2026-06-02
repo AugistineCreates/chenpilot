@@ -27,9 +27,6 @@ export class User {
   @Index()
   address!: string;
 
-  @Column({ type: "varchar" })
-  pk!: string;
-
   @Column({ type: "boolean", default: false })
   isDeployed!: boolean;
 
@@ -39,7 +36,7 @@ export class User {
   @Column({ type: "boolean", default: false })
   isEmailVerified!: boolean;
 
-  @Column({ type: "varchar", default: "STRK" })
+  @Column({ type: "varchar", select: false })
   encryptedPrivateKey!: string;
 
   @Column({ type: "varchar", default: "XLM" })

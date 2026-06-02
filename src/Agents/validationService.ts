@@ -160,7 +160,7 @@ function validateSwapIntent(
     }
   }
 
-  if (!payload.amount) {
+  if (payload.amount === undefined || payload.amount === null) {
     errors.push({
       field: "amount",
       message: "Amount is required for swap operations",

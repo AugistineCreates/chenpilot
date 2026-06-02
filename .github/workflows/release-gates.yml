@@ -1,0 +1,105 @@
+name: Release Gates
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  backend-health:
+    name: Backend compiler and tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript compiler gate
+        run: npm run build:check
+
+      - name: Backend unit tests
+        run: npm test -- --runInBand
+
+  sdk-health:
+    name: SDK drift and package health
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/sdk/package-lock.json
+
+      - name: Install SDK dependencies
+        run: npm ci
+        working-directory: packages/sdk
+
+      - name: SDK compiler gate
+        run: npm run type-check
+        working-directory: packages/sdk
+
+      - name: SDK tests
+        run: npm test -- --runInBand
+        working-directory: packages/sdk
+
+      - name: SDK artifact dry run
+        run: npm pack --dry-run
+        working-directory: packages/sdk
+
+  contract-health:
+    name: Soroban contract compatibility
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cargo check
+        run: cargo check --manifest-path contracts/Cargo.toml --workspace
+
+      - name: Contract tests
+        run: cargo test --manifest-path contracts/Cargo.toml --workspace
+
+  root-artifact-health:
+    name: Backend artifact integrity
+    runs-on: ubuntu-latest
+    needs: backend-health
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production artifact
+        run: npm run build
+
+      - name: Package dry run
+        run: npm pack --dry-run

@@ -80,8 +80,12 @@ export default class UserService {
   }
 
   async getDecryptedPrivateKey(userId: string): Promise<string | null> {
-    const user = await this.getUserById(userId);
-    if (!user) return null;
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ["encryptedPrivateKey"],
+    });
+
+    if (!user || !user.encryptedPrivateKey) return null;
     return decrypt(user.encryptedPrivateKey);
   }
 }

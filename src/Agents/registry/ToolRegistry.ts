@@ -5,12 +5,16 @@ import {
   ToolPayload,
   ToolResult,
 } from "./ToolMetadata";
-import { withTimeout, TimeoutError } from "../../utils/timeout";
+import { withTimeout } from "../../utils/timeout";
 import config from "../../config/config";
 import logger from "../../config/logger";
+import { UserRole } from "../../Auth/roles";
+import { AppDataSource } from "../../config/Datasource";
+import { User } from "../../Auth/user.entity";
 
 export class ToolRegistry {
-  private tools: Map<string, ToolRegistryEntry> = new Map();
+  // name -> version -> Entry
+  private tools: Map<string, Map<string, ToolRegistryEntry>> = new Map();
   private categories: Set<string> = new Set();
 
   /**
@@ -19,43 +23,33 @@ export class ToolRegistry {
   register<T extends ToolPayload>(tool: ToolDefinition<T>): void {
     const { metadata } = tool;
     const name = metadata.name;
-
-    if (this.tools.has(name)) {
-      throw new Error(`Tool '${name}' is already registered`);
-    }
+    const version = metadata.version;
 
     this.validateToolMetadata(metadata);
 
-    this.tools.set(name, {
+    if (!this.tools.has(name)) {
+      this.tools.set(name, new Map());
+    }
+
+    const versionMap = this.tools.get(name)!;
+    if (versionMap.has(version)) {
+      throw new Error(`Tool '${name}' version '${version}' is already registered`);
+    }
+
+    versionMap.set(version, {
       name,
+      version,
       definition: tool as ToolDefinition,
       enabled: true,
+      registeredAt: new Date(),
     });
 
     this.categories.add(metadata.category);
+    logger.info(`Registered tool: ${name}@${version}`);
   }
 
   /**
-   * Register a custom tool dynamically without modifying core registry
-   * This allows external tools to be added at runtime
-   *
-   * @param tool - The tool definition to register
-   * @param options - Optional configuration
-   * @param options.overwrite - If true, replaces existing tool with same name
-   * @param options.namespace - Optional namespace prefix for the tool name
-   *
-   * @example
-   * // Register a simple custom tool
-   * toolRegistry.registerCustomTool(myCustomTool);
-   *
-   * @example
-   * // Register with namespace
-   * toolRegistry.registerCustomTool(myTool, { namespace: 'custom' });
-   * // Tool will be registered as 'custom:myTool'
-   *
-   * @example
-   * // Overwrite existing tool
-   * toolRegistry.registerCustomTool(updatedTool, { overwrite: true });
+   * Register a custom tool dynamically
    */
   registerCustomTool<T extends ToolPayload>(
     tool: ToolDefinition<T>,
@@ -67,128 +61,95 @@ export class ToolRegistry {
     const { metadata } = tool;
     let toolName = metadata.name;
 
-    // Apply namespace if provided
     if (options?.namespace) {
       toolName = `${options.namespace}:${toolName}`;
-      // Create a new metadata object with namespaced name
       tool = {
         ...tool,
-        metadata: {
-          ...metadata,
-          name: toolName,
-        },
+        metadata: { ...metadata, name: toolName },
       };
     }
 
-    // Check if tool already exists
-    if (this.tools.has(toolName)) {
-      if (!options?.overwrite) {
-        throw new Error(
-          `Tool '${toolName}' is already registered. Use overwrite option to replace it.`
-        );
-      }
-      // Unregister existing tool first
-      this.unregister(toolName);
-    }
-
+    const version = tool.metadata.version;
     this.validateToolMetadata(tool.metadata);
 
-    this.tools.set(toolName, {
+    if (!this.tools.has(toolName)) {
+      this.tools.set(toolName, new Map());
+    }
+
+    const versionMap = this.tools.get(toolName)!;
+    if (versionMap.has(version) && !options?.overwrite) {
+      throw new Error(
+        `Tool '${toolName}' version '${version}' is already registered. Use overwrite option.`
+      );
+    }
+
+    versionMap.set(version, {
       name: toolName,
+      version,
       definition: tool as ToolDefinition,
       enabled: true,
+      registeredAt: new Date(),
     });
 
     this.categories.add(tool.metadata.category);
   }
 
   /**
-   * Register multiple custom tools at once
-   *
-   * @param tools - Array of tool definitions to register
-   * @param options - Optional configuration applied to all tools
-   * @returns Array of successfully registered tool names
-   *
-   * @example
-   * const tools = [tool1, tool2, tool3];
-   * const registered = toolRegistry.registerCustomTools(tools, { namespace: 'plugin' });
+   * Unregister a tool version or all versions
    */
-  registerCustomTools<T extends ToolPayload>(
-    tools: ToolDefinition<T>[],
-    options?: {
-      overwrite?: boolean;
-      namespace?: string;
-      continueOnError?: boolean;
+  unregister(toolName: string, version?: string): boolean {
+    if (!version) {
+      return this.tools.delete(toolName);
     }
-  ): string[] {
-    const registered: string[] = [];
-    const errors: Array<{ toolName: string; error: string }> = [];
-
-    for (const tool of tools) {
-      try {
-        this.registerCustomTool(tool, options);
-        registered.push(
-          options?.namespace
-            ? `${options.namespace}:${tool.metadata.name}`
-            : tool.metadata.name
-        );
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        errors.push({
-          toolName: tool.metadata.name,
-          error: errorMessage,
-        });
-
-        if (!options?.continueOnError) {
-          throw new Error(
-            `Failed to register tool '${tool.metadata.name}': ${errorMessage}`
-          );
-        }
-      }
+    const versionMap = this.tools.get(toolName);
+    if (versionMap) {
+      return versionMap.delete(version);
     }
-
-    if (errors.length > 0 && options?.continueOnError) {
-      console.warn(
-        `Some tools failed to register: ${JSON.stringify(errors, null, 2)}`
-      );
-    }
-
-    return registered;
+    return false;
   }
 
   /**
-   * Check if a tool is registered
-   *
-   * @param toolName - Name of the tool to check
-   * @returns True if the tool exists in the registry
+   * Get a tool by name and optionally version
    */
-  hasCustomTool(toolName: string): boolean {
-    return this.tools.has(toolName);
-  }
+  getTool(toolName: string, version?: string): ToolDefinition | undefined {
+    // Check if toolName includes @version
+    if (!version && toolName.includes("@")) {
+      [toolName, version] = toolName.split("@");
+    }
 
-  /**
-   * Unregister a tool from the registry
-   */
-  unregister(toolName: string): boolean {
-    return this.tools.delete(toolName);
-  }
+    const versionMap = this.tools.get(toolName);
+    if (!versionMap) return undefined;
 
-  /**
-   * Get a tool by name
-   */
-  getTool(toolName: string): ToolDefinition | undefined {
-    const entry = this.tools.get(toolName);
+    if (version) {
+      const entry = versionMap.get(version);
+      return entry?.enabled ? entry.definition : undefined;
+    }
+
+    // Default to latest version (simple string sort for now)
+    const versions = Array.from(versionMap.keys()).sort();
+    const latestVersion = versions[versions.length - 1];
+    const entry = versionMap.get(latestVersion);
     return entry?.enabled ? entry.definition : undefined;
   }
 
   /**
-   * Get all registered tools
+   * Get all registered tools (latest versions only by default)
    */
-  getAllTools(): ToolDefinition[] {
-    return Array.from(this.tools.values())
-      .filter((entry) => entry.enabled)
-      .map((entry) => entry.definition);
+  getAllTools(includeAllVersions = false): ToolDefinition[] {
+    const allTools: ToolDefinition[] = [];
+    
+    for (const [name, versionMap] of this.tools.entries()) {
+      if (includeAllVersions) {
+        for (const entry of versionMap.values()) {
+          if (entry.enabled) allTools.push(entry.definition);
+        }
+      } else {
+        const latest = this.getTool(name);
+        if (latest) allTools.push(latest);
+      }
+    }
+    
+    return allTools;
   }
 
   /**
@@ -208,7 +169,7 @@ export class ToolRegistry {
   }
 
   /**
-   * Execute a tool with payload validation and timeout
+   * Execute a tool with governance checks
    */
   async executeTool(
     toolName: string,
@@ -216,63 +177,105 @@ export class ToolRegistry {
     userId: string,
     timeoutMs?: number
   ): Promise<ToolResult> {
-    const tool = this.getTool(toolName);
+    let actualToolName = toolName;
+    let version: string | undefined;
 
-    if (!tool) {
-      throw new ToolExecutionError(`Tool '${toolName}' not found or disabled`);
+    if (toolName.includes("@")) {
+      [actualToolName, version] = toolName.split("@");
     }
 
-    // Validate payload if tool has validation
+    const versionMap = this.tools.get(actualToolName);
+    if (!versionMap) {
+      throw new ToolExecutionError(`Tool '${actualToolName}' not found`);
+    }
+
+    // Resolve version
+    let entry: ToolRegistryEntry | undefined;
+    if (version) {
+      entry = versionMap.get(version);
+    } else {
+      const versions = Array.from(versionMap.keys()).sort();
+      const latestVersion = versions[versions.length - 1];
+      entry = versionMap.get(latestVersion);
+    }
+
+    if (!entry || !entry.enabled) {
+      throw new ToolExecutionError(`Tool '${actualToolName}${version ? "@" + version : ""}' not found or disabled`);
+    }
+
+    const tool = entry.definition;
+
+    // Governance: Deprecation check
+    if (tool.metadata.deprecated) {
+      const warning = `Tool '${actualToolName}' is deprecated. Please migrate to '${tool.metadata.replacementTool || "latest version"}'.`;
+      logger.warn(warning, { toolName: actualToolName, userId });
+    }
+
+    // Governance: Authorization check
+    await this.authorizeTool(tool, userId);
+
+    // Validate payload
     if (tool.validate) {
       const validation = tool.validate(payload);
       if (!validation.valid) {
         throw new ToolExecutionError(
-          `Invalid payload for tool '${toolName}': ${validation.errors.join(
-            ", "
-          )}`
+          `Invalid payload for tool '${actualToolName}': ${validation.errors.join(", ")}`
         );
       }
     }
 
     const timeout = timeoutMs || config.agent.timeouts.toolExecution;
-    logger.debug("Executing tool with timeout", { toolName, userId, timeout });
+    logger.info("Governed tool execution starting", { 
+      toolName: actualToolName, 
+      version: entry.version, 
+      userId, 
+      riskLevel: tool.metadata.riskLevel 
+    });
 
     try {
       const result = await withTimeout(tool.execute(payload, userId), {
         timeoutMs: timeout,
-        operation: `Tool execution: ${toolName}`,
-        onTimeout: () => {
-          logger.error("Tool execution timeout", { toolName, userId, timeout });
-        },
+        operation: `Tool execution: ${actualToolName}@${entry.version}`,
       });
 
-      // Update last used timestamp
-      const entry = this.tools.get(toolName);
-      if (entry) {
-        entry.lastUsed = new Date();
-      }
-
+      entry.lastUsed = new Date();
       return result;
     } catch (error) {
-      if (error instanceof TimeoutError) {
-        const toolError = new ToolExecutionError(
-          `Tool '${toolName}' execution timed out after ${timeout}ms`
-        );
-        toolError.toolName = toolName;
-        toolError.payload = payload;
-        toolError.userId = userId;
-        throw toolError;
-      }
-
       const toolError = new ToolExecutionError(
-        `Tool execution failed: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
+        error instanceof Error ? error.message : "Unknown error"
       );
-      toolError.toolName = toolName;
+      toolError.toolName = actualToolName;
       toolError.payload = payload;
       toolError.userId = userId;
       throw toolError;
+    }
+  }
+
+  /**
+   * Authorize user for tool execution
+   */
+  private async authorizeTool(tool: ToolDefinition, userId: string): Promise<void> {
+    const requiredPermissions = tool.metadata.permissions;
+    if (!requiredPermissions || requiredPermissions.length === 0) {
+      return;
+    }
+
+    const userRepo = AppDataSource.getRepository(User);
+    const user = await userRepo.findOne({ where: { userId } });
+
+    if (!user) {
+      throw new ToolExecutionError(`User ${userId} not found for authorization`);
+    }
+
+    const userRole = user.role as UserRole;
+    
+    for (const permission of requiredPermissions) {
+      if (permission === "admin" && userRole !== UserRole.ADMIN) {
+        throw new ToolExecutionError(`Insufficient permissions for tool ${tool.metadata.name}: requires admin`);
+      }
+      if (permission === "moderator" && (userRole !== UserRole.MODERATOR && userRole !== UserRole.ADMIN)) {
+        throw new ToolExecutionError(`Insufficient permissions for tool ${tool.metadata.name}: requires moderator`);
+      }
     }
   }
 
@@ -291,48 +294,8 @@ export class ToolRegistry {
     return this.getAllTools().filter(
       (tool) =>
         tool.metadata.name.toLowerCase().includes(lowerQuery) ||
-        tool.metadata.description.toLowerCase().includes(lowerQuery) ||
-        tool.metadata.examples.some((example) =>
-          example.toLowerCase().includes(lowerQuery)
-        )
+        tool.metadata.description.toLowerCase().includes(lowerQuery)
     );
-  }
-
-  /**
-   * Enable/disable a tool
-   */
-  setToolEnabled(toolName: string, enabled: boolean): boolean {
-    const entry = this.tools.get(toolName);
-    if (entry) {
-      entry.enabled = enabled;
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Get registry statistics
-   */
-  getStats(): {
-    totalTools: number;
-    enabledTools: number;
-    categories: number;
-    toolsByCategory: Record<string, number>;
-  } {
-    const allTools = this.getAllTools();
-    const toolsByCategory: Record<string, number> = {};
-
-    allTools.forEach((tool) => {
-      const category = tool.metadata.category;
-      toolsByCategory[category] = (toolsByCategory[category] || 0) + 1;
-    });
-
-    return {
-      totalTools: this.tools.size,
-      enabledTools: allTools.length,
-      categories: this.categories.size,
-      toolsByCategory,
-    };
   }
 
   /**
@@ -342,42 +305,60 @@ export class ToolRegistry {
     if (!metadata.name || typeof metadata.name !== "string") {
       throw new Error("Tool metadata must have a valid name");
     }
-
-    if (!metadata.description || typeof metadata.description !== "string") {
-      throw new Error("Tool metadata must have a valid description");
-    }
-
-    if (!metadata.parameters || typeof metadata.parameters !== "object") {
-      throw new Error("Tool metadata must have valid parameters");
-    }
-
-    if (!Array.isArray(metadata.examples)) {
-      throw new Error("Tool metadata must have valid examples array");
-    }
-
-    if (!metadata.category || typeof metadata.category !== "string") {
-      throw new Error("Tool metadata must have a valid category");
-    }
-
     if (!metadata.version || typeof metadata.version !== "string") {
       throw new Error("Tool metadata must have a valid version");
     }
+    if (!metadata.riskLevel) {
+      throw new Error(`Tool '${metadata.name}' must have a riskLevel`);
+    }
+    if (!Array.isArray(metadata.capabilities)) {
+      throw new Error(`Tool '${metadata.name}' must have a capabilities array`);
+    }
+    if (!metadata.description || typeof metadata.description !== "string") {
+      throw new Error("Tool metadata must have a valid description");
+    }
+    if (!metadata.parameters || typeof metadata.parameters !== "object") {
+      throw new Error("Tool metadata must have valid parameters");
+    }
+  }
 
-    // Validate parameter definitions
-    Object.entries(metadata.parameters).forEach(([paramName, paramDef]) => {
-      if (
-        !paramDef.type ||
-        !paramDef.description ||
-        typeof paramDef.required !== "boolean"
-      ) {
-        throw new Error(`Invalid parameter definition for '${paramName}'`);
+  /**
+   * Performs full registry validation to ensure metadata integrity
+   * and capability consistency.
+   */
+  validateRegistry(): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    const tools = this.getAllTools(true);
+
+    if (tools.length === 0) {
+      errors.push("Registry is empty");
+    }
+
+    tools.forEach(tool => {
+      try {
+        this.validateToolMetadata(tool.metadata);
+      } catch (err) {
+        errors.push(`Metadata validation failed for ${tool.metadata.name}: ${err instanceof Error ? err.message : "Unknown error"}`);
+      }
+
+      // Check for deprecation loops or missing replacements
+      if (tool.metadata.deprecated && tool.metadata.replacementTool) {
+        const replacement = this.getTool(tool.metadata.replacementTool);
+        if (!replacement) {
+          errors.push(`Tool ${tool.metadata.name} refers to missing replacement: ${tool.metadata.replacementTool}`);
+        }
       }
     });
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
   }
 }
 
 // Custom error class for tool execution errors
-class ToolExecutionError extends Error {
+export class ToolExecutionError extends Error {
   public toolName: string = "";
   public payload: Record<string, unknown> = {};
   public userId: string = "";

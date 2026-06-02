@@ -40,6 +40,13 @@ if (jwtSecret.length < 32) {
   );
 }
 
+const encryptionKey = process.env.ENCRYPTION_KEY;
+if (!encryptionKey || !/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
+  throw new Error(
+    "ENCRYPTION_KEY must be set and be a 64-character hex string"
+  );
+}
+
 // Get Stellar network from environment, default to testnet
 const stellarNetwork: StellarNetwork =
   (process.env.STELLAR_NETWORK as StellarNetwork) || "testnet";

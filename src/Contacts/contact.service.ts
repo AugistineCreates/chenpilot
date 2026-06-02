@@ -17,6 +17,7 @@ export default class ContactService {
   ): Promise<Contact> {
     const contact = this.contactRepository.create({
       ...payload,
+      userId,
     });
     return this.contactRepository.save(contact);
   }

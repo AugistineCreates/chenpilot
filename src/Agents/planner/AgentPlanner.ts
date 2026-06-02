@@ -35,6 +35,7 @@ export interface PlanStep extends WorkflowStep {
   dependencies?: number[];
   estimatedDuration?: number;
   rollbackAction?: WorkflowStep;
+  requiresApproval?: boolean;
 }
 
 export interface ExecutionPlan {
@@ -151,24 +152,41 @@ Output JSON format:
     context: PlannerContext
   ): ExecutionPlan {
     const planId = `plan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const steps: PlanStep[] = workflowPlan.workflow.map((step, index) => ({
-      stepNumber: index + 1,
-      action: step.action,
-      payload: step.payload,
-      description: this.generateStepDescription(step),
-      estimatedDuration: 3000,
-      dependencies: [],
-    }));
+    const steps: PlanStep[] = workflowPlan.workflow.map((step, index) => {
+      const isHighRisk = this.isHighRiskAction(step);
+      return {
+        stepNumber: index + 1,
+        action: step.action,
+        payload: step.payload,
+        description: this.generateStepDescription(step),
+        estimatedDuration: 3000,
+        dependencies: [],
+        requiresApproval: isHighRisk,
+      };
+    });
+
+    const riskLevel = this.assessRiskLevel(steps);
 
     return {
       planId,
       steps,
       totalSteps: steps.length,
       estimatedDuration: steps.length * 3000,
-      riskLevel: this.assessRiskLevel(steps),
-      requiresApproval: steps.length > 3,
+      riskLevel,
+      requiresApproval: riskLevel === "high" || steps.some(s => s.requiresApproval),
       summary: `Plan for "${context.userInput}"`,
     };
+  }
+
+  private isHighRiskAction(step: WorkflowStep): boolean {
+    const highRiskActions = ["swap", "transfer", "withdraw", "approve"];
+    if (highRiskActions.includes(step.action.toLowerCase())) {
+      // Check for large amounts if available
+      const amount = (step.payload as any)?.amount;
+      if (amount && parseFloat(amount) > 1000) return true;
+      return true; // Default high risk for these actions for now
+    }
+    return false;
   }
 
   private generateStepDescription(step: WorkflowStep): string {

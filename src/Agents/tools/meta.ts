@@ -21,6 +21,9 @@ export class MetaTool extends BaseTool {
     ],
     category: "meta",
     version: "1.0.0",
+    riskLevel: "low",
+    capabilities: ["agent_info"],
+    permissions: [],
   };
 
   async execute(

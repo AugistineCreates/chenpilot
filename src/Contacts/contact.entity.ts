@@ -23,6 +23,10 @@ export class Contact {
   @Column({ type: "varchar", default: "STRK" })
   tokenType!: string;
 
+  @Column("uuid", { nullable: true })
+  @Index()
+  userId?: string;
+
   @CreateDateColumn()
   createdAt!: Date;
 
