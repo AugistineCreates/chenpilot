@@ -239,7 +239,7 @@ describe("validateDeFiIntent", () => {
       const result = validateDeFiIntent(intent);
 
       expect(result.isValid).toBe(true);
-      expect(result.warnings).toContain(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining("Large swap amount detected")
       );
     });
@@ -318,7 +318,7 @@ describe("validateDeFiIntent", () => {
       const result = validateDeFiIntent(intent);
 
       expect(result.isValid).toBe(true);
-      expect(result.warnings).toContain(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining("High slippage tolerance")
       );
     });
@@ -584,7 +584,7 @@ describe("validateDeFiIntent", () => {
       const result = validateDeFiIntent(intent);
 
       expect(result.isValid).toBe(true);
-      expect(result.warnings).toContain(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining("No collateral specified")
       );
     });
@@ -602,7 +602,7 @@ describe("validateDeFiIntent", () => {
       const result = validateDeFiIntent(intent);
 
       expect(result.isValid).toBe(true);
-      expect(result.warnings).toContain(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining("Large borrow amount")
       );
     });
@@ -637,7 +637,7 @@ describe("validateDeFiIntent", () => {
       const result = validateDeFiIntent(intent);
 
       expect(result.isValid).toBe(true);
-      expect(result.warnings).toContain(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining("No debt/position ID specified")
       );
     });

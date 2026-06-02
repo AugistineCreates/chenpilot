@@ -148,6 +148,8 @@ export function buildTrustlineRemovalOps(
       limit: "0",
     })
   );
+}
+
 /**
  * Creates a ChangeTrust operation for a given asset.
  * 
