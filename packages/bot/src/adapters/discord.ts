@@ -56,6 +56,11 @@ const MARKET_OVERVIEW_ENABLED = process.env.DISCORD_MARKET_OVERVIEW_ENABLED === 
 const MARKET_OVERVIEW_CHANNEL_ID = process.env.DISCORD_MARKET_OVERVIEW_CHANNEL_ID || '';
 const MARKET_OVERVIEW_TIME = process.env.DISCORD_MARKET_OVERVIEW_TIME || '09:00'; // Format: HH:MM in UTC
 
+// Transaction thread logging (#113)
+const TRANSACTION_THREAD_LOGGING_ENABLED = process.env.DISCORD_TRANSACTION_LOG_THREADS_ENABLED !== 'false';
+const TRANSACTION_LOG_CHANNEL_ID = process.env.DISCORD_TRANSACTION_LOG_CHANNEL_ID || '';
+const TRANSACTION_THREAD_ARCHIVE_MINUTES = Number(process.env.DISCORD_TRANSACTION_THREAD_ARCHIVE_MINUTES || '10080'); // default 7 days
+
 function isDM(message: Message): boolean {
   return message.channel.type === ChannelType.DM;
 }
@@ -83,6 +88,8 @@ export class DiscordAdapter {
   private marketOverviewService: MarketOverviewService;
   // #118: User preferred currency (userId -> currency)
   private userCurrency: Map<string, 'USD' | 'XLM' | 'BTC'> = new Map();
+  // #113: Map of userId -> threadId for transaction logs
+  private transactionThreads: Map<string, string> = new Map();
   // #119: Active price alerts
   private priceAlerts: Map<string, PriceAlert> = new Map();
   private alertCheckInterval?: ReturnType<typeof setInterval>;
@@ -1102,6 +1109,18 @@ export class DiscordAdapter {
 
     try {
       await channel.send(message);
+      // Additionally log to a dedicated transaction thread if configured
+      if (TRANSACTION_THREAD_LOGGING_ENABLED && TRANSACTION_LOG_CHANNEL_ID) {
+        try {
+          const thread = await this.getOrCreateTransactionThread(userId, data.from);
+          if (thread) {
+            const detailed = this.formatDetailedTransactionLog(data);
+            await thread.send(detailed);
+          }
+        } catch (e) {
+          console.error('Error logging transaction to thread:', e);
+        }
+      }
       await this.logAuditAction({
         action: 'SEND_TRANSACTION_NOTIFICATION',
         triggeredBy: userId,
@@ -1114,6 +1133,56 @@ export class DiscordAdapter {
       console.error("Error sending Discord notification:", error);
       return false;
     }
+  }
+
+  private async getOrCreateTransactionThread(userId: string, username?: string): Promise<ThreadChannel | null> {
+    if (!TRANSACTION_THREAD_LOGGING_ENABLED || !TRANSACTION_LOG_CHANNEL_ID) return null;
+    try {
+      const ch = this.client.channels.cache.get(TRANSACTION_LOG_CHANNEL_ID) as TextChannel | undefined;
+      if (!ch) return null;
+
+      const existingThreadId = this.transactionThreads.get(userId);
+      if (existingThreadId) {
+        const existing = this.client.channels.cache.get(existingThreadId) as ThreadChannel | undefined;
+        if (existing) return existing;
+        this.transactionThreads.delete(userId);
+      }
+
+      // Fetch active threads in the channel and look for one matching the user
+      const fetched = await ch.threads.fetch();
+      const threadName = `tx-log-${userId}`;
+      const found = fetched.threads.find(t => t.name === threadName);
+      if (found) {
+        this.transactionThreads.set(userId, found.id);
+        return found as ThreadChannel;
+      }
+
+      // Create a starter message then start a thread from it
+      const starter = await ch.send(`🔐 Starting transaction log thread for <@${userId}> (${username ?? userId})`);
+      const thread = await starter.startThread({ name: threadName, autoArchiveDuration: TRANSACTION_THREAD_ARCHIVE_MINUTES });
+      this.transactionThreads.set(userId, thread.id);
+      return thread;
+    } catch (e) {
+      console.error('getOrCreateTransactionThread error', e);
+      return null;
+    }
+  }
+
+  private formatDetailedTransactionLog(data: TransactionNotificationData): string {
+    const timestamp = new Date(data.timestamp).toISOString();
+    let msg = `**Detailed Transaction Log` + `**\n`;
+    msg += `• Hash: \`${data.hash}\`\n`;
+    msg += `• Successful: ${data.successful}\n`;
+    msg += `• From: \`${data.from}\`\n`;
+    msg += `• To: \`${data.to}\`\n`;
+    msg += `• Amount: ${data.amount} ${data.asset}\n`;
+    if (data.fee) msg += `• Fee: ${data.fee} XLM\n`;
+    if (data.memo) msg += `• Memo: ${data.memo}\n`;
+    msg += `• Timestamp: ${timestamp}\n`;
+    if ((data as any).raw) {
+      msg += `\nRaw Payload:\n` + '```json\n' + JSON.stringify((data as any).raw, null, 2) + '\n```';
+    }
+    return msg;
   }
 
   private formatTransactionMessage(data: TransactionNotificationData): string {
