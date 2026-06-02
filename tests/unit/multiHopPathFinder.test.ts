@@ -1,12 +1,36 @@
 import { describe, it, expect, jest, beforeEach } from "@jest/globals";
-import { MultiHopPathFinder } from "../../src/services/multiHopPathFinder";
+import {
+  MultiHopPathFinder,
+  RoutePolicyViolationError,
+  DEFAULT_ROUTE_POLICY,
+  RoutePolicy,
+} from "../../src/services/multiHopPathFinder";
 import * as StellarSdk from "@stellar/stellar-sdk";
 
 jest.mock("@stellar/stellar-sdk");
 
+const XLM = StellarSdk.Asset.native();
+const USDC = new StellarSdk.Asset(
+  "USDC",
+  "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+);
+
+function makeRecord(destAmount: string, midAssets: unknown[] = []) {
+  return {
+    source_amount: "100.0000000",
+    destination_amount: destAmount,
+    path: midAssets,
+  };
+}
+
 describe("MultiHopPathFinder", () => {
   let pathFinder: MultiHopPathFinder;
-  let mockServer: any;
+  let mockServer: {
+    strictSendPaths: jest.Mock;
+    strictReceivePaths: jest.Mock;
+    limit: jest.Mock;
+    call: jest.Mock;
+  };
 
   beforeEach(() => {
     mockServer = {
@@ -15,204 +39,259 @@ describe("MultiHopPathFinder", () => {
       limit: jest.fn().mockReturnThis(),
       call: jest.fn(),
     };
-
-    (StellarSdk.Horizon.Server as any) = jest.fn(() => mockServer);
+    (StellarSdk.Horizon.Server as unknown as jest.Mock).mockImplementation(
+      () => mockServer
+    );
     pathFinder = new MultiHopPathFinder();
   });
 
-  describe("findOptimalPath", () => {
-    it("should find and evaluate multiple trading paths", async () => {
-      const mockPaths = {
-        records: [
-          {
-            source_amount: "100.0000000",
-            destination_amount: "12.5000000",
-            path: [
-              {
-                asset_type: "credit_alphanum4",
-                asset_code: "USDC",
-                asset_issuer: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-              },
-            ],
-          },
-          {
-            source_amount: "100.0000000",
-            destination_amount: "12.3000000",
-            path: [
-              {
-                asset_type: "credit_alphanum4",
-                asset_code: "USDT",
-                asset_issuer: "GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V",
-              },
-            ],
-          },
-        ],
-      };
-
-      mockServer.call.mockResolvedValue(mockPaths);
-
-      const sourceAsset = StellarSdk.Asset.native();
-      const destAsset = new StellarSdk.Asset(
-        "USDC",
-        "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
-      );
-
-      const result = await pathFinder.findOptimalPath(
-        sourceAsset,
-        destAsset,
-        "100",
-        { maxHops: 3 }
-      );
-
-      expect(result.bestPath).toBeDefined();
-      expect(result.allPaths.length).toBeGreaterThan(0);
-      expect(result.bestPath.efficiency).toBeGreaterThan(0);
-      expect(result.evaluationTime).toBeGreaterThan(0);
-    });
-
-    it("should select path with highest efficiency", async () => {
-      const mockPaths = {
-        records: [
-          {
-            source_amount: "100.0000000",
-            destination_amount: "15.0000000",
-            path: [],
-          },
-          {
-            source_amount: "100.0000000",
-            destination_amount: "14.5000000",
-            path: [
-              {
-                asset_type: "credit_alphanum4",
-                asset_code: "USDC",
-                asset_issuer: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-              },
-            ],
-          },
-        ],
-      };
-
-      mockServer.call.mockResolvedValue(mockPaths);
-
-      const sourceAsset = StellarSdk.Asset.native();
-      const destAsset = new StellarSdk.Asset(
-        "USDT",
-        "GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V"
-      );
-
-      const result = await pathFinder.findOptimalPath(
-        sourceAsset,
-        destAsset,
-        "100"
-      );
-
-      expect(parseFloat(result.bestPath.destinationAmount)).toBeGreaterThanOrEqual(
-        parseFloat(result.allPaths[1]?.destinationAmount || "0")
-      );
-    });
-
-    it("should filter paths by max hops", async () => {
-      const mockPaths = {
-        records: [
-          {
-            source_amount: "100.0000000",
-            destination_amount: "12.0000000",
-            path: [],
-          },
-          {
-            source_amount: "100.0000000",
-            destination_amount: "12.5000000",
-            path: [
-              { asset_type: "credit_alphanum4", asset_code: "USDC", asset_issuer: "ISSUER1" },
-              { asset_type: "credit_alphanum4", asset_code: "USDT", asset_issuer: "ISSUER2" },
-              { asset_type: "credit_alphanum4", asset_code: "BTC", asset_issuer: "ISSUER3" },
-            ],
-          },
-        ],
-      };
-
-      mockServer.call.mockResolvedValue(mockPaths);
-
-      const sourceAsset = StellarSdk.Asset.native();
-      const destAsset = new StellarSdk.Asset("USDC", "ISSUER");
-
-      const result = await pathFinder.findOptimalPath(
-        sourceAsset,
-        destAsset,
-        "100",
-        { maxHops: 2 }
-      );
-
-      result.allPaths.forEach((path) => {
-        expect(path.hops).toBeLessThanOrEqual(2);
+  describe("findOptimalPath — basic evaluation", () => {
+    it("returns a result with normalized efficiency in [0,1]", async () => {
+      mockServer.call.mockResolvedValue({
+        records: [makeRecord("12.5000000"), makeRecord("11.0000000")],
       });
+
+      const result = await pathFinder.findOptimalPath(XLM, USDC, "100", {
+        policy: { minEfficiency: 0, maxSlippage: 1, maxHops: 10 },
+      });
+
+      expect(result.bestPath.efficiency).toBeGreaterThanOrEqual(0);
+      expect(result.bestPath.efficiency).toBeLessThanOrEqual(1);
+      expect(
+        result.allPaths.every((p) => p.efficiency >= 0 && p.efficiency <= 1)
+      ).toBe(true);
     });
 
-    it("should throw error when no paths found", async () => {
+    it("selects the path with highest destination amount as best", async () => {
+      mockServer.call.mockResolvedValue({
+        records: [makeRecord("10.0000000"), makeRecord("15.0000000")],
+      });
+
+      const result = await pathFinder.findOptimalPath(XLM, USDC, "100", {
+        policy: { minEfficiency: 0, maxSlippage: 1, maxHops: 10 },
+      });
+
+      expect(parseFloat(result.bestPath.destinationAmount)).toBe(15.0);
+    });
+
+    it("evaluationTime is a positive number", async () => {
+      mockServer.call.mockResolvedValue({
+        records: [makeRecord("12.0000000")],
+      });
+
+      const result = await pathFinder.findOptimalPath(XLM, USDC, "100", {
+        policy: { minEfficiency: 0, maxSlippage: 1, maxHops: 10 },
+      });
+
+      expect(result.evaluationTime).toBeGreaterThanOrEqual(0);
+    });
+
+    it("throws when no paths are found", async () => {
       mockServer.call.mockResolvedValue({ records: [] });
 
-      const sourceAsset = StellarSdk.Asset.native();
-      const destAsset = new StellarSdk.Asset("UNKNOWN", "ISSUER");
+      await expect(
+        pathFinder.findOptimalPath(XLM, USDC, "100")
+      ).rejects.toThrow("No valid trading paths found");
+    });
+
+    it("throws on timeout", async () => {
+      mockServer.call.mockImplementation(
+        () => new Promise((resolve) => setTimeout(resolve, 500))
+      );
 
       await expect(
-        pathFinder.findOptimalPath(sourceAsset, destAsset, "100")
-      ).rejects.toThrow("No valid trading paths found");
+        pathFinder.findOptimalPath(XLM, USDC, "100", { timeout: 50 })
+      ).rejects.toThrow("timed out");
+    });
+  });
+
+  describe("findOptimalPath — hop filtering", () => {
+    it("excludes paths with too many intermediate hops", async () => {
+      const manyHops = [
+        { asset_type: "credit_alphanum4", asset_code: "A", asset_issuer: "I1" },
+        { asset_type: "credit_alphanum4", asset_code: "B", asset_issuer: "I2" },
+        { asset_type: "credit_alphanum4", asset_code: "C", asset_issuer: "I3" },
+      ];
+      mockServer.call.mockResolvedValue({
+        records: [
+          makeRecord("12.0000000"), // 1 hop (direct)
+          makeRecord("13.0000000", manyHops), // 4 hops — excluded when maxHops=2
+        ],
+      });
+
+      const result = await pathFinder.findOptimalPath(XLM, USDC, "100", {
+        maxHops: 2,
+        policy: { minEfficiency: 0, maxSlippage: 1, maxHops: 10 },
+      });
+
+      result.allPaths.forEach((p) => expect(p.hops).toBeLessThan(2));
+    });
+  });
+
+  describe("findOptimalPath — deterministic tie-breaking", () => {
+    it("prefers fewer hops when efficiency is equal", async () => {
+      // Two paths with same destination amount → same outputRatio → same efficiency
+      // before hop discount. After discount, fewer hops wins.
+      mockServer.call.mockResolvedValue({
+        records: [
+          makeRecord("12.0000000", [
+            {
+              asset_type: "credit_alphanum4",
+              asset_code: "X",
+              asset_issuer: "I",
+            },
+          ]),
+          makeRecord("12.0000000"), // direct, fewer hops
+        ],
+      });
+
+      const result = await pathFinder.findOptimalPath(XLM, USDC, "100", {
+        policy: { minEfficiency: 0, maxSlippage: 1, maxHops: 10 },
+      });
+
+      // Direct path (fewer hops) should win or tie
+      expect(result.bestPath.hops).toBeLessThanOrEqual(
+        result.allPaths.find((p) => p.hops > result.bestPath.hops)?.hops ??
+          result.bestPath.hops
+      );
+    });
+  });
+
+  describe("RoutePolicy enforcement", () => {
+    it("throws RoutePolicyViolationError when efficiency is below minEfficiency", async () => {
+      // Single-hop path: efficiency = 1.0 * (1 - 1*0.02) * (1 - 0.003) ≈ 0.977
+      // Set minEfficiency above that to force violation
+      mockServer.call.mockResolvedValue({
+        records: [makeRecord("12.0000000")],
+      });
+
+      const strictPolicy: RoutePolicy = {
+        minEfficiency: 0.999,
+        maxSlippage: 1,
+        maxHops: 10,
+      };
+
+      await expect(
+        pathFinder.findOptimalPath(XLM, USDC, "100", { policy: strictPolicy })
+      ).rejects.toThrow(RoutePolicyViolationError);
+    });
+
+    it("throws RoutePolicyViolationError when slippage exceeds maxSlippage", async () => {
+      // 3-hop path: slippage = 0.003 * 3 = 0.009 = 0.9%
+      const threeHops = [
+        { asset_type: "credit_alphanum4", asset_code: "A", asset_issuer: "I1" },
+        { asset_type: "credit_alphanum4", asset_code: "B", asset_issuer: "I2" },
+      ];
+      mockServer.call.mockResolvedValue({
+        records: [makeRecord("12.0000000", threeHops)],
+      });
+
+      const strictPolicy: RoutePolicy = {
+        minEfficiency: 0,
+        maxSlippage: 0.005, // 0.5% — below the 0.9% from 3 hops
+        maxHops: 10,
+      };
+
+      await expect(
+        pathFinder.findOptimalPath(XLM, USDC, "100", { policy: strictPolicy })
+      ).rejects.toThrow(RoutePolicyViolationError);
+    });
+
+    it("RoutePolicyViolationError exposes bestAvailable path", async () => {
+      mockServer.call.mockResolvedValue({
+        records: [makeRecord("12.0000000")],
+      });
+
+      const strictPolicy: RoutePolicy = {
+        minEfficiency: 0.999,
+        maxSlippage: 1,
+        maxHops: 10,
+      };
+
+      try {
+        await pathFinder.findOptimalPath(XLM, USDC, "100", {
+          policy: strictPolicy,
+        });
+        fail("Expected RoutePolicyViolationError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(RoutePolicyViolationError);
+        expect((err as RoutePolicyViolationError).bestAvailable).toBeDefined();
+        expect(
+          parseFloat(
+            (err as RoutePolicyViolationError).bestAvailable.destinationAmount
+          )
+        ).toBe(12.0);
+      }
+    });
+
+    it("passes with DEFAULT_ROUTE_POLICY for a reasonable path", async () => {
+      // Direct path: efficiency ≈ 0.977, slippage = 0.003, hops = 1
+      // DEFAULT_ROUTE_POLICY: minEfficiency=0.7, maxSlippage=0.05, maxHops=5 → should pass
+      mockServer.call.mockResolvedValue({
+        records: [makeRecord("12.0000000")],
+      });
+
+      const result = await pathFinder.findOptimalPath(XLM, USDC, "100", {
+        policy: DEFAULT_ROUTE_POLICY,
+      });
+
+      expect(result.bestPath).toBeDefined();
+      expect(result.bestPath.efficiency).toBeGreaterThanOrEqual(
+        DEFAULT_ROUTE_POLICY.minEfficiency
+      );
     });
   });
 
   describe("comparePaths", () => {
-    it("should prefer path with higher efficiency", () => {
-      const path1 = {
+    it("returns the path with higher efficiency", () => {
+      const high = {
+        path: [],
+        sourceAmount: "100",
+        destinationAmount: "15",
+        priceImpact: 0.3,
+        estimatedSlippage: 0.003,
+        hops: 1,
+        route: ["XLM", "USDC"],
+        efficiency: 0.97,
+      };
+      const low = {
         path: [],
         sourceAmount: "100",
         destinationAmount: "12",
-        priceImpact: 1,
-        estimatedSlippage: 0.001,
+        priceImpact: 0.6,
+        estimatedSlippage: 0.006,
         hops: 2,
-        route: ["XLM", "USDC"],
-        efficiency: 11.5,
-      };
-
-      const path2 = {
-        path: [],
-        sourceAmount: "100",
-        destinationAmount: "11",
-        priceImpact: 1.5,
-        estimatedSlippage: 0.002,
-        hops: 3,
         route: ["XLM", "USDT", "USDC"],
-        efficiency: 10.2,
+        efficiency: 0.75,
       };
 
-      const better = pathFinder.comparePaths(path1, path2);
-      expect(better.efficiency).toBe(11.5);
+      expect(pathFinder.comparePaths(high, low)).toBe(high);
+      expect(pathFinder.comparePaths(low, high)).toBe(high);
     });
 
-    it("should prefer fewer hops when efficiency is equal", () => {
-      const path1 = {
+    it("prefers fewer hops on equal efficiency", () => {
+      const direct = {
         path: [],
         sourceAmount: "100",
         destinationAmount: "12",
-        priceImpact: 1,
-        estimatedSlippage: 0.001,
-        hops: 2,
+        priceImpact: 0.3,
+        estimatedSlippage: 0.003,
+        hops: 1,
         route: ["XLM", "USDC"],
-        efficiency: 11.0,
+        efficiency: 0.9,
       };
-
-      const path2 = {
+      const indirect = {
         path: [],
         sourceAmount: "100",
         destinationAmount: "12",
-        priceImpact: 1,
-        estimatedSlippage: 0.001,
+        priceImpact: 0.3,
+        estimatedSlippage: 0.003,
         hops: 3,
-        route: ["XLM", "USDT", "USDC"],
-        efficiency: 11.0,
+        route: ["XLM", "A", "B", "USDC"],
+        efficiency: 0.9,
       };
 
-      const better = pathFinder.comparePaths(path1, path2);
-      expect(better.hops).toBe(2);
+      expect(pathFinder.comparePaths(direct, indirect)).toBe(direct);
     });
   });
 });

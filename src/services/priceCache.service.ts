@@ -7,6 +7,16 @@ export interface PriceData {
   source: string;
 }
 
+/** Maximum age in ms a cached price is considered fresh enough to act on. */
+export const PRICE_MAX_AGE_MS = 60_000;
+
+export interface CachedPriceResult {
+  data: PriceData;
+  /** True when the entry is within PRICE_MAX_AGE_MS. */
+  fresh: boolean;
+  ageMs: number;
+}
+
 interface CacheStats {
   totalKeys: number;
   memoryUsage: string;
@@ -25,7 +35,7 @@ export class PriceCacheService {
   async getPrice(
     fromAsset: string,
     toAsset: string
-  ): Promise<PriceData | null> {
+  ): Promise<CachedPriceResult | null> {
     const start = Date.now();
 
     try {
@@ -39,15 +49,20 @@ export class PriceCacheService {
       }
 
       this.hits++;
-      const priceData: PriceData = JSON.parse(cached);
+
+      const data: PriceData = JSON.parse(cached);
+      const ageMs = Date.now() - data.timestamp;
+      const fresh = ageMs <= PRICE_MAX_AGE_MS;
 
       logger.debug("Cache hit for price", {
         pair: `${fromAsset}/${toAsset}`,
-        price: priceData.price,
+        price: data.price,
+        ageMs,
+        fresh,
         latencyMs: Date.now() - start,
       });
 
-      return priceData;
+      return { data, fresh, ageMs };
     } catch (error) {
       logger.error("Error getting cached price", {
         error: error instanceof Error ? error.message : "Unknown error",
@@ -93,12 +108,12 @@ export class PriceCacheService {
 
   async getPrices(
     pairs: Array<{ from: string; to: string }>
-  ): Promise<Map<string, PriceData | null>> {
-    const results = new Map<string, PriceData | null>();
+  ): Promise<Map<string, CachedPriceResult | null>> {
+    const results = new Map<string, CachedPriceResult | null>();
     const start = Date.now();
 
     try {
-      const keys = pairs.map((pair) => this.getCacheKey(pair.from, pair.to));
+      const keys = pairs.map((p) => this.getCacheKey(p.from, p.to));
       const redis = getRedisClient();
       const values = await redis.mget(...keys);
 
@@ -107,11 +122,19 @@ export class PriceCacheService {
         const value = values[index];
 
         if (value) {
-          results.set(pairKey, JSON.parse(value));
+          const data: PriceData = JSON.parse(value);
+          const ageMs = Date.now() - data.timestamp;
+
           this.hits++;
+
+          results.set(pairKey, {
+            data,
+            fresh: ageMs <= PRICE_MAX_AGE_MS,
+            ageMs,
+          });
         } else {
-          results.set(pairKey, null);
           this.misses++;
+          results.set(pairKey, null);
         }
       });
 
@@ -134,6 +157,7 @@ export class PriceCacheService {
       const key = this.getCacheKey(fromAsset, toAsset);
       const redis = getRedisClient();
       await redis.del(key);
+
       logger.debug("Invalidated price cache", {
         pair: `${fromAsset}/${toAsset}`,
       });
@@ -153,13 +177,7 @@ export class PriceCacheService {
       let deletedCount = 0;
 
       do {
-        const result = await redis.scan(
-          cursor,
-          "MATCH",
-          "price:*",
-          "COUNT",
-          100
-        );
+        const result = await redis.scan(cursor, "MATCH", "price:*", "COUNT", 100);
         cursor = result[0];
         const keys = result[1];
 
@@ -185,17 +203,12 @@ export class PriceCacheService {
   async getStats(): Promise<CacheStats> {
     try {
       const redis = getRedisClient();
+
       let totalKeys = 0;
       let cursor = "0";
 
       do {
-        const result = await redis.scan(
-          cursor,
-          "MATCH",
-          "price:*",
-          "COUNT",
-          500
-        );
+        const result = await redis.scan(cursor, "MATCH", "price:*", "COUNT", 500);
         cursor = result[0];
         totalKeys += result[1].length;
       } while (cursor !== "0");
@@ -219,6 +232,7 @@ export class PriceCacheService {
       logger.error("Error getting cache stats", {
         error: error instanceof Error ? error.message : "Unknown error",
       });
+
       return {
         totalKeys: 0,
         memoryUsage: "unknown",
@@ -226,12 +240,18 @@ export class PriceCacheService {
     }
   }
 
-  getHitRate(): { hits: number; misses: number; hitRate: number | undefined } {
+  getHitRate(): {
+    hits: number;
+    misses: number;
+    hitRate: number | undefined;
+  } {
     const total = this.hits + this.misses;
+
     return {
       hits: this.hits,
       misses: this.misses,
-      hitRate: total > 0 ? parseFloat(((this.hits / total) * 100).toFixed(1)) : undefined,
+      hitRate:
+        total > 0 ? parseFloat(((this.hits / total) * 100).toFixed(1)) : undefined,
     };
   }
 
@@ -244,5 +264,3 @@ export class PriceCacheService {
     return healthCheckRedis();
   }
 }
-
-export default new PriceCacheService();

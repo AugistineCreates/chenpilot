@@ -2,7 +2,6 @@ import { describe, it, expect, jest, beforeEach } from "@jest/globals";
 import { StellarPriceService } from "../../src/services/stellarPrice.service";
 import priceCacheService from "../../src/services/priceCache.service";
 
-// Mock the price cache service
 jest.mock("../../src/services/priceCache.service", () => ({
   __esModule: true,
   default: {
@@ -12,6 +11,18 @@ jest.mock("../../src/services/priceCache.service", () => ({
   },
 }));
 
+jest.mock("@stellar/stellar-sdk");
+
+const mockGetPrice = priceCacheService.getPrice as jest.Mock;
+
+function freshCacheResult(price: number) {
+  return {
+    data: { price, timestamp: Date.now(), source: "stellar_dex" },
+    fresh: true,
+    ageMs: 100,
+  };
+}
+
 describe("StellarPriceService", () => {
   let priceService: StellarPriceService;
 
@@ -20,96 +31,92 @@ describe("StellarPriceService", () => {
     jest.clearAllMocks();
   });
 
-  describe("getPrice", () => {
-    it("should return cached price if available", async () => {
-      const mockCachedPrice = {
-        price: 0.12,
-        timestamp: Date.now(),
-        source: "stellar_dex",
-      };
-
-      (priceCacheService.getPrice as jest.Mock).mockResolvedValue(
-        mockCachedPrice
-      );
+  describe("getPrice — QuoteValidity contract", () => {
+    it("returns a valid quote from fresh cache", async () => {
+      mockGetPrice.mockResolvedValue(freshCacheResult(0.12));
 
       const quote = await priceService.getPrice("XLM", "USDC", 100);
 
       expect(quote.cached).toBe(true);
       expect(quote.price).toBe(0.12);
       expect(quote.estimatedOutput).toBe(12);
-      expect(priceCacheService.getPrice).toHaveBeenCalledWith("XLM", "USDC");
+      expect(quote.validity.valid).toBe(true);
+      expect(quote.validity.ageMs).toBeGreaterThanOrEqual(0);
+      expect(quote.validity.expiresAt).toBeGreaterThan(Date.now() - 1000);
     });
 
-    it("should fetch from Stellar DEX if not cached", async () => {
-      (priceCacheService.getPrice as jest.Mock).mockResolvedValue(null);
+    it("does NOT use stale cache — returns invalid quote instead", async () => {
+      // Stale cache entry (fresh=false)
+      mockGetPrice.mockResolvedValue({
+        data: {
+          price: 0.12,
+          timestamp: Date.now() - 120_000,
+          source: "stellar_dex",
+        },
+        fresh: false,
+        ageMs: 120_000,
+      });
 
-      // This will fail in test environment without actual Stellar connection
-      // but we're testing the flow
-      await expect(priceService.getPrice("XLM", "USDC", 100)).rejects.toThrow();
-      expect(priceCacheService.getPrice).toHaveBeenCalledWith("XLM", "USDC");
+      // No live Horizon server available in tests → fetch_error
+      const quote = await priceService.getPrice("XLM", "USDC", 100);
+
+      expect(quote.validity.valid).toBe(false);
+      expect(quote.validity.reason).toBe("fetch_error");
+      expect(quote.price).toBe(0);
     });
 
-    it("should throw error for unsupported asset", async () => {
-      (priceCacheService.getPrice as jest.Mock).mockResolvedValue(null);
+    it("returns invalid quote with reason=unsupported_asset for unknown symbols", async () => {
+      mockGetPrice.mockResolvedValue(null);
 
-      await expect(
-        priceService.getPrice("INVALID", "USDC", 100)
-      ).rejects.toThrow("Unsupported asset: INVALID");
+      const quote = await priceService.getPrice("DOGE", "USDC", 100);
+
+      expect(quote.validity.valid).toBe(false);
+      expect(quote.validity.reason).toBe("unsupported_asset");
+      expect(quote.price).toBe(0);
+      expect(quote.estimatedOutput).toBe(0);
+    });
+
+    it("returns invalid quote with reason=fetch_error when Horizon fails", async () => {
+      mockGetPrice.mockResolvedValue(null); // no cache
+
+      const quote = await priceService.getPrice("XLM", "USDC", 100);
+
+      expect(quote.validity.valid).toBe(false);
+      expect(quote.validity.reason).toBe("fetch_error");
     });
   });
 
-  describe("getPrices", () => {
-    it("should fetch multiple prices", async () => {
-      const mockCachedPrice = {
-        price: 0.12,
-        timestamp: Date.now(),
-        source: "stellar_dex",
-      };
+  describe("getPrices — batch", () => {
+    it("returns one quote per pair, each with validity", async () => {
+      mockGetPrice.mockResolvedValue(freshCacheResult(0.12));
 
-      (priceCacheService.getPrice as jest.Mock).mockResolvedValue(
-        mockCachedPrice
-      );
-
-      const pairs = [
+      const quotes = await priceService.getPrices([
         { from: "XLM", to: "USDC", amount: 100 },
         { from: "XLM", to: "USDT", amount: 50 },
-      ];
+      ]);
 
-      const quotes = await priceService.getPrices(pairs);
-
-      expect(quotes.length).toBe(2);
-      expect(quotes[0].fromAsset).toBe("XLM");
-      expect(quotes[0].toAsset).toBe("USDC");
-      expect(quotes[1].fromAsset).toBe("XLM");
-      expect(quotes[1].toAsset).toBe("USDT");
+      expect(quotes).toHaveLength(2);
+      quotes.forEach((q) => expect(q.validity).toBeDefined());
     });
 
-    it("should handle errors gracefully in batch", async () => {
-      (priceCacheService.getPrice as jest.Mock)
-        .mockResolvedValueOnce({
-          price: 0.12,
-          timestamp: Date.now(),
-          source: "stellar_dex",
-        })
-        .mockResolvedValueOnce(null);
+    it("returns invalid quotes (not throws) for unsupported assets in batch", async () => {
+      mockGetPrice.mockResolvedValue(freshCacheResult(0.12));
 
-      const pairs = [
+      const quotes = await priceService.getPrices([
         { from: "XLM", to: "USDC" },
-        { from: "INVALID", to: "USDT" },
-      ];
+        { from: "DOGE", to: "USDC" },
+      ]);
 
-      const quotes = await priceService.getPrices(pairs);
-
-      // Should return only successful quotes
-      expect(quotes.length).toBe(1);
-      expect(quotes[0].fromAsset).toBe("XLM");
+      expect(quotes).toHaveLength(2);
+      expect(quotes[0].validity.valid).toBe(true);
+      expect(quotes[1].validity.valid).toBe(false);
+      expect(quotes[1].validity.reason).toBe("unsupported_asset");
     });
   });
 
   describe("invalidatePrice", () => {
-    it("should call cache invalidation", async () => {
+    it("delegates to cache service", async () => {
       await priceService.invalidatePrice("XLM", "USDC");
-
       expect(priceCacheService.invalidatePrice).toHaveBeenCalledWith(
         "XLM",
         "USDC"

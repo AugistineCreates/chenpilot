@@ -1,8 +1,27 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
 import config from "../config/config";
 import logger from "../config/logger";
-import priceCacheService from "./priceCache.service";
+import priceCacheService, { PRICE_MAX_AGE_MS } from "./priceCache.service";
 import { multiHopPathFinder } from "./multiHopPathFinder";
+
+// ---------------------------------------------------------------------------
+// QuoteValidity — the contract callers must check before acting on a quote
+// ---------------------------------------------------------------------------
+
+export type QuoteInvalidReason =
+  | "stale"
+  | "no_liquidity"
+  | "fetch_error"
+  | "unsupported_asset";
+
+export interface QuoteValidity {
+  valid: boolean;
+  reason?: QuoteInvalidReason;
+  /** Age of the underlying price data in ms. */
+  ageMs: number;
+  /** Timestamp when this quote expires (ms since epoch). */
+  expiresAt: number;
+}
 
 export interface PriceQuote {
   fromAsset: string;
@@ -13,87 +32,115 @@ export interface PriceQuote {
   path?: string[];
   cached: boolean;
   timestamp: number;
+  validity: QuoteValidity;
   multiHopAnalysis?: {
     totalPathsFound: number;
     bestPathHops: number;
+    /** Normalized 0–1 efficiency score. */
     efficiency: number;
+  };
+}
+
+// ---------------------------------------------------------------------------
+
+const SUPPORTED_ASSETS: Record<string, StellarSdk.Asset> = {
+  XLM: StellarSdk.Asset.native(),
+  USDC: new StellarSdk.Asset(
+    "USDC",
+    "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+  ),
+  USDT: new StellarSdk.Asset(
+    "USDT",
+    "GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V"
+  ),
+};
+
+function makeValidity(
+  ageMs: number,
+  valid: boolean,
+  reason?: QuoteInvalidReason
+): QuoteValidity {
+  return {
+    valid,
+    reason,
+    ageMs,
+    expiresAt: Date.now() - ageMs + PRICE_MAX_AGE_MS,
   };
 }
 
 export class StellarPriceService {
   private server: StellarSdk.Horizon.Server;
-  private readonly CACHE_TTL = 60; // Cache prices for 60 seconds
+  private readonly CACHE_TTL = 60;
 
   constructor() {
     this.server = new StellarSdk.Horizon.Server(config.stellar.horizonUrl);
   }
 
-  /**
-   * Get asset definition from symbol
-   */
   private getAsset(symbol: string): StellarSdk.Asset {
-    const assets: Record<string, StellarSdk.Asset> = {
-      XLM: StellarSdk.Asset.native(),
-      USDC: new StellarSdk.Asset(
-        "USDC",
-        "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
-      ),
-      USDT: new StellarSdk.Asset(
-        "USDT",
-        "GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V"
-      ),
-    };
-
-    const asset = assets[symbol.toUpperCase()];
-    if (!asset) {
-      throw new Error(`Unsupported asset: ${symbol}`);
-    }
+    const asset = SUPPORTED_ASSETS[symbol.toUpperCase()];
+    if (!asset) throw new Error(`Unsupported asset: ${symbol}`);
     return asset;
   }
 
   /**
-   * Get price quote from Stellar DEX with caching
+   * Returns a price quote with an explicit `validity` contract.
+   * Throws only on unsupported assets; all other failures produce an
+   * invalid quote so callers can handle them deterministically.
+   *
+   * Stale cache is NEVER silently returned as a valid quote.
    */
   async getPrice(
     fromAsset: string,
     toAsset: string,
     amount: number = 1
   ): Promise<PriceQuote> {
-    // Check cache first
+    // Validate assets up-front — this is the only hard throw.
+    try {
+      this.getAsset(fromAsset);
+      this.getAsset(toAsset);
+    } catch {
+      return this.invalidQuote(
+        fromAsset,
+        toAsset,
+        amount,
+        "unsupported_asset",
+        0
+      );
+    }
+
+    // Check cache — only use if fresh.
     const cached = await priceCacheService.getPrice(fromAsset, toAsset);
-    if (cached) {
+    if (cached?.fresh) {
       return {
         fromAsset,
         toAsset,
-        price: cached.price,
+        price: cached.data.price,
         amount,
-        estimatedOutput: amount * cached.price,
+        estimatedOutput: amount * cached.data.price,
         cached: true,
-        timestamp: cached.timestamp,
+        timestamp: cached.data.timestamp,
+        validity: makeValidity(cached.ageMs, true),
       };
     }
 
-    // Fetch from Stellar DEX
+    // Fetch live price from Stellar DEX.
     try {
       const sourceAsset = this.getAsset(fromAsset);
       const destAsset = this.getAsset(toAsset);
 
-      // Use strict send path to get price
       const paths = await this.server
         .strictSendPaths(sourceAsset, amount.toFixed(7), [destAsset])
         .call();
 
       if (!paths.records || paths.records.length === 0) {
-        throw new Error(
-          `No liquidity path found for ${fromAsset} to ${toAsset}`
-        );
+        logger.warn(`No liquidity path found for ${fromAsset}/${toAsset}`);
+        return this.invalidQuote(fromAsset, toAsset, amount, "no_liquidity", 0);
       }
 
       const bestPath = paths.records[0];
       const destAmount = parseFloat(bestPath.destination_amount);
       const price = destAmount / amount;
 
-      // Cache the price
       await priceCacheService.setPrice(
         fromAsset,
         toAsset,
@@ -102,15 +149,12 @@ export class StellarPriceService {
         this.CACHE_TTL
       );
 
-      // Extract path information
       const pathAssets = bestPath.path.map(
-        (asset: { asset_type: string; asset_code: string }) =>
-          asset.asset_type === "native" ? "XLM" : asset.asset_code
+        (a: { asset_type: string; asset_code: string }) =>
+          a.asset_type === "native" ? "XLM" : a.asset_code
       );
 
-      logger.info(
-        `Fetched price from Stellar DEX: ${fromAsset}/${toAsset} = ${price}`
-      );
+      logger.info(`Fetched live price ${fromAsset}/${toAsset} = ${price}`);
 
       return {
         fromAsset,
@@ -121,39 +165,26 @@ export class StellarPriceService {
         path: [fromAsset, ...pathAssets, toAsset],
         cached: false,
         timestamp: Date.now(),
+        validity: makeValidity(0, true),
       };
     } catch (error) {
       logger.error("Error fetching price from Stellar DEX:", error);
-      throw error;
+      return this.invalidQuote(fromAsset, toAsset, amount, "fetch_error", 0);
     }
   }
 
   /**
-   * Get multiple prices at once
+   * Batch price fetch. Each quote carries its own validity — callers must
+   * filter on `quote.validity.valid` before use.
    */
   async getPrices(
     pairs: Array<{ from: string; to: string; amount?: number }>
   ): Promise<PriceQuote[]> {
-    const quotes: PriceQuote[] = [];
-
-    for (const pair of pairs) {
-      try {
-        const quote = await this.getPrice(pair.from, pair.to, pair.amount || 1);
-        quotes.push(quote);
-      } catch (error) {
-        logger.error(
-          `Error fetching price for ${pair.from}/${pair.to}:`,
-          error
-        );
-      }
-    }
-
-    return quotes;
+    return Promise.all(
+      pairs.map((p) => this.getPrice(p.from, p.to, p.amount ?? 1))
+    );
   }
 
-  /**
-   * Get orderbook depth for asset pair
-   */
   async getOrderbookDepth(
     fromAsset: string,
     toAsset: string,
@@ -162,40 +193,33 @@ export class StellarPriceService {
     bids: Array<{ price: number; amount: number }>;
     asks: Array<{ price: number; amount: number }>;
   }> {
-    try {
-      const sourceAsset = this.getAsset(fromAsset);
-      const destAsset = this.getAsset(toAsset);
+    const sourceAsset = this.getAsset(fromAsset);
+    const destAsset = this.getAsset(toAsset);
 
-      const orderbook = await this.server
-        .orderbook(sourceAsset, destAsset)
-        .limit(limit)
-        .call();
+    const orderbook = await this.server
+      .orderbook(sourceAsset, destAsset)
+      .limit(limit)
+      .call();
 
-      return {
-        bids: orderbook.bids.map((bid) => ({
-          price: parseFloat(bid.price),
-          amount: parseFloat(bid.amount),
-        })),
-        asks: orderbook.asks.map((ask) => ({
-          price: parseFloat(ask.price),
-          amount: parseFloat(ask.amount),
-        })),
-      };
-    } catch (error) {
-      logger.error("Error fetching orderbook:", error);
-      throw error;
-    }
+    return {
+      bids: orderbook.bids.map((b) => ({
+        price: parseFloat(b.price),
+        amount: parseFloat(b.amount),
+      })),
+      asks: orderbook.asks.map((a) => ({
+        price: parseFloat(a.price),
+        amount: parseFloat(a.amount),
+      })),
+    };
   }
 
-  /**
-   * Invalidate cached price
-   */
   async invalidatePrice(fromAsset: string, toAsset: string): Promise<void> {
     await priceCacheService.invalidatePrice(fromAsset, toAsset);
   }
 
   /**
-   * Get price with multi-hop path evaluation
+   * Multi-hop price with validity contract.
+   * Returns an invalid quote (rather than throwing) when no path is found.
    */
   async getPriceWithMultiHop(
     fromAsset: string,
@@ -203,6 +227,19 @@ export class StellarPriceService {
     amount: number = 1,
     maxHops: number = 5
   ): Promise<PriceQuote> {
+    try {
+      this.getAsset(fromAsset);
+      this.getAsset(toAsset);
+    } catch {
+      return this.invalidQuote(
+        fromAsset,
+        toAsset,
+        amount,
+        "unsupported_asset",
+        0
+      );
+    }
+
     try {
       const sourceAsset = this.getAsset(fromAsset);
       const destAsset = this.getAsset(toAsset);
@@ -226,6 +263,7 @@ export class StellarPriceService {
         path: pathResult.bestPath.route,
         cached: false,
         timestamp: Date.now(),
+        validity: makeValidity(0, true),
         multiHopAnalysis: {
           totalPathsFound: pathResult.allPaths.length,
           bestPathHops: pathResult.bestPath.hops,
@@ -234,8 +272,27 @@ export class StellarPriceService {
       };
     } catch (error) {
       logger.error("Error fetching multi-hop price:", error);
-      throw error;
+      return this.invalidQuote(fromAsset, toAsset, amount, "fetch_error", 0);
     }
+  }
+
+  private invalidQuote(
+    fromAsset: string,
+    toAsset: string,
+    amount: number,
+    reason: QuoteInvalidReason,
+    ageMs: number
+  ): PriceQuote {
+    return {
+      fromAsset,
+      toAsset,
+      price: 0,
+      amount,
+      estimatedOutput: 0,
+      cached: false,
+      timestamp: Date.now(),
+      validity: makeValidity(ageMs, false, reason),
+    };
   }
 }
 
