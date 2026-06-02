@@ -65,6 +65,9 @@ export class PriceTool extends BaseTool<PricePayload> {
     ],
     category: "price",
     version: "1.0.0",
+    riskLevel: "low",
+    capabilities: ["market_data", "price_lookup"],
+    permissions: [],
   };
 
   async execute(payload: PricePayload): Promise<ToolResult> {

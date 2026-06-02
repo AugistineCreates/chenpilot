@@ -3,6 +3,7 @@ export type SimulationMode = 'local' | 'live' | 'hybrid';
 export interface SimulationConfig {
   mode: SimulationMode;
   enabledServices: string[];
+  deterministicSeed?: number;
   
   stellar: {
     networkPassphrase: string;

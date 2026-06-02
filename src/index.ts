@@ -7,6 +7,9 @@ import logger from "./config/logger";
 import { initializeSocketManager } from "./Gateway/socketManager";
 import { horizonOperationStreamerService } from "./services/horizonOperationStreamer.service";
 import { priceSpikeAlertService } from "./services/priceSpikeAlert.service";
+import { durableRecoveryService } from "./Agents/planner/DurableRecoveryService";
+import { durableOperationService } from "./Reliability/DurableOperationService";
+
 class Server {
   private server: http.Server;
   private port: number;
@@ -38,6 +41,13 @@ class Server {
       await AppDataSource.initialize();
       console.log("DB connection established!");
       logger.info("Database connected successfully");
+      
+      // Recover interrupted durable executions
+      await durableRecoveryService.recoverInterruptedExecutions();
+
+      // Start durable operation background processor
+      durableOperationService.startBackgroundProcessor();
+
       horizonOperationStreamerService.start();
       priceSpikeAlertService.start();
       process.on("SIGTERM", shutdown);

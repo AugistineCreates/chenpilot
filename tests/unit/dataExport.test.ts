@@ -8,6 +8,11 @@ import AppDataSource from "../../src/config/Datasource";
 jest.mock("../../src/config/Datasource");
 jest.mock("../../src/Agents/memory/memory");
 jest.mock("../../src/config/logger");
+jest.mock("../../src/AuditLog/auditLog.service", () => ({
+  auditLogService: {
+    log: jest.fn().mockResolvedValue({ id: "audit-1" }),
+  },
+}));
 
 describe("DataExportService", () => {
   let dataExportService: DataExportService;
@@ -107,6 +112,10 @@ describe("DataExportService", () => {
       const result = await dataExportService.exportUserData("user-123");
 
       expect(result).toBeDefined();
+      expect(mockContactRepository.find).toHaveBeenCalledWith({
+        where: { userId: "user-123" },
+        order: { createdAt: "DESC" },
+      });
       expect(result.exportMetadata.userId).toBe("user-123");
       expect(result.exportMetadata.exportVersion).toBe("1.0.0");
       expect(result.profile.id).toBe("user-123");

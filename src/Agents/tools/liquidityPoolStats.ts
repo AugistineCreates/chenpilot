@@ -39,6 +39,9 @@ export class LiquidityPoolStatsTool extends BaseTool<LiquidityPoolStatsPayload> 
     ],
     category: "stellar",
     version: "1.0.0",
+    riskLevel: "low",
+    capabilities: ["market_data"],
+    permissions: [],
   };
 
   validate(payload: LiquidityPoolStatsPayload): { valid: boolean; errors: string[] } {

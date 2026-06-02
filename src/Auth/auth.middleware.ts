@@ -1,10 +1,15 @@
 import { Request, Response, NextFunction } from "express";
 import { container } from "tsyringe";
 import JwtService from "./jwt.service";
+import { updateObservabilityContext } from "../observability";
 
 // Extend Express Request type to include user
 declare module "express-serve-static-core" {
   interface Request {
+    requestId?: string;
+    executionId?: string;
+    rootExecutionId?: string;
+    parentExecutionId?: string;
     user?: {
       userId: string;
       name: string;
@@ -43,6 +48,7 @@ export async function authenticateToken(
       name: payload.name,
       role: payload.role,
     };
+    updateObservabilityContext({ userId: payload.userId });
 
     next();
   } catch {
@@ -73,6 +79,7 @@ export async function optionalAuth(
         name: payload.name,
         role: payload.role,
       };
+      updateObservabilityContext({ userId: payload.userId });
     }
 
     next();

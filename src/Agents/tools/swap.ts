@@ -64,6 +64,9 @@ export class SwapTool extends BaseTool<SwapPayload> {
     ],
     category: "trading",
     version: "1.0.0",
+    riskLevel: "high",
+    capabilities: ["dex_trading", "path_payment"],
+    permissions: ["user"],
   };
 
   private server: StellarSdk.Horizon.Server;

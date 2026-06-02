@@ -5,6 +5,8 @@ import { RefreshToken } from "../Auth/refreshToken.entity";
 import AppDataSource from "../config/Datasource";
 import { memoryStore } from "../Agents/memory/memory";
 import logger from "../config/logger";
+import { auditLogService } from "../AuditLog/auditLog.service";
+import { AuditAction, AuditSeverity } from "../AuditLog/auditLog.entity";
 
 export interface UserProfileExport {
   exportMetadata: {
@@ -131,6 +133,27 @@ export class DataExportService {
         sessionsCount: sessions.length,
       });
 
+      await auditLogService.log({
+        userId,
+        action: AuditAction.DATA_EXPORT,
+        severity: AuditSeverity.INFO,
+        resource: "profile_export",
+        metadata: {
+          exportVersion: exportData.exportMetadata.exportVersion,
+          dataCategories: {
+            profile: true,
+            contacts: contacts.length > 0,
+            conversationHistory: conversationHistory.length > 0,
+            sessions: sessions.length > 0,
+          },
+          counts: {
+            contacts: contacts.length,
+            conversationEntries: conversationHistory.length,
+            sessions: sessions.length,
+          },
+        },
+      });
+
       return exportData;
     } catch (error) {
       logger.error("Failed to export user data", { userId, error });
@@ -138,8 +161,9 @@ export class DataExportService {
     }
   }
 
-  private async getContactsByUserId(): Promise<Contact[]> {
+  private async getContactsByUserId(userId: string): Promise<Contact[]> {
     return this.contactRepository.find({
+      where: { userId },
       order: { createdAt: "DESC" },
     });
   }

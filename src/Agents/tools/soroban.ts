@@ -76,6 +76,9 @@ export class SorobanTool extends BaseTool<SorobanInvokePayload> {
     ],
     category: "soroban",
     version: "1.0.0",
+    riskLevel: "high",
+    capabilities: ["soroban_invocation"],
+    permissions: ["user"],
   };
 
   async execute(payload: SorobanInvokePayload): Promise<ToolResult> {

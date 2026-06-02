@@ -1,6 +1,7 @@
 import winston from "winston";
 import DailyRotateFile from "winston-daily-rotate-file";
 import path from "path";
+import { getObservabilityLogFields } from "../observability";
 
 // Sensitive fields to redact from logs
 const SENSITIVE_FIELDS = ["pk", "privateKey", "password", "token", "secret"];
@@ -38,11 +39,13 @@ const redactFormat = winston.format((info: Record<string, unknown>) => {
 
   const { level, message, timestamp, ...meta } = info;
   const redactedMeta = redactSensitiveData(meta);
+  const contextFields = getObservabilityLogFields();
 
   return {
     level,
     message,
     timestamp,
+    ...contextFields,
     ...(typeof redactedMeta === "object" && redactedMeta !== null
       ? redactedMeta
       : {}),

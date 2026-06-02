@@ -1,16 +1,11 @@
 // chenpilot/src/Agents/agents/intentagent.ts
 import { validateQuery } from "../validationService";
-import { executionAgent } from "./exectutionagent";
-import { agentLLM } from "../agent";
-import { promptGenerator } from "../registry/PromptGenerator";
+import { agentPlanner } from "../planner/AgentPlanner";
+import { planExecutor } from "../planner/PlanExecutor";
 import { toolAutoDiscovery } from "../registry/ToolAutoDiscovery";
-import { WorkflowPlan, WorkflowStep } from "../types";
-import { memoryStore } from "../memory/memory";
-import { parseSorobanIntent } from "../planner/sorobanIntent";
 import logger from "../../config/logger";
 import { randomUUID } from "crypto";
 import { userPreferencesService } from "../../Auth/userPreferences.service";
-import { RiskLevel } from "../../Auth/userPreferences.entity";
 
 export class IntentAgent {
   private initialized = false;
@@ -30,15 +25,11 @@ export class IntentAgent {
       return { success: false, error: "Invalid request format" };
     }
 
-    // Fetch user preferences and include in context
+    // Fetch user preferences
     let userPreferences;
     try {
       userPreferences =
         await userPreferencesService.getPreferencesForAgent(userId);
-      logger.debug("User preferences loaded", {
-        userId,
-        riskLevel: userPreferences.riskLevel,
-      });
     } catch (error) {
       logger.warn("Failed to load user preferences, using defaults", {
         userId,
@@ -46,92 +37,35 @@ export class IntentAgent {
       });
     }
 
-    const workflow = await this.planWorkflow(
-      input,
-      userId,
-      traceId,
-      userPreferences
-    );
-    logger.info("Workflow planned", { traceId, workflow, userId });
-    if (!workflow.workflow.length) {
-      logger.warn("Empty workflow", { traceId, userId });
-      return { success: false, error: "Could not determine workflow" };
-    }
-    return executionAgent.run(workflow, userId, input, traceId);
-  }
-
-  private async planWorkflow(
-    input: string,
-    userId: string,
-    traceId: string,
-    userPreferences?: {
-      riskLevel: RiskLevel;
-      preferredAssets: string[];
-      autoApproveSmallTransactions: boolean;
-      smallTransactionThreshold: number;
-      defaultSlippage: number | null;
-    }
-  ): Promise<WorkflowPlan> {
-    const startTime = Date.now();
-    let promptVersionId: string | undefined;
-
     try {
-      const sorobanWorkflow = parseSorobanIntent(input);
-      if (sorobanWorkflow) {
-        logger.info("Soroban workflow detected", { traceId, userId });
-        memoryStore.add(userId, `User: ${input}`);
-        return sorobanWorkflow;
-      }
-
-      const promptVersion = await promptGenerator.generateIntentPrompt();
-      promptVersionId = (promptVersion as Record<string, unknown>).id as string;
-
-      // Build user preferences context for the prompt
-      const userConstraints = userPreferences
-        ? `\n\nUSER_CONSTRAINTS:\n- Risk Level: ${userPreferences.riskLevel}\n- Preferred Assets: ${userPreferences.preferredAssets.join(", ")}\n- Auto-approve small transactions (< ${userPreferences.smallTransactionThreshold}): ${userPreferences.autoApproveSmallTransactions ? "enabled" : "disabled"}\n- Default Slippage: ${userPreferences.defaultSlippage ?? "0.5"}%\n\nIMPORTANT: You MUST respect these user constraints when generating the workflow.`
-        : "";
-
-      const prompt = (
-        typeof promptVersion === "string" ? promptVersion : promptVersion
-      )
-        .replace("{{USER_INPUT}}", input)
-        .replace("{{USER_ID}}", userId)
-        .replace("{{USER_CONSTRAINTS}}", userConstraints);
-
-      const parsed = await agentLLM.callLLM(
+      // Use the new durable planner and executor
+      const plan = await agentPlanner.createPlan({
         userId,
-        prompt,
-        "",
-        true,
-        undefined,
-        traceId
-      );
-      const steps: WorkflowStep[] = Array.isArray(
-        (parsed as Record<string, unknown>)?.workflow
-      )
-        ? ((parsed as Record<string, unknown>).workflow as WorkflowStep[])
-        : [];
-
-      if (promptVersionId) {
-        const { promptVersionService } =
-          await import("../registry/PromptVersionService");
-        await promptVersionService.trackMetric(
-          promptVersionId,
-          steps.length > 0,
-          userId,
-          Date.now() - startTime
-        );
-      }
-
-      memoryStore.add(userId, `User: ${input}`);
-      return { workflow: steps };
-    } catch (err) {
-      logger.error("LLM workflow parsing failed", {
-        traceId,
-        error: err,
-        userId,
+        userInput: input,
+        userPreferences,
       });
-      return { workflow: [] };
+
+      logger.info("Plan created", { traceId, planId: plan.planId, userId });
+
+      const result = await planExecutor.executePlan(plan, userId, {
+        durable: true,
+      });
+
+      return {
+        success: true,
+        data: {
+          message: "Execution started",
+          executionId: result.executionId,
+          planId: result.planId,
+          status: result.status,
+        },
+      };
+    } catch (error) {
+      logger.error("Failed to handle intent", { traceId, error, userId });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to process request",
+      };
     }
   }
 }

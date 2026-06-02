@@ -56,6 +56,8 @@ export enum AuditAction {
   UNAUTHORIZED_ACCESS = "unauthorized_access",
   PERMISSION_DENIED = "permission_denied",
   SUSPICIOUS_ACTIVITY = "suspicious_activity",
+  ABUSE_POLICY_DECISION = "abuse_policy_decision",
+  KYC_POLICY_DECISION = "kyc_policy_decision",
 
   // Data
   DATA_EXPORT = "data_export",
