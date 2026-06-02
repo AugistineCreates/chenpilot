@@ -11,6 +11,14 @@ export type KycDocumentType =
   | "proof_of_address"
   | "selfie";
 
+export type KycAction =
+  | "submit_verification"
+  | "wallet.withdraw"
+  | "wallet.transfer"
+  | "trade.execute"
+  | "agent.execute"
+  | "soroban.invoke";
+
 export interface KycDocumentInput {
   type: KycDocumentType;
   documentId?: string;
@@ -46,6 +54,20 @@ export interface KycVerificationResult {
   reason?: string;
   reviewedAt?: string;
   metadata?: Record<string, string | number | boolean | null>;
+}
+
+export interface KycGateContext {
+  userId: string;
+  action: KycAction;
+  verificationStatus?: KycVerificationStatus;
+  providerReferenceId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface KycGateDecision {
+  allowed: boolean;
+  reason: string;
+  requiredStatus?: KycVerificationStatus;
 }
 
 export interface KycProvider {

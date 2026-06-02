@@ -2,6 +2,7 @@ import { Server as SocketIOServer, Socket } from "socket.io";
 import { Server as HTTPServer } from "http";
 import logger from "../config/logger";
 import { EventEmitter } from "events";
+import { evaluateRealtimeAbusePolicy } from "../Security";
 
 /**
  * Represents a connected client with metadata
@@ -212,10 +213,27 @@ export class SocketManager {
       });
 
       // Handle subscription to transaction updates — requires prior authentication
-      socket.on("subscribe:transactions", (transactionId?: string) => {
+      socket.on("subscribe:transactions", async (transactionId?: string) => {
         if (!client.userId) {
           socket.emit("error", { message: "Authentication required before subscribing." });
           logger.warn(`Unauthenticated client ${socket.id} attempted to subscribe to transactions`);
+          return;
+        }
+        const abuseDecision = await evaluateRealtimeAbusePolicy(
+          "subscribe:transactions",
+          {
+            userId: client.userId,
+            sessionId: socket.id,
+            ipAddress: socket.handshake.address,
+          },
+          { transactionId }
+        );
+        if (!abuseDecision.allowed) {
+          socket.emit("error", {
+            message: abuseDecision.reason,
+            code: abuseDecision.policyId,
+            retryAfterMs: abuseDecision.retryAfterMs,
+          });
           return;
         }
         if (transactionId) {
@@ -227,10 +245,27 @@ export class SocketManager {
       });
 
       // Handle subscription to bot updates — requires prior authentication
-      socket.on("subscribe:bot-alerts", (botId?: string) => {
+      socket.on("subscribe:bot-alerts", async (botId?: string) => {
         if (!client.userId) {
           socket.emit("error", { message: "Authentication required before subscribing." });
           logger.warn(`Unauthenticated client ${socket.id} attempted to subscribe to bot alerts`);
+          return;
+        }
+        const abuseDecision = await evaluateRealtimeAbusePolicy(
+          "subscribe:bot-alerts",
+          {
+            userId: client.userId,
+            sessionId: socket.id,
+            ipAddress: socket.handshake.address,
+          },
+          { botId }
+        );
+        if (!abuseDecision.allowed) {
+          socket.emit("error", {
+            message: abuseDecision.reason,
+            code: abuseDecision.policyId,
+            retryAfterMs: abuseDecision.retryAfterMs,
+          });
           return;
         }
         if (botId) {

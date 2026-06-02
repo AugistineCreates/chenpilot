@@ -2,14 +2,18 @@ import express from "express";
 import path from "path";
 import cors from "cors";
 import helmet from "helmet";
-import { rateLimit } from "express-rate-limit";
 import { container } from "tsyringe";
 import swaggerUi from "swagger-ui-express";
 import routes from "./routes";
 import authRoutes from "./auth.routes";
+import promptRoutes from "./promptRoutes";
 import { swaggerSpec } from "./swagger";
 import requestLogger from "../middleware/requestLogger";
-import { ipBlacklistMiddleware, ipBlacklistRoutes } from "../Security";
+import {
+  createAbusePreventionMiddleware,
+  ipBlacklistMiddleware,
+  ipBlacklistRoutes,
+} from "../Security";
 
 import { authenticate } from "../Auth/auth";
 import UserService from "../Auth/user.service";
@@ -44,24 +48,7 @@ app.use(ipBlacklistMiddleware);
 // --- SWAGGER API DOCS ---
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// --- RATE LIMITING STRATEGY (GLOBAL/SENSITIVE) ---
-
-/**
- * AC: Authenticated/Sensitive Rate Limit
- * Applied to AI queries and wallet-related operations.
- * Limit: 20 requests per minute per IP.
- */
-const sensitiveLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  limit: 20,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error:
-      "Sensitive action limit reached. Please wait a moment before trying again.",
-  },
-});
+const sensitiveLimiter = createAbusePreventionMiddleware("query");
 
 function createSuccess<T>(data: T, message: string) {
   return {

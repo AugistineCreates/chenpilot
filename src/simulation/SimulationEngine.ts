@@ -10,6 +10,7 @@ export class SimulationEngine {
   private responseGenerator: ResponseGenerator;
   private gasSimulator: GasSimulator;
   private initialized = false;
+  private randomState = 1;
 
   constructor() {
     this.stateManager = new StateManager();
@@ -19,6 +20,7 @@ export class SimulationEngine {
 
   async initialize(config: SimulationConfig): Promise<void> {
     this.config = config;
+    this.randomState = config.deterministicSeed || 1;
     
     await this.stateManager.initialize(config);
     await this.responseGenerator.initialize(config);
@@ -34,6 +36,11 @@ export class SimulationEngine {
     }
 
     const startTime = Date.now();
+    const originalRandom = Math.random;
+
+    if (this.config.deterministicSeed !== undefined) {
+      Math.random = () => this.nextRandom();
+    }
     
     try {
       // Generate realistic response based on service type
@@ -92,7 +99,14 @@ export class SimulationEngine {
           stateChanges: []
         }
       };
+    } finally {
+      Math.random = originalRandom;
     }
+  }
+
+  private nextRandom(): number {
+    this.randomState = (this.randomState * 1664525 + 1013904223) % 4294967296;
+    return this.randomState / 4294967296;
   }
 
   private async simulateLatency(): Promise<void> {
