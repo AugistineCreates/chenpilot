@@ -22,6 +22,17 @@ export type {
 } from "./soroban/invoker";
 export type { SimulationEstimates } from "./soroban/simulator";
 export { invokeContract, estimateContract } from "./soroban/invoker";
+export {
+  contractMetadataRegistry,
+  ContractMetadataRegistry,
+} from "./contracts";
+export type {
+  ContractBinding,
+  ContractCapability,
+  ContractEnvironment,
+  ContractMetadata,
+  ContractRegistrySnapshot,
+} from "./contracts";
 
 // Re-export error types so callers can do `instanceof` checks
 export {

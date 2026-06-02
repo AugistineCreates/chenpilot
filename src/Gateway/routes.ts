@@ -17,6 +17,7 @@ import {
 import logger from "../config/logger";
 import authRoutes from "../Auth/auth.routes";
 import dataExportRoutes from "../services/dataExport.routes";
+import contractMetadataRoutes from "../services/contracts/contractMetadata.routes";
 import horizonProxyRoutes from "./horizonProxy.routes";
 import auditLogRoutes from "../AuditLog/auditLog.routes";
 import adminAgentRoutes from "../Agents/admin/adminAgent.routes";
@@ -31,6 +32,7 @@ import { AuditAction, AuditSeverity } from "../AuditLog/auditLog.entity";
 import { getSocketManager } from "./socketManager";
 import { BotSessionService } from "../Bot/botSession.service";
 import { BotSessionType, BotPlatform } from "../Bot/botSession.entity";
+import { operatorReportingService } from "../services/operatorReporting.service";
 
 const router = Router();
 
@@ -111,6 +113,9 @@ router.use("/auth", authRoutes);
 // Mount data export routes
 router.use("/export", dataExportRoutes);
 
+// Mount contract metadata discovery routes
+router.use("/contracts", contractMetadataRoutes);
+
 // Mount Horizon proxy routes (authenticated)
 router.use("/horizon", horizonProxyRoutes);
 // Mount audit log routes
@@ -118,6 +123,38 @@ router.use("/audit", auditLogRoutes);
 
 // Mount admin agent management routes (requires admin role)
 router.use("/admin/agents", adminAgentRoutes);
+
+router.get(
+  "/admin/operator-report",
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    try {
+      const startDate = req.query.startDate
+        ? new Date(req.query.startDate as string)
+        : undefined;
+      const endDate = req.query.endDate
+        ? new Date(req.query.endDate as string)
+        : undefined;
+
+      const report = await operatorReportingService.buildReport({
+        startDate,
+        endDate,
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: report,
+      });
+    } catch (error) {
+      logger.error("Error building operator report", { error });
+      return res.status(500).json({
+        success: false,
+        message: "Failed to build operator report",
+      });
+    }
+  }
+);
 
 // #149: Bot command performance metrics endpoint
 router.post("/bot/metrics", async (req: Request, res: Response) => {
