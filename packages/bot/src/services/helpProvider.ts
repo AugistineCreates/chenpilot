@@ -121,3 +121,10 @@ export function formatHelpMessage(
 
   return message;
 }
+
+export function formatAiHelpMessage(response: string, format: "html" | "markdown" = "html"): string {
+  const bold = (text: string) =>
+    format === "html" ? `<b>${text}</b>` : `**${text}**`;
+
+  return `${bold("🤖 Chen Pilot AI Help")}\n\n${response}`;
+}

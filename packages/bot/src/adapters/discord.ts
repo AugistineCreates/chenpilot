@@ -13,8 +13,9 @@ import { TransactionNotificationData, PriceAlert, TrendingAsset } from "../types
 import {
   createTrustlineOperation,
   getNetworkStatus,
+  AgentClient,
 } from "@chen-pilot/sdk-core";
-import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
+import { searchFeatures, formatHelpMessage, formatAiHelpMessage } from "../services/helpProvider";
 import { AssetVerificationService } from '../assetVerification';
 import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
 import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
@@ -34,7 +35,7 @@ const ADVANCED_ROLE_NAMES = (process.env.DISCORD_ADVANCED_ROLES || 'DeFi Pro,Wha
 const SUPPORTED_CURRENCIES = ['USD', 'XLM', 'BTC'] as const;
 
 // Commands that involve personal account data and must only be used in DMs
-const DM_ONLY_COMMANDS = ['!balance', '!sponsor'];
+const DM_ONLY_COMMANDS = ['!balance', '!sponsor', '!swap'];
 
 // Commands that start a wizard
 const WIZARD_COMMANDS = ['!multisig'];
@@ -84,6 +85,8 @@ export class DiscordAdapter {
   private alertCheckInterval?: ReturnType<typeof setInterval>;
   // #128: Market overview digest interval
   private marketOverviewInterval?: ReturnType<typeof setInterval>;
+  // #114: AI agent client
+  private agentClient: AgentClient;
 
   constructor(token: string, auditLogChannelId?: string) {
     this.token = token;
@@ -106,6 +109,8 @@ export class DiscordAdapter {
     this.scamDetectionService = new ScamDetectionService();
     // #128: Initialize market overview service
     this.marketOverviewService = new MarketOverviewService();
+    // #114: Initialize AI agent client
+    this.agentClient = new AgentClient({ baseUrl: BACKEND_URL });
   }
 
   // #145: Returns true if the user is flooding (within debounce window)
@@ -347,13 +352,41 @@ export class DiscordAdapter {
         }
 
         if (message.content.startsWith("!help")) {
-          await withPerformanceProfiling(commandName, 'discord', userId, async () => {
-            const query = message.content.replace("!help", "").trim();
+      await withPerformanceProfiling(commandName, 'discord', userId, async () => {
+        const query = message.content.replace("!help", "").trim();
+        
+        if (query.length > 0) {
+          // Check if it's a natural language question vs keyword search
+          const isNaturalLanguage = query.includes(" ") && !["swap", "balance", "trustline", "sponsor", "notify", "status", "price", "help"].includes(query.toLowerCase());
+          
+          if (isNaturalLanguage) {
+            try {
+              await message.reply("🤖 Thinking... Let me get you some help with that.");
+              const response = await this.agentClient.query({
+                userId,
+                query,
+              });
+              // Assume AgentResponse has a message field, or use result directly
+              const aiResponse = typeof response.result === 'string' ? response.result : (response.result as any).message || "Sorry, I couldn't help with that.";
+              await message.reply(formatAiHelpMessage(aiResponse, "markdown"));
+            } catch (error) {
+              // Fallback to keyword search if AI fails
+              console.error("AI help failed, falling back to keyword search:", error);
+              const results = searchFeatures(query);
+              await message.reply(formatHelpMessage(results, true, "markdown"));
+            }
+          } else {
+            // Keyword search
             const results = searchFeatures(query);
-            const isSearch = query.length > 0;
-            await message.reply(formatHelpMessage(results, isSearch, "markdown"));
-          })();
+            await message.reply(formatHelpMessage(results, true, "markdown"));
+          }
+        } else {
+          // Show all commands
+          const results = searchFeatures(query);
+          await message.reply(formatHelpMessage(results, false, "markdown"));
         }
+      })();
+    }
 
         if (message.content === "!thread") {
           await withPerformanceProfiling('!thread', 'discord', userId, async () => {
@@ -474,6 +507,53 @@ export class DiscordAdapter {
               await message.reply(
                 `❌ Error: ${error instanceof Error ? error.message : String(error)}`
               );
+            }
+          })();
+        }
+
+        // #109: Swap command
+        if (message.content.startsWith('!swap')) {
+          await withPerformanceProfiling('!swap', 'discord', userId, async () => {
+            if (!isDM(message)) {
+              await rejectPublicChannel(message);
+              return;
+            }
+
+            const args = message.content.split(' ').slice(1);
+            if (args.length < 3) {
+              return message.reply('Usage: !swap <fromAsset> <toAsset> <amount>\nExample: !swap XLM USDC 100');
+            }
+
+            const [fromAsset, toAsset, amountStr] = args;
+            const amount = parseFloat(amountStr);
+
+            if (isNaN(amount) || amount <= 0) {
+              return message.reply('❌ Amount must be a positive number.');
+            }
+
+            try {
+              await message.reply('🔄 Initiating swap...');
+              const response = await this.agentClient.query({
+                userId,
+                query: `swap ${amount} ${fromAsset} to ${toAsset}`
+              });
+
+              const result = response.result;
+              if (typeof result === 'string') {
+                await message.reply(result);
+              } else if ((result as any).successful) {
+                let reply = '✅ **Swap Successful!**\n\n';
+                reply += `**From:** ${(result as any).from} ${(result as any).amount}\n`;
+                reply += `**To:** ${(result as any).to}\n`;
+                reply += `**Estimated Output:** ${(result as any).estimatedOutput}\n`;
+                reply += `**Tx Hash:** \`${(result as any).txHash}\``;
+                await message.reply(reply);
+              } else {
+                await message.reply(`❌ Swap failed: ${(result as any).message || 'Unknown error'}`);
+              }
+            } catch (error) {
+              console.error('Swap command error:', error);
+              await message.reply('❌ Could not complete the swap. Please try again later.');
             }
           })();
         }

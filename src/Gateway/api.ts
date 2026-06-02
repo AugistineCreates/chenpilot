@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import cors from "cors";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
@@ -18,6 +19,9 @@ import { ErrorHandler } from "./middleware/errorHandler";
 import { UnauthorizedError, ValidationError, BadError } from "../utils/error";
 
 const app = express();
+
+// Serve static files for Telegram WebApp
+app.use("/settings", express.static(path.join(__dirname, "../../public")));
 
 // --- GLOBAL SECURITY MIDDLEWARE ---
 // AC: Helmet configured securely
