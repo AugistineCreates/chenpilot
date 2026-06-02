@@ -10,6 +10,7 @@ import authRoutes from "./auth.routes";
 import { swaggerSpec } from "./swagger";
 import requestLogger from "../middleware/requestLogger";
 import { ipBlacklistMiddleware, ipBlacklistRoutes } from "../Security";
+import { observabilityMiddleware, updateObservabilityContext } from "../observability";
 
 import { authenticate } from "../Auth/auth";
 import UserService from "../Auth/user.service";
@@ -38,6 +39,7 @@ app.use(
 );
 
 app.use(express.json());
+app.use(observabilityMiddleware);
 app.use(requestLogger);
 app.use(ipBlacklistMiddleware);
 
@@ -173,6 +175,11 @@ app.post("/query", sensitiveLimiter, async (req, res, next) => {
   // app.post("/query", async (req, res, next) => {
   try {
     const { userId, query } = req.body;
+    updateObservabilityContext({
+      userId,
+      operationName: "agent.query",
+      component: "http.query",
+    });
 
     const user = await authenticate(userId);
 
