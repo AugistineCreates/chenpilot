@@ -45,6 +45,9 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
   logger.info("Incoming request", {
     method,
     url: originalUrl,
+    requestId: req.requestId,
+    executionId: req.executionId,
+    rootExecutionId: req.rootExecutionId,
     ip: ip || req.socket.remoteAddress,
     userAgent: headers["user-agent"],
     body: sanitizeObject(req.body),
@@ -58,6 +61,8 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     logger.info("Outgoing response", {
       method,
       url: originalUrl,
+      requestId: req.requestId,
+      executionId: req.executionId,
       statusCode: res.statusCode,
       duration: `${duration}ms`,
       response: sanitizeObject(body),
@@ -79,6 +84,8 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
       logger.warn("Request completed with error", {
         method,
         url: originalUrl,
+        requestId: req.requestId,
+        executionId: req.executionId,
         statusCode: res.statusCode,
         duration: `${duration}ms`,
       });

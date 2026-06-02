@@ -13,6 +13,7 @@ import {
 import { WebhookIdempotency } from "../Gateway/webhookIdempotency.entity";
 import { AuditLog } from "../AuditLog/auditLog.entity";
 import { BotSession } from "../Bot/botSession.entity";
+import { IndexerCursor } from "../services/stellarIndexer/indexerCursor.entity";
 
 const isDev = config.env === "development";
 
@@ -36,6 +37,7 @@ const dbOptions: DataSourceOptions = {
     WebhookIdempotency,
     AuditLog,
     BotSession,
+    IndexerCursor,
   ],
   migrations: [isDev ? "src/migrations/**/*.ts" : "dist/migrations/**/*.js"],
   subscribers: [],

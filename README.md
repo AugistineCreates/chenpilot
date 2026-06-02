@@ -18,7 +18,7 @@ Chen Pilot is a sophisticated AI-driven gateway that enables seamless interactio
 
 ```bash
 git clone <repository-url>
-cd chenpilot-experimental
+cd chenpilot
 ```
 
 ### Install dependencies
@@ -233,9 +233,8 @@ The SDK package includes TypeDoc configuration for automated HTML API reference 
 ### Generate docs locally
 
 ```bash
-cd packages/sdk
-npm install
-npm run docs
+pnpm install
+pnpm --dir packages/sdk run docs
 ```
 
 Generated output is written to:
