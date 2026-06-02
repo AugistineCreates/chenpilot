@@ -17,6 +17,7 @@ import { validateQuery } from "../Agents/validationService";
 import { intentAgent } from "../Agents/agents/intentagent";
 import { ErrorHandler } from "./middleware/errorHandler";
 import { UnauthorizedError, ValidationError, BadError } from "../utils/error";
+import { healthService } from "../services/healthService";
 
 const app = express();
 
@@ -192,6 +193,46 @@ app.post("/query", sensitiveLimiter, async (req, res, next) => {
 app.use("/api", routes);
 app.use("/api/security/blacklist", ipBlacklistRoutes);
 app.use("/api/prompts", promptRoutes);
+
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Liveness probe — always 200 while the process is running
+ *     tags: [Ops]
+ *     responses:
+ *       200:
+ *         description: Process is alive
+ */
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "UP", timestamp: new Date().toISOString() });
+});
+
+/**
+ * @swagger
+ * /ready:
+ *   get:
+ *     summary: Readiness probe — 200 if healthy/degraded, 503 if critical deps are down
+ *     tags: [Ops]
+ *     responses:
+ *       200:
+ *         description: Service is ready (HEALTHY or DEGRADED)
+ *       503:
+ *         description: Service is not ready (UNHEALTHY — critical dependency down)
+ */
+app.get("/ready", async (_req, res) => {
+  try {
+    const report = await healthService.getFullReport();
+    const httpStatus = report.overallStatus === "UNHEALTHY" ? 503 : 200;
+    res.status(httpStatus).json(report);
+  } catch (err) {
+    res.status(503).json({
+      overallStatus: "UNHEALTHY",
+      timestamp: new Date().toISOString(),
+      error: err instanceof Error ? err.message : "Health check failed",
+    });
+  }
+});
 
 app.use(ErrorHandler);
 
