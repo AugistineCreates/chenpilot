@@ -8,6 +8,7 @@ import stellarPriceService from "../../services/stellarPrice.service";
 import { flashSwapRiskAnalyzer } from "../../services/flashSwapRiskAnalyzer";
 import { RedisLockService } from "../../services/lock";
 import { transactionLifecycleService } from "../../transactions/TransactionLifecycle.service";
+import { assetRevocationService } from "../../Security";
 
 interface SwapPayload extends Record<string, unknown> {
   from: string;
@@ -351,6 +352,22 @@ export class SwapTool extends BaseTool<SwapPayload> {
         .build();
 
       transaction.sign(sourceKeypair);
+
+      // Re-check revocation immediately before submission
+      try {
+        const sourceRevocation = await assetRevocationService.isRevoked(sourceAsset.code, "asset");
+        if (sourceRevocation.revoked) {
+          await transactionLifecycleService.fail(lifecycleId, `Asset ${sourceAsset.code} revoked before submission: ${sourceRevocation.reason}`);
+          return this.createErrorResult("swap", `Asset ${sourceAsset.code} has been revoked: ${sourceRevocation.reason}`);
+        }
+        const destRevocation = await assetRevocationService.isRevoked(destAsset.code, "asset");
+        if (destRevocation.revoked) {
+          await transactionLifecycleService.fail(lifecycleId, `Asset ${destAsset.code} revoked before submission: ${destRevocation.reason}`);
+          return this.createErrorResult("swap", `Asset ${destAsset.code} has been revoked: ${destRevocation.reason}`);
+        }
+      } catch (err) {
+        logger.warn("Revocation re-check failed before swap submission", { userId, error: err });
+      }
 
       // Submission phase
       await transactionLifecycleService.transition(lifecycleId, "submitting");
