@@ -21,15 +21,9 @@ const LIQUIDITY_POOL_KEYWORDS = [
 const SOROBAN_KEYWORDS = [
   "soroban",
   "contract",
-  "invoke",
-  "call",
-  "stake",
-  "unstake",
-  "lend",
-  "borrow",
-  "staking",
-  "defi",
-  "lending",
+  "soroban_invoke",
+  "invoke contract",
+  "call contract",
 ];
 
 const METHOD_KEYWORDS = ["stake", "unstake", "lend", "borrow"];

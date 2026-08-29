@@ -7,12 +7,58 @@ import {
   LLMTokenUsage,
   recordLLMUsage,
 } from "../observability/agentPlanMetrics";
+import { AgentContextBuilder } from "./context/AgentContextBuilder";
 
 const client = new Anthropic({
   apiKey: config.apiKey,
 });
 
+export interface LLMCallOptions {
+  asJson?: boolean;
+  timeoutMs?: number;
+  traceId?: string;
+}
+
 export class AgentLLM {
+  /**
+   * Calls the LLM using a typed AgentContextBuilder instance.
+   * Guarantees strict trust zone separation between instructions and external data.
+   */
+  async callLLMWithContext(
+    agentId: string,
+    contextBuilder: AgentContextBuilder,
+    options: LLMCallOptions = {}
+  ): Promise<unknown> {
+    const { asJson = true, timeoutMs, traceId } = options;
+    const timeout = timeoutMs || config.agent.timeouts.llmCall;
+    const actualTraceId = traceId || "";
+
+    const promptText = contextBuilder.buildPrompt();
+    const fullPrompt = `${promptText}${
+      asJson ? "\n\nPlease respond with valid JSON only." : ""
+    }`;
+
+    logger.debug("Starting LLM call with typed context", {
+      agentId,
+      timeout,
+      asJson,
+      traceId: actualTraceId,
+      trustSummary: contextBuilder.getTrustSummary(),
+    });
+
+    return this.executeAnthropicCall(
+      agentId,
+      fullPrompt,
+      asJson,
+      timeout,
+      actualTraceId
+    );
+  }
+
+  /**
+   * Standard callLLM method. Uses AgentContextBuilder under the hood
+   * to guarantee typed trust zone separation and size bounding.
+   */
   async callLLM(
     agentId: string,
     prompt: string,
@@ -27,11 +73,20 @@ export class AgentLLM {
       typeof timeoutMs === "string" ? timeoutMs : traceId || "";
 
     const timeout = actualTimeoutMs || config.agent.timeouts.llmCall;
-    const memoryContext = memoryStore.get(agentId).join("\n");
-    const safeUserInput = userInput.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const fullPrompt = `${
-      memoryContext ? "Previous context:\n" + memoryContext + "\n\n" : ""
-    }${prompt}\n\n<user_input>\n${safeUserInput}\n</user_input>${
+
+    // Construct typed context
+    const contextBuilder = new AgentContextBuilder(prompt);
+
+    const memoryHistory = memoryStore.get(agentId);
+    if (memoryHistory && memoryHistory.length > 0) {
+      contextBuilder.addMemoryHistory(memoryHistory);
+    }
+
+    if (userInput && typeof userInput === "string") {
+      contextBuilder.addUserInput(userInput);
+    }
+
+    const fullPrompt = `${contextBuilder.buildPrompt()}${
       asJson ? "\n\nPlease respond with valid JSON only." : ""
     }`;
 
@@ -42,6 +97,22 @@ export class AgentLLM {
       traceId: actualTraceId,
     });
 
+    return this.executeAnthropicCall(
+      agentId,
+      fullPrompt,
+      asJson,
+      timeout,
+      actualTraceId
+    );
+  }
+
+  private async executeAnthropicCall(
+    agentId: string,
+    fullPrompt: string,
+    asJson: boolean,
+    timeout: number,
+    traceId: string
+  ): Promise<unknown> {
     try {
       const message = await withTimeout(
         client.messages.create({
@@ -73,7 +144,7 @@ export class AgentLLM {
         model: "claude-3-5-haiku-20241022",
       };
 
-      recordLLMUsage(actualTraceId || agentId, usage);
+      recordLLMUsage(traceId || agentId, usage);
 
       const content =
         message.content[0].type === "text" ? message.content[0].text : "{}";
