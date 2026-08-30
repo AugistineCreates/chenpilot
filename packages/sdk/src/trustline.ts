@@ -234,8 +234,8 @@ export class TrustlineWorkflowBuilder {
     this.config = {
       horizonUrl: config.horizonUrl || "https://horizon.stellar.org",
       networkPassphrase: config.networkPassphrase || StellarSdk.Networks.PUBLIC,
-      sourceSecret: config.sourceSecret,
-      source: config.source,
+      sourceSecret: config.sourceSecret ?? "",
+      source: config.source ?? "",
     };
   }
 
@@ -398,9 +398,10 @@ export class TrustlineWorkflowBuilder {
     this.step = TrustlineWorkflowStep.ESTIMATING;
 
     const preview = previewResult || { assetsToTrust: [], trustlinesToRemove: [] };
-    const operationCount = preview.assetsToTrust.length + preview.trustlinesToRemove.length;
+    const trustlinesToRemove = preview.trustlinesToRemove || [];
+    const operationCount = preview.assetsToTrust.length + trustlinesToRemove.length;
     const trustlinesCreated = preview.assetsToTrust.length;
-    const trustlinesRemoved = preview.trustlinesToRemove.length;
+    const trustlinesRemoved = trustlinesToRemove.length;
     const reservesRequired = trustlinesCreated.toString();
 
     return {

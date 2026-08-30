@@ -45,6 +45,8 @@ export class SignatureProviderSDK {
       autoDiscovery: config.autoDiscovery ?? true,
       enableMetrics: config.enableMetrics ?? false,
       enableLogging: config.enableLogging ?? false,
+      connectionTimeout: config.connectionTimeout ?? 5000,
+      maxRetries: config.maxRetries ?? 3,
       errorRecovery: {
         enabled: config.errorRecovery?.enabled ?? true,
         maxRetries: config.errorRecovery?.maxRetries ?? 3,
@@ -589,7 +591,11 @@ export class SignatureProviderSDKBuilder {
     maxRetries?: number;
     retryDelay?: number;
   }): this {
-    this.config.errorRecovery = { ...this.config.errorRecovery, ...config };
+    this.config.errorRecovery = {
+      enabled: config.enabled ?? this.config.errorRecovery?.enabled ?? true,
+      maxRetries: config.maxRetries ?? this.config.errorRecovery?.maxRetries ?? 3,
+      retryDelay: config.retryDelay ?? this.config.errorRecovery?.retryDelay ?? 1000,
+    };
     return this;
   }
 

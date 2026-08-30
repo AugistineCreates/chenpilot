@@ -1,7 +1,6 @@
 import { ChainId } from "../types";
 import { SignatureProvider } from "./interfaces";
-import { ProviderType } from "./provider-factory";
-import { ProviderSelectionPreferences, ProviderResolutionResult } from "./types";
+import { ProviderType, ProviderSelectionPreferences, ProviderResolutionResult } from "./types";
 import {
   ProviderNotFoundError,
   ProviderAlreadyRegisteredError,

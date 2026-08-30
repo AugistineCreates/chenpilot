@@ -49,7 +49,7 @@ export class CacheInvalidator {
   /**
    * Invalidate cache based on time (max age)
    */
-  async invalidateOnTime(asset: Asset, maxAge?: number): number {
+  invalidateOnTime(asset: Asset, maxAge?: number): number {
     const age = maxAge || this.config.maxAge;
     const assetKey = this.getAssetKey(asset);
     

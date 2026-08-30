@@ -3,10 +3,9 @@
  * Bridges old assetCache and metadata implementations with new Asset Intelligence Layer
  */
 
-import { AssetCache } from './core/AssetCache.js';
-import { Asset, AssetInfo, AssetMetadata } from './core/types';
-import { AssetIntelligence } from './core/AssetIntelligence.js';
-import { AssetIntelligenceConfig } from './core/types.js';
+import { AssetCache } from './core/AssetCache';
+import { Asset, AssetMetadata, AssetIntelligenceConfig } from './core/types';
+import { AssetIntelligence } from './core/AssetIntelligence';
 
 // Old AssetInfo interface from assetCache.ts
 interface LegacyAssetInfo {

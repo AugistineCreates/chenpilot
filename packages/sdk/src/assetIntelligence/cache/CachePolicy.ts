@@ -5,7 +5,13 @@
 
 import { CacheEntry } from './MemoryCache';
 
-export type EvictionPolicy = 'lru' | 'lfu' | 'fifo' | 'ttl';
+export const EvictionPolicy = {
+  LRU: 'lru' as const,
+  LFU: 'lfu' as const,
+  FIFO: 'fifo' as const,
+  TTL: 'ttl' as const,
+};
+export type EvictionPolicy = (typeof EvictionPolicy)[keyof typeof EvictionPolicy];
 
 export class CachePolicy {
   private policy: EvictionPolicy;

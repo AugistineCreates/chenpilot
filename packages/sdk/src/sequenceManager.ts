@@ -250,7 +250,7 @@ export class SequenceManager {
 
       if (transaction) {
         transaction.status = "failed";
-        accountPending.delete(sequence);
+        accountPending?.delete(sequence);
 
         // Update pending count
         const info = this.sequences.get(accountId);

@@ -13,6 +13,3 @@ export * from "./signature-verification";
 export * from "./provider-factory";
 export * from "./transaction-workflow-engine";
 export * from "./sdk-integration";
-
-// Type definitions and utilities
-export * from "./types/index";

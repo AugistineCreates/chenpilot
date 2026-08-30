@@ -4,15 +4,16 @@
  * Uses Soroban contracts for persistent storage.
  */
 
-// @ts-ignore: dependency is provided at the workspace root
 import {
-  Server,
+  Horizon,
   Account as StellarAccount,
   TransactionBuilder,
   Networks,
   Operation,
   BASE_FEE,
-} from "stellar-sdk";
+} from "@stellar/stellar-sdk";
+
+const Server = Horizon.Server;
 
 /**
  * Metadata operation parameters for set/get operations
@@ -79,14 +80,14 @@ export class StellarMetadataManager {
   private server: any;
   private horizonUrl: string;
   private networkPassphrase: string;
-  private baseFee: number;
+  private baseFee: string;
   private metadataCache: Map<string, MetadataEntry[]> = new Map();
 
   constructor(config?: MetadataManagerConfig) {
     this.horizonUrl = config?.horizonUrl || "https://horizon.stellar.org";
     this.networkPassphrase =
-      config?.networkPassphrase || Networks.PUBLIC_NETWORK_PASSPHRASE;
-    this.baseFee = config?.baseFee || BASE_FEE;
+      config?.networkPassphrase || Networks.PUBLIC;
+    this.baseFee = String(config?.baseFee || BASE_FEE);
     this.server = new Server(this.horizonUrl);
   }
 
