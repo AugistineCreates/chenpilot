@@ -7,6 +7,8 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:2333';
 
+const BACKEND_URL = process.env.NODE_URL || 'http://localhost:3000';
+
 export class DiscordAdapter {
   private client: Client;
   private userChannels: Map<string, string> = new Map(); // userId -> channelId
@@ -243,33 +245,16 @@ export class DiscordAdapter {
     this.client.on("messageCreate", async (message: Message) => {
       if (message.author.bot) return;
 
-      // Handle both !command and /command for consistency
-      if (!message.content.startsWith('!') && !message.content.startsWith('/')) return;
+      const content = message.content;
 
-      const command = normalizeCommand(message.content);
-
-      if (command === "start") {
+      if (content === "!start") {
         await message.reply(
           "Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant."
         );
+        return;
       }
 
-      if (command === "help") {
-        await message.reply(
-          "**Commands:** !start, !balance, !swap, !trustline, !sponsor\n\n" +
-          "You can also use short aliases like !b for balance, !t for trustline, etc."
-        );
-      }
-
-      if (command === "balance") {
-        await message.reply("💰 Your balance: 100 XLM (Placeholder)\n*Real balance integration coming soon!*");
-      }
-
-      if (command === "swap") {
-        await message.reply("🔄 Swap functionality is coming soon!");
-      }
-
-      if (command === "sponsor") {
+      if (content === "!sponsor") {
         const userId = message.author.id;
         await message.reply("⏳ Requesting account sponsorship...");
 
@@ -306,25 +291,49 @@ export class DiscordAdapter {
             "❌ Could not reach the sponsorship service. Please try again later."
           );
         }
+        return;
       }
 
-      if (command === "trustline") {
-        const args = message.content.split(' ').slice(1);
-        if (args.length < 1) {
-          return message.reply('Usage: !trustline <assetCode> [issuerDomain|issuerAddress]\nExample: !trustline USDC circle.com');
+      if (content.startsWith('!trustline')) {
+        const text = content.split(' ').slice(1).join(' ');
+        if (!text) {
+          return message.reply('Usage: !trustline <assetCode> [issuerDomain|issuerAddress] OR !trustline <description>\nExample: !trustline USDC circle.com OR !trustline the dollar stablecoin');
         }
 
-        const assetCode = args[0];
-        const assetIssuer = args[1];
-
-        if (!assetIssuer) {
-          return message.reply(`Please provide an issuer domain or address for ${assetCode}.`);
-        }
-      };
+        const args = text.split(' ');
+        let assetCode = args[0];
+        let assetIssuer = args[1];
 
       if (handler) {
         try {
-          await handler(genericInteraction);
+          // If we only have one arg or it doesn't look like a code + issuer, try AI recognition
+          if (!assetIssuer || assetCode.length > 12) {
+            await message.reply(`🔍 AI is identifying the asset: "${text}"...`);
+            const recognized = await this.recognizeAsset(text, message.author.id);
+            
+            if (recognized) {
+              assetCode = recognized.assetCode;
+              assetIssuer = recognized.issuer;
+              await message.reply(`💡 AI recognized this as **${assetCode}**${assetIssuer ? ` from \`${assetIssuer}\`` : ''}.\n${recognized.description}`);
+            } else if (!assetIssuer) {
+              return message.reply(`❌ Could not recognize asset from "${text}". Please provide an asset code and issuer address/domain.`);
+            }
+          }
+
+          if (!assetIssuer && assetCode !== 'XLM') {
+            return message.reply(`Please provide an issuer domain or address for ${assetCode}.`);
+          }
+
+          await message.reply(`🔍 Looking up asset ${assetCode}${assetIssuer ? ` from ${assetIssuer}` : ''}...`);
+          const op = await createTrustlineOperation(assetCode, assetIssuer || 'native');
+          
+          let response = `✅ Found asset ${assetCode}!\n\n`;
+          response += `To add this trustline, you can use the following details in your wallet:\n`;
+          response += `**Asset:** ${assetCode}\n`;
+          response += `**Issuer:** \`${(op as any).asset.issuer || 'native'}\`\n\n`;
+          response += `*Note: In a future update, I will provide a direct signing link.*`;
+          
+          await message.reply(response);
         } catch (error) {
           console.error('Error handling button interaction:', error);
           if (!interaction.replied && !interaction.deferred) {
@@ -334,6 +343,28 @@ export class DiscordAdapter {
       } else {
         if (!interaction.replied && !interaction.deferred) {
           await interaction.reply('⚠️ No handler found for this button.');
+        }
+        return;
+      }
+
+      // Handle natural language asset recognition
+      if (!content.startsWith('!')) {
+        const keywords = ['add', 'trustline', 'asset', 'coin', 'stablecoin', 'token'];
+        const lowercaseText = content.toLowerCase();
+        
+        if (keywords.some(k => lowercaseText.includes(k))) {
+          try {
+            const recognized = await this.recognizeAsset(content, message.author.id);
+            if (recognized && recognized.confidence > 0.8) {
+              let response = `🤖 It sounds like you're talking about **${recognized.assetCode}**!\n\n`;
+              response += `${recognized.description}\n\n`;
+              response += `Would you like to add a trustline for this asset? Use \`!trustline ${recognized.assetCode} ${recognized.issuer || ''}\``;
+              
+              await message.reply(response);
+            }
+          } catch (error) {
+            console.error("Passive AI recognition error:", error);
+          }
         }
       }
     this.client.on(
@@ -1179,165 +1210,31 @@ export class DiscordAdapter {
     console.log("✅ Discord bot initialized.");
   }
 
-  // Route slash command interactions to the shared command registry.
-  private async handleSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
-    const userId = interaction.user.id;
-    const cmd = interaction.commandName;
-
-    // Collect slash-command option args as a plain array so the registry
-    // handlers stay platform-neutral.
-    const args = buildSlashArgs(interaction);
-
-    // Build the platform-neutral context.  The registry handles flood, rate
-    // limiting, guards, execution, and metrics internally.
-    const ctx = fromSlashInteraction(interaction, args);
-
-    // Defer for commands known to do async work so Discord doesn't time out.
-    const deferCommands = new Set([
-      "ping", "sponsor", "trustline", "validate", "report", "portfolio",
-      "discover", "swap",
-    ]);
-    if (deferCommands.has(cmd) && !interaction.deferred && !interaction.replied) {
-      const ephemeral = ["sponsor", "report", "portfolio"].includes(cmd);
-      await interaction.deferReply({ ephemeral });
-    }
-
-    // /thread is Discord-specific (creates a thread object) — keep it inline.
-    if (cmd === "thread") {
-      if (interaction.channel?.type === ChannelType.GuildText) {
-        try {
-          const thread = await interaction.channel.threads.create({
-            name: `Chen Pilot Session - ${interaction.user.username}`,
-            autoArchiveDuration: 60,
-          });
-          await thread.send(
-            `👋 Hello ${interaction.user.username}! I've started this thread. How can I help you with Stellar DeFi today?`
-          );
-          await interaction.reply({ content: `🧵 Thread created: ${thread}`, ephemeral: true });
-        } catch {
-          await interaction.reply({ content: "❌ Couldn't start a thread. Check my permissions.", ephemeral: true });
-        }
-      } else if (interaction.channel?.isThread()) {
-        await interaction.reply({ content: "🧵 We are already in a thread!", ephemeral: true });
-      } else {
-        await interaction.reply({ content: "❌ Threads can only be started in text channels.", ephemeral: true });
-      }
-      return;
-    }
-
-    const result = await commandRegistry.dispatch(ctx);
-    if (result === null) {
-      // Unknown command not in registry
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: "❓ Unknown command.", ephemeral: true });
-      } else if (interaction.deferred) {
-        await interaction.editReply("❓ Unknown command.");
-      }
-    }
-  }
-
-  // #120: Check if message author has an advanced role
-  private hasAdvancedRole(message: Message): boolean {
-    if (!message.member) return false;
-    return message.member.roles.cache.some((r: { name: string }) =>
-      ADVANCED_ROLE_NAMES.includes(r.name)
-    );
-  }
-
-  // #119: Poll prices and fire triggered alerts via DM
-  private startAlertPolling() {
-    this.alertCheckInterval = setInterval(async () => {
-      const pending = [...this.priceAlerts.values()].filter(
-        (a) => !a.triggered
-      );
-      if (!pending.length) return;
-      for (const alert of pending) {
-        try {
-          const res = await fetch(
-            `${BACKEND_URL}/api/price/${alert.assetCode}?currency=${alert.currency}`
-          );
-          if (!res.ok) continue;
-          const { price } = (await res.json()) as { price: number };
-          const triggered =
-            alert.condition === "above"
-              ? price >= alert.targetPrice
-              : price <= alert.targetPrice;
-          if (!triggered) continue;
-          alert.triggered = true;
-          const channelId = this.userChannels.get(alert.userId);
-          if (!channelId) continue;
-          const channel = this.client.channels.cache.get(channelId);
-          if (channel && channel.isTextBased()) {
-            await (channel as TextChannel).send(
-              `🔔 **Price Alert Triggered!**\n**${alert.assetCode}** is now ${alert.condition} **${alert.targetPrice} ${alert.currency}** (current: ${price} ${alert.currency})`
-            );
-          }
-        } catch {
-          /* ignore per-alert errors */
-        }
-          const channel = this.client.channels.cache.get(channelId) as TextChannel;
-          if (!channel) continue;
-          await channel.send(
-            `🔔 **Price Alert Triggered!**\n**${alert.assetCode}** is now ${alert.condition} **${alert.targetPrice} ${alert.currency}** (current: ${price} ${alert.currency})`
-          );
-        } catch { /* ignore per-alert errors */ }
-      }
-    }, 60_000); // check every minute
-  }
-
-  private async logAuditAction(entry: {
-    action: string;
-    triggeredBy: string;
-    details?: string;
-    success?: boolean;
-    timestamp?: string;
-  }): Promise<void> {
-    if (!this.auditLogChannelId || !this.client) return;
+  /**
+   * Calls the backend AI asset recognition service
+   */
+  private async recognizeAsset(query: string, userId: string): Promise<any> {
     try {
-      const ch = this.client.channels.cache.get(this.auditLogChannelId);
-      if (ch && ch.isTextBased()) {
-        await (ch as TextChannel).send(
-          `📝 Audit: ${entry.action} by ${entry.triggeredBy} — ${entry.details ?? ""}`
-        );
-      const ch = this.client.channels.cache.get(this.auditLogChannelId) as TextChannel;
-      if (ch && typeof ch.send === 'function') {
-        await ch.send(`📝 Audit: ${entry.action} by ${entry.triggeredBy} — ${entry.details ?? ''}`);
+      const response = await fetch(`${BACKEND_URL}/api/assets/recognize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, query })
+      });
+
+      const data = await response.json() as any;
+      if (data.success) {
+        return data.asset;
       }
-    } catch (e) {
-      console.error("Audit log failed", e);
-    }
-  }
-
-  // #147: Announce a new GitHub release to all registered announcement channels
-  async announceRelease(
-    channelId: string,
-    release: { tag_name: string; name: string; html_url: string; body?: string }
-  ): Promise<boolean> {
-    if (!this.client?.user) {
-      console.warn("⚠️ Discord bot not initialized");
-      return false;
-    }
-
-    const channel = this.client.channels.cache.get(channelId) as TextChannel;
-    if (!channel) {
-      console.warn(`⚠️ Announcement channel ${channelId} not found`);
-      return false;
-    }
-
-    const body = release.body
-      ? `\n\n${release.body.slice(0, 500)}${release.body.length > 500 ? "..." : ""}`
-      : "";
-    const message = `🚀 **New Release: ${release.name || release.tag_name}**${body}\n\n🔗 ${release.html_url}`;
-
-    try {
-      await channel.send(message);
-      return true;
+      return null;
     } catch (error) {
-      console.error("Error sending release announcement:", error);
-      return false;
+      console.error("Error calling asset recognition API:", error);
+      return null;
     }
   }
 
+  /**
+   * Register a user to receive notifications
+   */
   async registerUser(userId: string, channelId: string): Promise<boolean> {
     this.userChannels.set(userId, channelId);
     return true;

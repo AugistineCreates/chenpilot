@@ -6,7 +6,7 @@ import { container } from "tsyringe";
 import swaggerUi from "swagger-ui-express";
 import routes from "./routes";
 import authRoutes from "./auth.routes";
-import promptRoutes from "./promptRoutes";
+import assetRoutes from "./asset.routes";
 import { swaggerSpec } from "./swagger";
 import requestLogger from "../middleware/requestLogger";
 import {
@@ -93,6 +93,8 @@ app.post("/query", sensitiveLimiter, async (req, res, next) => {
 
 // Mount all API routes under /api prefix
 app.use("/api", routes);
+app.use("/api/assets", assetRoutes);
+app.use("/api/security/blacklist", ipBlacklistRoutes);
 app.use("/api/prompts", promptRoutes);
 app.use("/api/security/blacklist", ipBlacklistRoutes);
 

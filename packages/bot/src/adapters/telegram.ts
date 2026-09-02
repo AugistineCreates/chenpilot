@@ -3,6 +3,8 @@ import { TransactionNotificationData } from './types';
 import { createTrustlineOperation } from '@chen-pilot/sdk-core';
 import { getAliases } from '../commands';
 
+const BACKEND_URL = process.env.NODE_URL || 'http://localhost:3000';
+
 export class TelegramAdapter {
   private bot: Telegraf | undefined;
   private token: string;
@@ -80,67 +82,77 @@ export class TelegramAdapter {
     this.bot.command(getAliases('start'), (ctx) => ctx.reply('Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant.'));
     this.bot.command(getAliases('help'), (ctx) => ctx.reply('Commands: /start, /balance, /swap, /trustline\n\nYou can also use short aliases like /b for balance, /t for trustline, etc.'));
 
-    // Balance command alias support
-    this.bot.command(getAliases('balance'), async (ctx) => {
-      await ctx.reply('💰 Your balance: 100 XLM (Placeholder)\n<i>Real balance integration coming soon!</i>', { parse_mode: 'HTML' });
-    });
-
-    this.bot.command(getAliases('trustline'), async (ctx) => {
-      const args = ctx.message.text.split(' ').slice(1);
-      if (args.length < 1) {
-        return ctx.reply('Usage: /trustline <assetCode> [issuerDomain|issuerAddress]\nExample: /trustline USDC circle.com');
+    this.bot.command('trustline', async (ctx) => {
+      const text = ctx.message.text.split(' ').slice(1).join(' ');
+      if (!text) {
+        return ctx.reply('Usage: /trustline <assetCode> [issuerDomain|issuerAddress] OR /trustline <description>\nExample: /trustline USDC circle.com OR /trustline the dollar stablecoin');
       }
 
-      // #123: Rate limit check
-      const text = ctx.message && "text" in ctx.message ? ctx.message.text : "";
-      const command = text.split(" ")[0] || "";
-      if (userId) {
-        const rateLimitResult = this.checkRateLimit(userId, command);
-        if (!rateLimitResult.allowed) {
-          await ctx.reply(rateLimitResult.message!);
-          return;
+      const args = text.split(' ');
+      let assetCode = args[0];
+      let assetIssuer = args[1];
+
+      try {
+        // If we only have one arg or it doesn't look like a code + issuer, try AI recognition
+        if (!assetIssuer || assetCode.length > 12) {
+          await ctx.reply(`🔍 AI is identifying the asset: "${text}"...`);
+          const recognized = await this.recognizeAsset(text, ctx.from.id.toString());
+          
+          if (recognized) {
+            assetCode = recognized.assetCode;
+            assetIssuer = recognized.issuer;
+            await ctx.reply(`💡 AI recognized this as <b>${assetCode}</b>${assetIssuer ? ` from <code>${assetIssuer}</code>` : ''}.\n${recognized.description}`, { parse_mode: 'HTML' });
+          } else if (!assetIssuer) {
+            return ctx.reply(`❌ Could not recognize asset from "${text}". Please provide an asset code and issuer address/domain.`);
+          }
         }
-      }
 
-      return next();
+        if (!assetIssuer && assetCode !== 'XLM') {
+          return ctx.reply(`Please provide an issuer domain or address for ${assetCode}.`);
+        }
+
+        await ctx.reply(`🔍 Looking up asset ${assetCode}${assetIssuer ? ` from ${assetIssuer}` : ''}...`);
+        const op = await createTrustlineOperation(assetCode, assetIssuer || 'native');
+        
+        let message = `✅ Found asset ${assetCode}!\n\n`;
+        message += `To add this trustline, you can use the following details in your wallet:\n`;
+        message += `<b>Asset:</b> ${assetCode}\n`;
+        message += `<b>Issuer:</b> <code>${(op as any).asset.issuer || 'native'}</code>\n\n`;
+        message += `<i>Note: In a future update, I will provide a direct signing link.</i>`;
+        
+        await ctx.reply(message, { parse_mode: 'HTML' });
+      } catch (error) {
+        await ctx.reply(`❌ Error: ${error instanceof Error ? error.message : String(error)}`);
+      }
     });
 
-    // Handle callback queries (button presses)
-    this.bot.on("callback_query", async (ctx: any) => {
-      const buttonId = ctx.callbackQuery.data;
-      const userId = String(ctx.from?.id || "unknown");
-      const chatId = String(ctx.chat?.id || "");
+    // Handle natural language asset recognition
+    this.bot.on('text', async (ctx, next) => {
+      const text = ctx.message.text;
+      if (text.startsWith('/') || text.toLowerCase().includes('trustline')) {
+        return next();
+      }
 
-      const genericInteraction: GenericButtonInteraction = {
-        platform: "telegram",
-        userId: userId,
-        buttonId: buttonId,
-        chatId: chatId,
-        raw: ctx,
-        reply: async (message: string) => {
-          await ctx.answerCbQuery(); // Acknowledge the callback query
-          await ctx.reply(message);
-        },
-      };
-
-      const handler = this.buttonHandlers.get(buttonId);
-      if (handler) {
+      // Simple heuristic: if message mentions "add", "trustline", "asset", or "coin"
+      const keywords = ['add', 'trustline', 'asset', 'coin', 'stablecoin', 'token'];
+      const lowercaseText = text.toLowerCase();
+      
+      if (keywords.some(k => lowercaseText.includes(k))) {
         try {
-          await handler(genericInteraction);
+          const recognized = await this.recognizeAsset(text, ctx.from.id.toString());
+          if (recognized && recognized.confidence > 0.8) {
+            let message = `🤖 It sounds like you're talking about <b>${recognized.assetCode}</b>!\n\n`;
+            message += `${recognized.description}\n\n`;
+            message += `Would you like to add a trustline for this asset? Use <code>/trustline ${recognized.assetCode} ${recognized.issuer || ''}</code>`;
+            
+            await ctx.reply(message, { parse_mode: 'HTML' });
+          }
         } catch (error) {
-          console.error("Error handling button interaction:", error);
-          await ctx.answerCbQuery(
-            "âŒ An error occurred while processing your button click."
-          );
+          // Silent error for passive recognition
+          console.error("Passive AI recognition error:", error);
         }
-      } else {
-        await ctx.answerCbQuery("âš ï¸ No handler found for this button.");
       }
-    });
-
-    // Swap command alias support
-    this.bot.command(getAliases('swap'), async (ctx) => {
-      await ctx.reply('🔄 Swap functionality is coming soon!', { parse_mode: 'HTML' });
+      return next();
     });
 
     this.bot.launch();
@@ -173,6 +185,31 @@ export class TelegramAdapter {
     }
   }
 
+  /**
+   * Calls the backend AI asset recognition service
+   */
+  private async recognizeAsset(query: string, userId: string): Promise<any> {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/assets/recognize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, query })
+      });
+
+      const data = await response.json() as any;
+      if (data.success) {
+        return data.asset;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error calling asset recognition API:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Register a user to receive notifications
+   */
   async registerUser(userId: string, chatId: string): Promise<boolean> {
     this.userChatIds.set(userId, chatId);
     return true;
