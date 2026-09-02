@@ -1,0 +1,50 @@
+{
+  "contract": "pause_state",
+  "source": "contracts/pause_state/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.600Z",
+  "ttl_constants": {},
+  "data_key_variants": [],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "PauseInfo",
+      "fields": [
+        {
+          "name": "paused",
+          "rust_type": "bool"
+        },
+        {
+          "name": "changed_by",
+          "rust_type": "Option<Address>"
+        },
+        {
+          "name": "changed_at_ledger",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "PauseChangedEvent",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "paused",
+          "rust_type": "bool"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "contract": "rbac",
+  "source": "contracts/rbac/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.607Z",
+  "ttl_constants": {},
+  "data_key_variants": [
+    {
+      "key_variant": "SuperAdmin",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "HasRole",
+      "value_type": "unknown",
+      "storage_tier": "unknown",
+      "key_payload": "Address, Role"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "EvtRoleGranted",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "to",
+          "rust_type": "Address"
+        },
+        {
+          "name": "role",
+          "rust_type": "Role"
+        },
+        {
+          "name": "by",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtRoleRevoked",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "from",
+          "rust_type": "Address"
+        },
+        {
+          "name": "role",
+          "rust_type": "Role"
+        },
+        {
+          "name": "by",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtAdminTransferred",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "old_admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "new_admin",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "super_admin",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "Role",
+      "fields": [],
+      "variants": [
+        {
+          "name": "OracleProvider"
+        },
+        {
+          "name": "AgentOperator"
+        },
+        {
+          "name": "EmergencyAdmin"
+        }
+      ]
+    }
+  ]
+}

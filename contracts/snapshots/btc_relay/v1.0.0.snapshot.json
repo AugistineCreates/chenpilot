@@ -1,0 +1,47 @@
+{
+  "contract": "btc_relay",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Config",
+      "storage_tier": "Instance",
+      "value_type": "Config",
+      "sample_value": {
+        "admin": "GABC1234ADMINADDRESS000000000000000000000000000000000000",
+        "wrapped_btc_token": "CTOKEN000000000000000000000000000000000000000000000000000",
+        "min_confirmations": 6,
+        "crypto_contract": "CCRYPTO00000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "key_variant": "Claimed",
+      "key_payload": "BytesN<32>",
+      "storage_tier": "Persistent",
+      "value_type": "bool",
+      "sample_value": true,
+      "encoded_value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    },
+    {
+      "key_variant": "Checkpoint",
+      "storage_tier": "Instance",
+      "value_type": "Checkpoint",
+      "sample_value": {
+        "block_hash": "000000000000000000000000000000000000000000000000000000000000abcd",
+        "height": 840000
+      }
+    },
+    {
+      "key_variant": "MaxSafeReorgDepth",
+      "storage_tier": "Instance",
+      "value_type": "u32",
+      "sample_value": 6
+    },
+    {
+      "key_variant": "MaxStaleDepth",
+      "storage_tier": "Instance",
+      "value_type": "u32",
+      "sample_value": 100
+    }
+  ]
+}

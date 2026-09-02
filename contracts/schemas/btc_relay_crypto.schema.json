@@ -1,0 +1,9 @@
+{
+  "contract": "btc_relay_crypto",
+  "source": "contracts/btc_relay_crypto/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.516Z",
+  "ttl_constants": {},
+  "data_key_variants": [],
+  "contract_types": []
+}

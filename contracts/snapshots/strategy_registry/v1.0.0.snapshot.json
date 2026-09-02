@@ -1,0 +1,46 @@
+{
+  "contract": "strategy_registry",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Admin",
+      "storage_tier": "Instance",
+      "value_type": "Address",
+      "sample_value": "GADMIN0000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "key_variant": "AiAgent",
+      "key_payload": "Address",
+      "storage_tier": "Instance",
+      "value_type": "bool",
+      "sample_value": true
+    },
+    {
+      "key_variant": "VerifiedPool",
+      "key_payload": "BytesN<32>",
+      "storage_tier": "Instance",
+      "value_type": "bool",
+      "sample_value": true
+    },
+    {
+      "key_variant": "CurrentStrategy",
+      "storage_tier": "Instance",
+      "value_type": "BytesN<32>",
+      "sample_value": "0000000000000000000000000000000000000000000000000000000000000001"
+    },
+    {
+      "key_variant": "Votes",
+      "key_payload": "BytesN<32>",
+      "storage_tier": "Persistent",
+      "value_type": "u32",
+      "sample_value": 3
+    },
+    {
+      "key_variant": "VotedPools",
+      "storage_tier": "Instance",
+      "value_type": "Vec<BytesN<32>>",
+      "sample_value": []
+    }
+  ]
+}

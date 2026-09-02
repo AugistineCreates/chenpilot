@@ -1,0 +1,52 @@
+{
+  "contract": "flash_loan_guard",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Config",
+      "storage_tier": "Instance",
+      "value_type": "Config",
+      "sample_value": {
+        "admin": "GADMIN0000000000000000000000000000000000000000000000000000",
+        "oracle": "CORACLE000000000000000000000000000000000000000000000000000",
+        "guarded_asset": "CASSET0000000000000000000000000000000000000000000000000000",
+        "max_intra_ledger_deviation_bps": 100,
+        "min_ledger_gap": 5,
+        "max_oracle_staleness_seconds": 300,
+        "max_consecutive_price_change_bps": 500,
+        "max_oracle_update_gap_seconds": 600,
+        "circuit_breaker_threshold_bps": 300,
+        "circuit_breaker_window_seconds": 3600
+      }
+    },
+    {
+      "key_variant": "PriceSnapshot",
+      "storage_tier": "Instance",
+      "value_type": "PriceSnapshot",
+      "sample_value": {
+        "price": 6500000000000,
+        "ledger": 5000000,
+        "oracle_timestamp": 1700000000,
+        "oracle_sequence": 42
+      }
+    },
+    {
+      "key_variant": "PriceSequenceHistory",
+      "storage_tier": "Instance",
+      "value_type": "Vec<PriceSnapshot>",
+      "sample_value": []
+    },
+    {
+      "key_variant": "CircuitBreaker",
+      "storage_tier": "Instance",
+      "value_type": "CircuitBreakerState",
+      "sample_value": {
+        "triggered": false,
+        "trigger_ledger": 0,
+        "trigger_timestamp": 0,
+        "consecutive_violations": 0
+      }
+    }
+  ]
+}

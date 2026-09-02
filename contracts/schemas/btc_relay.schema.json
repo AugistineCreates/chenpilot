@@ -1,0 +1,338 @@
+{
+  "contract": "btc_relay",
+  "source": "contracts/btc_relay/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.506Z",
+  "ttl_constants": {
+    "CLAIMED_TX_TTL_LEDGERS": 6048000,
+    "MAX_MERKLE_PROOF_DEPTH": 32
+  },
+  "data_key_variants": [
+    {
+      "key_variant": "Config",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "Claimed",
+      "value_type": "unknown",
+      "storage_tier": "unknown",
+      "key_payload": "BytesN<32>"
+    },
+    {
+      "key_variant": "Header",
+      "value_type": "unknown",
+      "storage_tier": "unknown",
+      "key_payload": "BytesN<32>"
+    },
+    {
+      "key_variant": "Checkpoint",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "MaxSafeReorgDepth",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "MaxStaleDepth",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "Config",
+      "fields": [
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "wrapped_btc_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "min_confirmations",
+          "rust_type": "u32"
+        },
+        {
+          "name": "crypto_contract",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "HeaderRecord",
+      "fields": [
+        {
+          "name": "block_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "prev_block_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "height",
+          "rust_type": "u32"
+        },
+        {
+          "name": "header_timestamp",
+          "rust_type": "u64"
+        },
+        {
+          "name": "on_canonical_chain",
+          "rust_type": "bool"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "Checkpoint",
+      "fields": [
+        {
+          "name": "block_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "height",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtHeaderAccepted",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "block_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "height",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtReorgApplied",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "old_tip_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "old_tip_height",
+          "rust_type": "u32"
+        },
+        {
+          "name": "new_tip_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "new_tip_height",
+          "rust_type": "u32"
+        },
+        {
+          "name": "orphaned_from_height",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtReorgRejected",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "current_tip_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "current_tip_height",
+          "rust_type": "u32"
+        },
+        {
+          "name": "rejected_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "rejected_height",
+          "rust_type": "u32"
+        },
+        {
+          "name": "fork_depth",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "wrapped_btc_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "min_confirmations",
+          "rust_type": "u32"
+        },
+        {
+          "name": "crypto_contract",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtCfgUpd",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "wrapped_btc_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "min_confirmations",
+          "rust_type": "u32"
+        },
+        {
+          "name": "crypto_contract",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtRelayOk",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "tx_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "recipient",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount_sat",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "SpvProof",
+      "fields": [
+        {
+          "name": "block_header",
+          "rust_type": "Bytes"
+        },
+        {
+          "name": "tx_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "merkle_proof",
+          "rust_type": "Vec<BytesN<32>>"
+        },
+        {
+          "name": "tx_index",
+          "rust_type": "u32"
+        },
+        {
+          "name": "amount_sat",
+          "rust_type": "i128"
+        },
+        {
+          "name": "recipient",
+          "rust_type": "Address"
+        }
+      ]
+    }
+  ]
+}

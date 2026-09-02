@@ -1,0 +1,171 @@
+{
+  "contract": "htlc",
+  "source": "contracts/htlc/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.557Z",
+  "ttl_constants": {
+    "SWAP_TTL_GRACE_LEDGERS": 1209600
+  },
+  "data_key_variants": [
+    {
+      "key_variant": "Swap",
+      "value_type": "unknown",
+      "storage_tier": "Persistent",
+      "key_payload": "BytesN<32>"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "Swap",
+      "fields": [
+        {
+          "name": "initiator",
+          "rust_type": "Address"
+        },
+        {
+          "name": "recipient",
+          "rust_type": "Address"
+        },
+        {
+          "name": "token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "secret_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "expiry_ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "status",
+          "rust_type": "SwapStatus"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtSwapInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "swap_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "initiator",
+          "rust_type": "Address"
+        },
+        {
+          "name": "recipient",
+          "rust_type": "Address"
+        },
+        {
+          "name": "token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "expiry_ledger",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtClaim",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "swap_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "recipient",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtRefund",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "swap_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "initiator",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "SwapStatus",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Active"
+        },
+        {
+          "name": "Claimed"
+        },
+        {
+          "name": "Refunded"
+        }
+      ]
+    }
+  ]
+}

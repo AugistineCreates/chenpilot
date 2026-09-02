@@ -1,0 +1,404 @@
+{
+  "contract": "core_vault",
+  "source": "contracts/core_vault/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.540Z",
+  "ttl_constants": {
+    "TIMELOCK_LEDGERS": 720,
+    "FORCE_EXIT_TTL_LEDGERS": 360000,
+    "DEPOSIT_TTL_LEDGERS": 1209600
+  },
+  "data_key_variants": [
+    {
+      "key_variant": "Admin",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "UnifiedAuth",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "PendingUpgrade",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "BackendOnline",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "Deposit",
+      "value_type": "unknown",
+      "storage_tier": "Persistent",
+      "key_payload": "Address"
+    },
+    {
+      "key_variant": "ForceExit",
+      "value_type": "unknown",
+      "storage_tier": "Persistent",
+      "key_payload": "Address"
+    },
+    {
+      "key_variant": "VaultToken",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "UpgradeMode",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "PendingUpgrade",
+      "fields": [
+        {
+          "name": "new_wasm_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "unlock_ledger",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "ForceExitRequest",
+      "fields": [
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "eligible_at",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "DepositEvent",
+      "fields": [
+        {
+          "name": "user",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "total_deposited",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "WithdrawalEvent",
+      "fields": [
+        {
+          "name": "user",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "RecoveryEvent",
+      "fields": [
+        {
+          "name": "user",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "reason",
+          "rust_type": "RecoveryReason"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "vault_token",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtBackendStatus",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "online",
+          "rust_type": "bool"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtDeposit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "user",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtForceExitReq",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "user",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "eligible_at",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtForceExitDone",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "user",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtUpgProp",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "new_wasm_hash",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "unlock_ledger",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtUpgCncl",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtUpgDone",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "new_wasm_hash",
+          "rust_type": "BytesN<32>"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtAdmXfer",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "old_admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "new_admin",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "UnifiedRole",
+      "fields": [],
+      "variants": [
+        {
+          "name": "SuperAdmin"
+        },
+        {
+          "name": "EmergencyAdmin"
+        },
+        {
+          "name": "VaultAdmin"
+        },
+        {
+          "name": "UpgradeAdmin"
+        },
+        {
+          "name": "StrategyAdmin"
+        },
+        {
+          "name": "RoleAdmin"
+        },
+        {
+          "name": "OracleProvider"
+        },
+        {
+          "name": "AgentOperator"
+        },
+        {
+          "name": "StrategyOperator"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "RecoveryReason",
+      "fields": [],
+      "variants": [
+        {
+          "name": "ForceExitTimeout"
+        },
+        {
+          "name": "AdminIntervention"
+        }
+      ]
+    }
+  ]
+}

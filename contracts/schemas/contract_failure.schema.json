@@ -1,0 +1,9 @@
+{
+  "contract": "contract_failure",
+  "source": "contracts/contract_failure/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.527Z",
+  "ttl_constants": {},
+  "data_key_variants": [],
+  "contract_types": []
+}

@@ -1,0 +1,32 @@
+{
+  "registry_version": "1.0.0",
+  "updated_at": "2026-08-30T00:00:00.000Z",
+  "migrations": [
+    {
+      "_comment": "── TEMPLATE ──────────────────────────────────────────────────────────────",
+      "_template": {
+        "id": "<contract>/<fromVersion>→<toVersion>/<slug>",
+        "contract": "<contract_name>",
+        "fromVersion": "1.0.0",
+        "toVersion": "1.1.0",
+        "description": "Human-readable summary of what changed and why",
+        "idempotencyKey": "<contract_name>:<contract>/<fromVersion>→<toVersion>/<slug>",
+        "storageChanges": [
+          {
+            "keyVariant": "KeyName",
+            "kind": "value_type_changed",
+            "description": "Added new_field to Struct",
+            "from_type": "OldStruct",
+            "to_type": "NewStruct"
+          }
+        ],
+        "migrationInvocation": {
+          "functionName": "migrate",
+          "args": []
+        },
+        "authored_at": "2026-08-30T00:00:00.000Z",
+        "reference": "https://github.com/org/repo/pull/123"
+      }
+    }
+  ]
+}

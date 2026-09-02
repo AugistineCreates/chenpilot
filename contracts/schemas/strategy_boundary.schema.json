@@ -1,0 +1,452 @@
+{
+  "contract": "strategy_boundary",
+  "source": "contracts/strategy_boundary/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.617Z",
+  "ttl_constants": {},
+  "data_key_variants": [
+    {
+      "key_variant": "Admin",
+      "value_type": "Address",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "UnifiedAuth",
+      "value_type": "Address",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "StrategyMetadata",
+      "value_type": "unknown",
+      "storage_tier": "Instance",
+      "key_payload": "BytesN<32>"
+    },
+    {
+      "key_variant": "AllocationLimits",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "RiskLimits",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "StrategyAllocation",
+      "value_type": "unknown",
+      "storage_tier": "Instance",
+      "key_payload": "BytesN<32>"
+    },
+    {
+      "key_variant": "TotalStrategyAllocation",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "WithdrawalRequest",
+      "value_type": "unknown",
+      "storage_tier": "Persistent",
+      "key_payload": "Address"
+    },
+    {
+      "key_variant": "StrategyHealth",
+      "value_type": "unknown",
+      "storage_tier": "Instance",
+      "key_payload": "BytesN<32>"
+    },
+    {
+      "key_variant": "DisabledStrategy",
+      "value_type": "unknown",
+      "storage_tier": "Instance",
+      "key_payload": "BytesN<32>"
+    },
+    {
+      "key_variant": "ActiveStrategies",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "StrategyMetadata",
+      "fields": [
+        {
+          "name": "strategy_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "strategy_address",
+          "rust_type": "Address"
+        },
+        {
+          "name": "risk_level",
+          "rust_type": "RiskLevel"
+        },
+        {
+          "name": "max_allocation",
+          "rust_type": "i128"
+        },
+        {
+          "name": "min_liquidity",
+          "rust_type": "i128"
+        },
+        {
+          "name": "withdrawal_delay",
+          "rust_type": "u32"
+        },
+        {
+          "name": "audit_report",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "audit_expiry",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "AllocationLimits",
+      "fields": [
+        {
+          "name": "max_total_allocation",
+          "rust_type": "i128"
+        },
+        {
+          "name": "max_per_strategy",
+          "rust_type": "i128"
+        },
+        {
+          "name": "min_diversification",
+          "rust_type": "u32"
+        },
+        {
+          "name": "max_concentration",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "StrategyHealth",
+      "fields": [
+        {
+          "name": "strategy_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "total_value",
+          "rust_type": "i128"
+        },
+        {
+          "name": "user_funds",
+          "rust_type": "i128"
+        },
+        {
+          "name": "performance",
+          "rust_type": "i64"
+        },
+        {
+          "name": "last_updated",
+          "rust_type": "u64"
+        },
+        {
+          "name": "health_status",
+          "rust_type": "HealthStatus"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "WithdrawalRequest",
+      "fields": [
+        {
+          "name": "user",
+          "rust_type": "Address"
+        },
+        {
+          "name": "strategy_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "requested_at",
+          "rust_type": "u64"
+        },
+        {
+          "name": "eligible_at",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "RiskLimits",
+      "fields": [
+        {
+          "name": "max_smart_contract_exposure",
+          "rust_type": "i128"
+        },
+        {
+          "name": "max_market_exposure",
+          "rust_type": "i128"
+        },
+        {
+          "name": "max_liquidity_exposure",
+          "rust_type": "i128"
+        },
+        {
+          "name": "max_single_counterparty",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "unified_auth",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtStrategyRegistered",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "strategy_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "risk_level",
+          "rust_type": "RiskLevel"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtStrategyDisabled",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "strategy_id",
+          "rust_type": "BytesN<32>"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtAllocation",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "strategy_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtWithdrawalRequested",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "strategy_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "eligible_at",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtWithdrawalCompleted",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "strategy_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtHealthUpdated",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "strategy_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "health_status",
+          "rust_type": "HealthStatus"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtEmergencyWithdrawal",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "strategy_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "RiskLevel",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Low"
+        },
+        {
+          "name": "Medium"
+        },
+        {
+          "name": "High"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "HealthStatus",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Healthy"
+        },
+        {
+          "name": "Degraded"
+        },
+        {
+          "name": "Critical"
+        },
+        {
+          "name": "Compromised"
+        }
+      ]
+    }
+  ]
+}

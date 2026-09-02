@@ -1,0 +1,236 @@
+{
+  "contract": "lending_liquidation",
+  "source": "contracts/lending_liquidation/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.586Z",
+  "ttl_constants": {
+    "POSITION_TTL_LEDGERS": 6048000
+  },
+  "data_key_variants": [
+    {
+      "key_variant": "Config",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "Position",
+      "value_type": "unknown",
+      "storage_tier": "Persistent",
+      "key_payload": "Address"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "Config",
+      "fields": [
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "collateral_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "debt_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "min_health_factor",
+          "rust_type": "i128"
+        },
+        {
+          "name": "liquidation_bonus_bps",
+          "rust_type": "i128"
+        },
+        {
+          "name": "ltv_bps",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "Position",
+      "fields": [
+        {
+          "name": "collateral_amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "debt_amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "collateral_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "debt_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "min_health_factor",
+          "rust_type": "i128"
+        },
+        {
+          "name": "liquidation_bonus_bps",
+          "rust_type": "i128"
+        },
+        {
+          "name": "ltv_bps",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtCfgUpd",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "collateral_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "debt_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "min_health_factor",
+          "rust_type": "i128"
+        },
+        {
+          "name": "liquidation_bonus_bps",
+          "rust_type": "i128"
+        },
+        {
+          "name": "ltv_bps",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtDeposit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "borrower",
+          "rust_type": "Address"
+        },
+        {
+          "name": "collateral_amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "borrow_amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "health_factor",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtLiquidate",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "liquidator",
+          "rust_type": "Address"
+        },
+        {
+          "name": "borrower",
+          "rust_type": "Address"
+        },
+        {
+          "name": "repay_amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "collateral_seized",
+          "rust_type": "i128"
+        },
+        {
+          "name": "health_factor",
+          "rust_type": "i128"
+        }
+      ]
+    }
+  ]
+}

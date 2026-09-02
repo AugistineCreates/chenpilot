@@ -1,0 +1,220 @@
+{
+  "contract": "fee_distribution",
+  "source": "contracts/fee_distribution/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.540Z",
+  "ttl_constants": {},
+  "data_key_variants": [
+    {
+      "key_variant": "Config",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "DistributionNonce",
+      "value_type": "u32",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "LastDistribution",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "Config",
+      "fields": [
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "treasury",
+          "rust_type": "Address"
+        },
+        {
+          "name": "ai_agent_pool",
+          "rust_type": "Address"
+        },
+        {
+          "name": "lp_pool",
+          "rust_type": "Address"
+        },
+        {
+          "name": "treasury_bps",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ai_agent_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "DistributionRecord",
+      "fields": [
+        {
+          "name": "nonce",
+          "rust_type": "u32"
+        },
+        {
+          "name": "token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "from",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "treasury_share",
+          "rust_type": "i128"
+        },
+        {
+          "name": "ai_agent_share",
+          "rust_type": "i128"
+        },
+        {
+          "name": "lp_share",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "treasury",
+          "rust_type": "Address"
+        },
+        {
+          "name": "ai_agent_pool",
+          "rust_type": "Address"
+        },
+        {
+          "name": "lp_pool",
+          "rust_type": "Address"
+        },
+        {
+          "name": "treasury_bps",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ai_agent_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtCfgUpd",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "treasury",
+          "rust_type": "Address"
+        },
+        {
+          "name": "ai_agent_pool",
+          "rust_type": "Address"
+        },
+        {
+          "name": "lp_pool",
+          "rust_type": "Address"
+        },
+        {
+          "name": "treasury_bps",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ai_agent_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtSplit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "nonce",
+          "rust_type": "u32"
+        },
+        {
+          "name": "token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "from",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "treasury_share",
+          "rust_type": "i128"
+        },
+        {
+          "name": "ai_agent_share",
+          "rust_type": "i128"
+        },
+        {
+          "name": "lp_share",
+          "rust_type": "i128"
+        }
+      ]
+    }
+  ]
+}

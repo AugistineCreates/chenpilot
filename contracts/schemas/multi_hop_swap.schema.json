@@ -1,0 +1,128 @@
+{
+  "contract": "multi_hop_swap",
+  "source": "contracts/multi_hop_swap/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.595Z",
+  "ttl_constants": {
+    "POOL_STATE_TTL_LEDGERS": 6048000
+  },
+  "data_key_variants": [],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "Hop",
+      "fields": [
+        {
+          "name": "pool",
+          "rust_type": "Address"
+        },
+        {
+          "name": "token_in",
+          "rust_type": "Address"
+        },
+        {
+          "name": "token_out",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount_in",
+          "rust_type": "i128"
+        },
+        {
+          "name": "min_amount_out",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "HopResult",
+      "fields": [
+        {
+          "name": "pool",
+          "rust_type": "Address"
+        },
+        {
+          "name": "token_in",
+          "rust_type": "Address"
+        },
+        {
+          "name": "token_out",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount_in",
+          "rust_type": "i128"
+        },
+        {
+          "name": "amount_out",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtHop",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "pool",
+          "rust_type": "Address"
+        },
+        {
+          "name": "token_in",
+          "rust_type": "Address"
+        },
+        {
+          "name": "token_out",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount_in",
+          "rust_type": "i128"
+        },
+        {
+          "name": "amount_out",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtSwapDone",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "total_amount_in",
+          "rust_type": "i128"
+        },
+        {
+          "name": "total_amount_out",
+          "rust_type": "i128"
+        }
+      ]
+    }
+  ]
+}
