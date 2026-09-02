@@ -23,7 +23,9 @@ import {
   AdminWorkflowInstance,
   AdminWorkflowApproval,
 } from "../Agents/admin/workflow.entity";
-import { ShadowComparisonRecord } from "../shadow/ShadowComparisonRecord.entity";
+import { UserKeyTombstone } from "../lifecycle/userKeyTombstone.entity";
+import { LegalHoldEntry } from "../lifecycle/legalHoldEntry.entity";
+import { ErasureReceipt } from "../lifecycle/erasureReceipt.entity";
 
 const isDev = config.env === "development";
 
@@ -55,7 +57,9 @@ const dbOptions: DataSourceOptions = {
     AdminWorkflowPolicy,
     AdminWorkflowInstance,
     AdminWorkflowApproval,
-    ShadowComparisonRecord,
+    UserKeyTombstone,
+    LegalHoldEntry,
+    ErasureReceipt,
   ],
   migrations: [isDev ? "src/migrations/**/*.ts" : "dist/migrations/**/*.js"],
   subscribers: [],

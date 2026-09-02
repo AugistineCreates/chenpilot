@@ -10,7 +10,7 @@ import { priceSpikeAlertService } from "./services/priceSpikeAlert.service";
 import { durableRecoveryService } from "./Agents/planner/DurableRecoveryService";
 import { idempotencyService } from "./Reliability/IdempotencyService";
 import { adminWorkflowService } from "./Agents/admin/workflow.service";
-import { initializeModelRegistry } from "./Agents/models/modelInitialization";
+import { retentionEngine } from "./lifecycle";
 
 class Server {
   private server: http.Server;
@@ -44,6 +44,7 @@ class Server {
         logger.info("Shutting down gracefully...");
         horizonOperationStreamerService.stop();
         priceSpikeAlertService.stop();
+        retentionEngine.stop();
         await this.jobWorker.stop();
         await AppDataSource.destroy();
         this.server.close(() => {
@@ -69,6 +70,9 @@ class Server {
 
       // Start unified idempotency background processor
       idempotencyService.startBackgroundProcessor();
+
+      // Start data retention scheduler (runs daily at 02:00 UTC)
+      retentionEngine.scheduleDaily(2);
 
       horizonOperationStreamerService.start();
       priceSpikeAlertService.start();
