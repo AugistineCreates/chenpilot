@@ -12,8 +12,8 @@ import {
   Operation,
   BASE_FEE,
 } from "@stellar/stellar-sdk";
-import { abortableWait, isAbortError } from "./abort";
-import type { AbortSignalLike } from "./types";
+
+const Server = Horizon.Server;
 
 /**
  * Metadata operation parameters for set/get operations
@@ -83,16 +83,14 @@ export class StellarMetadataManager {
   private horizonUrl: string;
   private networkPassphrase: string;
   private baseFee: string;
-  private defaultSignal?: AbortSignalLike;
   private metadataCache: Map<string, MetadataEntry[]> = new Map();
 
   constructor(config?: MetadataManagerConfig) {
     this.horizonUrl = config?.horizonUrl || "https://horizon.stellar.org";
     this.networkPassphrase =
       config?.networkPassphrase || Networks.PUBLIC;
-    this.baseFee = String(config?.baseFee ?? 100);
-    this.defaultSignal = config?.signal;
-    this.server = new Horizon.Server(this.horizonUrl);
+    this.baseFee = String(config?.baseFee || BASE_FEE);
+    this.server = new Server(this.horizonUrl);
   }
 
   /**

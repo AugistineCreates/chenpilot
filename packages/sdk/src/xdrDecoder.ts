@@ -1,34 +1,45 @@
+// packages/sdk/src/xdrDecoder.ts
+
 import * as StellarSdk from "@stellar/stellar-sdk";
+import { SafeXdrDecoder } from "./xdr/safeDecoder";
+import { SafeXdrDecodeOptions } from "./xdr/types";
+import { sanitizeDiagnostic } from "./xdr/errors";
 
 /**
  * Utility class for decoding and explaining Stellar XDR operations in human-readable format.
+ * Hardened against adversarial resource exhaustion, unbounded allocation, and payload leakage.
  */
 export class XdrDecoder {
   /**
    * Explains a Stellar operation from its XDR representation in human-friendly terms.
-   * @param operationXdr The XDR string of the operation.
+   * @param operationXdr The XDR string or Buffer of the operation.
+   * @param options Optional safe decoding limits.
    * @returns A human-readable description of the operation.
    */
-  static explainOperation(operationXdr: string): string {
+  static explainOperation(
+    operationXdr: string | Buffer | Uint8Array,
+    options?: SafeXdrDecodeOptions
+  ): string {
     try {
-      const operation = StellarSdk.xdr.Operation.fromXDR(
-        operationXdr,
-        "base64"
-      );
+      const operation = SafeXdrDecoder.decodeOperation(operationXdr, options);
       const opType = operation.body().switch();
       const op = operation.body().value();
 
       switch (opType) {
         case StellarSdk.xdr.OperationType.createAccount(): {
           const createAccountOp = op as StellarSdk.xdr.CreateAccountOp;
-          return `Create account for ${createAccountOp.destination().toString()} with starting balance of ${createAccountOp.startingBalance().toString()} XLM`;
+          const dest = this.formatAccountId(createAccountOp.destination());
+          const startingBalance = this.formatAmount(createAccountOp.startingBalance());
+          return `Create account for ${dest} with starting balance of ${startingBalance} XLM`;
         }
 
         case StellarSdk.xdr.OperationType.payment(): {
           const paymentOp = op as StellarSdk.xdr.PaymentOp;
           const asset = paymentOp.asset();
           const assetDesc = this.getAssetDesc(asset);
-          return `Send ${paymentOp.amount().toString()} ${assetDesc} to ${paymentOp.destination().toString()}`;
+          const dest = this.formatMuxedAccount(paymentOp.destination());
+          const amount = this.formatAmount(paymentOp.amount());
+          return `Send ${amount} ${assetDesc} to ${dest}`;
         }
 
         case StellarSdk.xdr.OperationType.pathPaymentStrictReceive(): {
@@ -37,7 +48,10 @@ export class XdrDecoder {
           const destAsset = pathPaymentOp.destAsset();
           const sendAssetDesc = this.getAssetDesc(sendAsset);
           const destAssetDesc = this.getAssetDesc(destAsset);
-          return `Path payment: send up to ${pathPaymentOp.sendMax().toString()} ${sendAssetDesc} to receive exactly ${pathPaymentOp.destAmount().toString()} ${destAssetDesc} to ${pathPaymentOp.destination().toString()}`;
+          const dest = this.formatMuxedAccount(pathPaymentOp.destination());
+          const sendMax = this.formatAmount(pathPaymentOp.sendMax());
+          const destAmount = this.formatAmount(pathPaymentOp.destAmount());
+          return `Path payment: send up to ${sendMax} ${sendAssetDesc} to receive exactly ${destAmount} ${destAssetDesc} to ${dest}`;
         }
 
         case StellarSdk.xdr.OperationType.manageSellOffer(): {
@@ -46,7 +60,8 @@ export class XdrDecoder {
           const buying = manageSellOp.buying();
           const sellingDesc = this.getAssetDesc(selling);
           const buyingDesc = this.getAssetDesc(buying);
-          return `Manage sell offer: sell ${manageSellOp.amount().toString()} ${sellingDesc} for ${buyingDesc} at price ${manageSellOp.price().n().toString()}/${manageSellOp.price().d().toString()}`;
+          const amount = this.formatAmount(manageSellOp.amount());
+          return `Manage sell offer: sell ${amount} ${sellingDesc} for ${buyingDesc} at price ${manageSellOp.price().n().toString()}/${manageSellOp.price().d().toString()}`;
         }
 
         case StellarSdk.xdr.OperationType.createPassiveSellOffer(): {
@@ -55,7 +70,8 @@ export class XdrDecoder {
           const pbuying = passiveSellOp.buying();
           const psellingDesc = this.getAssetDesc(pselling);
           const pbuyingDesc = this.getAssetDesc(pbuying);
-          return `Create passive sell offer: sell ${passiveSellOp.amount().toString()} ${psellingDesc} for ${pbuyingDesc} at price ${passiveSellOp.price().n().toString()}/${passiveSellOp.price().d().toString()}`;
+          const amount = this.formatAmount(passiveSellOp.amount());
+          return `Create passive sell offer: sell ${amount} ${psellingDesc} for ${pbuyingDesc} at price ${passiveSellOp.price().n().toString()}/${passiveSellOp.price().d().toString()}`;
         }
 
         case StellarSdk.xdr.OperationType.setOptions():
@@ -64,11 +80,7 @@ export class XdrDecoder {
         case StellarSdk.xdr.OperationType.changeTrust(): {
           const changeTrustOp = op as StellarSdk.xdr.ChangeTrustOp;
           const line = changeTrustOp.line();
-          const limit = changeTrustOp.limit().toString();
-          // ChangeTrustAsset shares AssetType's discriminant with Asset —
-          // there is no separate ChangeTrustAssetType (the SDK never
-          // exposes one; the previous `as any` lookup here always resolved
-          // to `undefined` and silently fell into the credit-asset branch).
+          const limit = this.formatAmount(changeTrustOp.limit());
           if (line.switch() === StellarSdk.xdr.AssetType.assetTypeNative()) {
             return `Change trust: remove trustline for XLM (limit: ${limit})`;
           } else {
@@ -79,7 +91,7 @@ export class XdrDecoder {
 
         case StellarSdk.xdr.OperationType.allowTrust(): {
           const allowTrustOp = op as StellarSdk.xdr.AllowTrustOp;
-          const trustor = allowTrustOp.trustor().toString();
+          const trustor = this.formatAccountId(allowTrustOp.trustor());
           const assetCode = allowTrustOp.asset().toString();
           const authorize = allowTrustOp.authorize().toString();
           return `Allow trust: ${authorize === "1" ? "authorize" : "deauthorize"} ${trustor} to hold ${assetCode}`;
@@ -87,7 +99,7 @@ export class XdrDecoder {
 
         case StellarSdk.xdr.OperationType.accountMerge(): {
           const mergeOp = op as StellarSdk.xdr.MuxedAccount;
-          return `Merge account into ${mergeOp.toString()}`;
+          return `Merge account into ${this.formatMuxedAccount(mergeOp)}`;
         }
 
         case StellarSdk.xdr.OperationType.inflation():
@@ -113,7 +125,7 @@ export class XdrDecoder {
           const createClaimOp = op as StellarSdk.xdr.CreateClaimableBalanceOp;
           const claimants = createClaimOp.claimants();
           const asset = createClaimOp.asset();
-          const amount = createClaimOp.amount().toString();
+          const amount = this.formatAmount(createClaimOp.amount());
           const assetDesc = this.getAssetDesc(asset);
           return `Create claimable balance: ${amount} ${assetDesc} for ${claimants.length} claimant(s)`;
         }
@@ -125,7 +137,8 @@ export class XdrDecoder {
 
         case StellarSdk.xdr.OperationType.beginSponsoringFutureReserves(): {
           const beginSponsorOp = op as StellarSdk.xdr.BeginSponsoringFutureReservesOp;
-          return `Begin sponsoring future reserves for ${beginSponsorOp.sponsoredId().toString()}`;
+          const sponsored = this.formatAccountId(beginSponsorOp.sponsoredId());
+          return `Begin sponsoring future reserves for ${sponsored}`;
         }
 
         case StellarSdk.xdr.OperationType.endSponsoringFutureReserves():
@@ -136,9 +149,9 @@ export class XdrDecoder {
 
         case StellarSdk.xdr.OperationType.clawback(): {
           const clawbackOp = op as StellarSdk.xdr.ClawbackOp;
-          const from = clawbackOp.from().toString();
+          const from = this.formatMuxedAccount(clawbackOp.from());
           const asset = clawbackOp.asset();
-          const amount = clawbackOp.amount().toString();
+          const amount = this.formatAmount(clawbackOp.amount());
           const assetDesc = this.getAssetDesc(asset);
           return `Clawback ${amount} ${assetDesc} from ${from}`;
         }
@@ -150,7 +163,7 @@ export class XdrDecoder {
 
         case StellarSdk.xdr.OperationType.setTrustLineFlags(): {
           const setTrustFlagsOp = op as StellarSdk.xdr.SetTrustLineFlagsOp;
-          const trustor = setTrustFlagsOp.trustor().toString();
+          const trustor = this.formatAccountId(setTrustFlagsOp.trustor());
           const asset = setTrustFlagsOp.asset();
           const assetDesc = this.getAssetDesc(asset);
           const clearFlags = setTrustFlagsOp.clearFlags().toString();
@@ -185,15 +198,54 @@ export class XdrDecoder {
           return `Unknown operation type: ${opType}`;
       }
     } catch (error) {
-      return `Failed to decode operation: ${(error as Error).message}`;
+      const sanitized = sanitizeDiagnostic(
+        (error as Error).message,
+        options?.limits?.maxDiagnosticLength ?? 256
+      );
+      return `Failed to decode operation: ${sanitized}`;
     }
   }
 
   /**
-   * Describe a payment/offer-style xdr.Asset. assetCode()/issuer() live on
-   * the alphaNum4/alphaNum12 sub-object, not on Asset itself — calling them
-   * directly on the Asset throws for any non-native asset (this previously
-   * went unnoticed because the parameter was typed `any`).
+   * Format an AccountId to Stellar G-address string.
+   */
+  private static formatAccountId(account: StellarSdk.xdr.AccountId): string {
+    try {
+      return StellarSdk.StrKey.encodeEd25519PublicKey(account.ed25519());
+    } catch {
+      return String(account);
+    }
+  }
+
+  /**
+   * Format a MuxedAccount to Stellar address string.
+   */
+  private static formatMuxedAccount(account: StellarSdk.xdr.MuxedAccount): string {
+    try {
+      return StellarSdk.encodeMuxedAccountToAddress(account, false);
+    } catch {
+      return String(account);
+    }
+  }
+
+  /**
+   * Format a stroop amount (int64 / 10,000,000) to decimal string.
+   */
+  private static formatAmount(amount: StellarSdk.xdr.Int64 | string | number | bigint): string {
+    try {
+      const raw = BigInt(amount.toString());
+      const whole = raw / 10000000n;
+      const rem = raw % 10000000n;
+      if (rem === 0n) return whole.toString();
+      const frac = rem.toString().padStart(7, "0").replace(/0+$/, "");
+      return `${whole}.${frac}`;
+    } catch {
+      return String(amount);
+    }
+  }
+
+  /**
+   * Describe a payment/offer-style xdr.Asset.
    */
   private static getAssetDesc(asset: StellarSdk.xdr.Asset): string {
     if (asset.switch() === StellarSdk.xdr.AssetType.assetTypeNative()) {
@@ -201,26 +253,33 @@ export class XdrDecoder {
     }
     if (asset.switch() === StellarSdk.xdr.AssetType.assetTypeCreditAlphanum4()) {
       const alphaNum4 = asset.alphaNum4();
-      return `${alphaNum4.assetCode().toString().replace(/\0+$/, "")} (${alphaNum4.issuer().toString()})`;
+      const code = alphaNum4.assetCode().toString("utf8").replace(/\0+$/, "");
+      const issuer = this.formatAccountId(alphaNum4.issuer());
+      return `${code} (${issuer})`;
     }
     const alphaNum12 = asset.alphaNum12();
-    return `${alphaNum12.assetCode().toString().replace(/\0+$/, "")} (${alphaNum12.issuer().toString()})`;
+    const code = alphaNum12.assetCode().toString("utf8").replace(/\0+$/, "");
+    const issuer = this.formatAccountId(alphaNum12.issuer());
+    return `${code} (${issuer})`;
   }
 
   /**
-   * Same as getAssetDesc() but for xdr.ChangeTrustAsset, which additionally
-   * supports the pool-share variant (no assetCode/issuer of its own).
+   * Describe xdr.ChangeTrustAsset.
    */
   private static getChangeTrustAssetDesc(
     asset: StellarSdk.xdr.ChangeTrustAsset
   ): string {
     if (asset.switch() === StellarSdk.xdr.AssetType.assetTypeCreditAlphanum4()) {
       const alphaNum4 = asset.alphaNum4();
-      return `${alphaNum4.assetCode().toString().replace(/\0+$/, "")} (${alphaNum4.issuer().toString()})`;
+      const code = alphaNum4.assetCode().toString("utf8").replace(/\0+$/, "");
+      const issuer = this.formatAccountId(alphaNum4.issuer());
+      return `${code} (${issuer})`;
     }
     if (asset.switch() === StellarSdk.xdr.AssetType.assetTypeCreditAlphanum12()) {
       const alphaNum12 = asset.alphaNum12();
-      return `${alphaNum12.assetCode().toString().replace(/\0+$/, "")} (${alphaNum12.issuer().toString()})`;
+      const code = alphaNum12.assetCode().toString("utf8").replace(/\0+$/, "");
+      const issuer = this.formatAccountId(alphaNum12.issuer());
+      return `${code} (${issuer})`;
     }
     return "liquidity pool share";
   }

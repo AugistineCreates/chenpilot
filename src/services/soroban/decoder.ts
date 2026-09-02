@@ -9,6 +9,8 @@
 import { scValToNative } from "./sdkAdapter";
 import { DecodeError } from "./errors";
 import type { SimulationSuccess } from "./sdkAdapter";
+import { safeScValToNative, SafeXdrDecoder } from "../../utils/xdr";
+import * as StellarSdk from "@stellar/stellar-sdk";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -21,6 +23,12 @@ export function decodeReturnValue(sim: SimulationSuccess): unknown {
   if (retval === null || retval === undefined) return null;
 
   try {
+    if (typeof retval === "string" || Buffer.isBuffer(retval) || retval instanceof Uint8Array) {
+      return SafeXdrDecoder.decodeScVal(retval);
+    }
+    if (retval instanceof StellarSdk.xdr.ScVal) {
+      return safeScValToNative(retval);
+    }
     return scValToNative(retval);
   } catch (err) {
     throw new DecodeError(
@@ -37,6 +45,12 @@ export function decodeReturnValue(sim: SimulationSuccess): unknown {
 export function decodeScVal(scVal: unknown): unknown {
   if (scVal === null || scVal === undefined) return null;
   try {
+    if (typeof scVal === "string" || Buffer.isBuffer(scVal) || scVal instanceof Uint8Array) {
+      return SafeXdrDecoder.decodeScVal(scVal);
+    }
+    if (scVal instanceof StellarSdk.xdr.ScVal) {
+      return safeScValToNative(scVal);
+    }
     return scValToNative(scVal);
   } catch (err) {
     throw new DecodeError(

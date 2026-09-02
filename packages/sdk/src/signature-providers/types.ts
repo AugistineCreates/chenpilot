@@ -110,7 +110,52 @@ export interface SignatureProviderSDKConfig {
   enableLogging?: boolean;
   connectionTimeout?: number;
   maxRetries?: number;
-  registry?: Record<string, unknown>; // SignatureProviderRegistry type
+  errorRecovery?: {
+    enabled: boolean;
+    maxRetries: number;
+    retryDelay: number;
+  };
+  registry?: {
+    autoRegister?: boolean;
+    validateProviders?: boolean;
+    [key: string]: unknown;
+  };
+}
+
+export interface SignatureProviderContext {
+  registry: unknown;
+  factory: unknown;
+  coordinator: unknown;
+  errorRecovery: unknown;
+}
+
+export interface ProviderHealthCheck {
+  providerId: string;
+  healthy: boolean;
+  connected: boolean;
+  lastChecked: Date;
+  capabilities: SignatureProviderCapabilities;
+  errors?: Error[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface BatchOperationResult<T> {
+  successful: T[];
+  failed: Array<{ error: Error; input?: unknown }>;
+  totalCount: number;
+  successCount: number;
+  failureCount: number;
+  duration: number;
+}
+
+export interface ProviderMetrics {
+  providerId: string;
+  connectionCount: number;
+  signatureCount: number;
+  errorCount: number;
+  averageSigningTime: number;
+  lastActivity: Date;
+  uptime: number;
 }
 
 export interface ProviderSelectionPreferences {

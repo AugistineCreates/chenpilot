@@ -54,19 +54,9 @@ export class AgentRequestError extends SdkError {
     message: string,
     idempotencyKey: string,
     attempts: number,
-    statusCode?: number,
+    statusCode?: number
   ) {
-    const category = statusCode !== undefined
-      ? categorizeHttpStatus(statusCode)
-      : ErrorCategory.TRANSPORT;
-    const code = statusCode !== undefined
-      ? `HTTP_${statusCode}`
-      : "AGENT_REQUEST_FAILED";
-    const recoverable = statusCode !== undefined
-      ? RETRIABLE_STATUS_CODES.has(statusCode)
-      : false;
-
-    super({ category, code, message, recoverable });
+    super(message);
     this.name = "AgentRequestError";
     this.idempotencyKey = idempotencyKey;
     this.attempts = attempts;
@@ -97,58 +87,8 @@ type FetchLike = (
 
 const RETRIABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
 
-function categorizeHttpStatus(status: number): ErrorCategory {
-  if (status === 429) return ErrorCategory.POLICY;
-  if (status === 422 || status === 400) return ErrorCategory.VALIDATION;
-  if (status === 401 || status === 403) return ErrorCategory.POLICY;
-  if (status >= 500) return ErrorCategory.EXECUTION;
-  return ErrorCategory.TRANSPORT;
-}
-
-interface CategorizedError {
-  category: ErrorCategory;
-  code: string;
-  message: string;
-  recoverable: boolean;
-}
-
-/**
- * Parses a non-2xx response body into a structured `CategorizedError`.
- * Tolerates JSON and plain-text bodies, falling back to the HTTP status.
- */
-function parseCategorizedError(body: string, status: number): CategorizedError {
-  let message = body;
-  let category: ErrorCategory = categorizeHttpStatus(status);
-  let code = `HTTP_${status}`;
-
-  try {
-    const parsed = JSON.parse(body) as {
-      message?: unknown;
-      category?: unknown;
-      code?: unknown;
-    };
-    if (typeof parsed.message === "string" && parsed.message.trim() !== "") {
-      message = parsed.message;
-    }
-    if (typeof parsed.category === "string") {
-      const candidate = parsed.category.toUpperCase() as ErrorCategory;
-      if (Object.values<string>(ErrorCategory).includes(candidate)) {
-        category = candidate;
-      }
-    }
-    if (typeof parsed.code === "string") {
-      code = parsed.code;
-    }
-  } catch {
-    // Not JSON — keep the raw body as the message.
-  }
-
-  return {
-    category,
-    code,
-    message,
-    recoverable: RETRIABLE_STATUS_CODES.has(status),
-  };
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function canonicalize(value: unknown): unknown {
@@ -242,12 +182,7 @@ export class AgentClient {
     const retryDelayMs = request.retryDelayMs ?? this.defaultRetryDelayMs;
 
     let attempts = 0;
-    let lastCategorizedError: CategorizedError = {
-      category: ErrorCategory.TRANSPORT,
-      code: "UNKNOWN",
-      message: "Request failed",
-      recoverable: false,
-    };
+    let lastErrorMessage = "Request failed";
     let lastStatusCode: number | undefined;
 
     while (attempts < maxRetries) {
@@ -271,24 +206,22 @@ export class AgentClient {
         if (!response.ok) {
           lastStatusCode = response.status;
           const body = await response.text().catch(() => "");
-          lastCategorizedError = parseCategorizedError(body, response.status);
+          const message = body || `HTTP ${response.status}`;
 
           if (
             !RETRIABLE_STATUS_CODES.has(response.status) ||
             attempts >= maxRetries
           ) {
             throw new AgentRequestError(
-              `Agent query failed: ${lastCategorizedError.message}`,
+              `Agent query failed: ${message}`,
               idempotencyKey,
               attempts,
-              response.status,
+              response.status
             );
           }
 
-          await abortableSleep(
-            retryDelayMs * attempts,
-            timed.signal as AbortSignalLike
-          );
+          lastErrorMessage = `Agent query failed: ${message}`;
+          await sleep(retryDelayMs * attempts);
           continue;
         }
 
@@ -299,34 +232,27 @@ export class AgentClient {
           result: parsed.result,
         };
       } catch (error) {
-        if (error instanceof AgentRequestError) {
-          throw error;
-        }
-
-        // Caller-initiated cancellation (or a timeout) must propagate as an
-        // abort error, never be wrapped or retried.
-        if (isAbortError(error)) {
-          throw error;
-        }
-
+        const isAbort =
+          error instanceof Error &&
+          (error.name === "AbortError" || error.message.includes("aborted"));
         const isNetwork =
           error instanceof TypeError ||
           (error instanceof Error &&
             error.message.toLowerCase().includes("network"));
 
-        lastCategorizedError = {
-          category: isNetwork ? ErrorCategory.TRANSPORT : ErrorCategory.UNKNOWN,
-          code: isNetwork ? "NETWORK_ERROR" : "UNKNOWN",
-          message: error instanceof Error ? error.message : String(error),
-          recoverable: isNetwork,
-        };
+        if (error instanceof AgentRequestError) {
+          throw error;
+        }
+
+        lastErrorMessage =
+          error instanceof Error ? error.message : String(error);
 
         if (!isNetwork || attempts >= maxRetries) {
           throw new AgentRequestError(
-            `Agent query failed: ${lastCategorizedError.message}`,
+            `Agent query failed: ${lastErrorMessage}`,
             idempotencyKey,
             attempts,
-            lastStatusCode,
+            lastStatusCode
           );
         }
 
@@ -340,10 +266,10 @@ export class AgentClient {
     }
 
     throw new AgentRequestError(
-      `Agent query failed: ${lastCategorizedError.message}`,
+      `Agent query failed: ${lastErrorMessage}`,
       idempotencyKey,
       attempts,
-      lastStatusCode,
+      lastStatusCode
     );
   }
 
@@ -421,16 +347,9 @@ export class AgentClient {
       swapRequest.fromChain !== ChainId.BITCOIN ||
       swapRequest.toChain !== ChainId.STELLAR
     ) {
-      throw new SdkError({
-        category: ErrorCategory.VALIDATION,
-        code: "INVALID_SWAP_DIRECTION",
-        message:
-          "executeBtcToStellarSwap only supports fromChain=bitcoin and toChain=stellar",
-        details: {
-          fromChain: swapRequest.fromChain,
-          toChain: swapRequest.toChain,
-        },
-      });
+      throw new Error(
+        "executeBtcToStellarSwap only supports fromChain=bitcoin and toChain=stellar"
+      );
     }
 
     const idempotencyKey =

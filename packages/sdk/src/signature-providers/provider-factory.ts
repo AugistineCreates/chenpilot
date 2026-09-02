@@ -17,7 +17,7 @@ import {
   ProviderCreationError,
   UnsupportedProviderTypeError,
 } from "./errors";
-import { ProviderSelectionPreferences } from "./types";
+import { ProviderSelectionPreferences, ProviderType } from "./types";
 
 /**
  * Concrete error class for provider factory operations
@@ -29,18 +29,9 @@ class ProviderFactoryError extends SignatureProviderError {
 }
 
 /**
- * Provider type identifiers
- */
-export enum ProviderType {
-  MOCK = "mock",
-  LEDGER = "ledger",
-  ALBEDO = "albedo",
-}
-
-/**
  * Provider configuration union type
  */
-export type ProviderConfig =
+type ProviderConfig =
   | { type: ProviderType.MOCK; config?: MockProviderConfig }
   | { type: ProviderType.LEDGER; config?: LedgerProviderConfig }
   | { type: ProviderType.ALBEDO; config?: AlbedoProviderConfig };
@@ -265,10 +256,7 @@ export class SignatureProviderFactory {
       requireUserInteraction?: boolean;
     } = {}
   ): Promise<SignatureProvider> {
-    const registry = this.config.defaultRegistry;
-    if (!registry) {
-      throw new Error("No default registry configured");
-    }
+    const registry = this.config.defaultRegistry ?? signatureProviderRegistry;
     const candidates = registry.resolveProviders(
       chainId,
       preferences as ProviderSelectionPreferences

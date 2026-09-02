@@ -5,9 +5,8 @@ import config from "../config/config";
 import AppDataSource from "../config/Datasource";
 import logger from "../config/logger";
 import { DeploymentEventBridge, TransactionEventBridge } from "../Gateway/eventBridges";
-import { QueueJob } from "./job.entity";
 import { JobHandler, JobHandlerResult, NonRetryableJobError } from "./jobWorker";
-import { getFinalizationManager } from "../services/finality/FinalizationManager";
+import { SafeXdrDecoder } from "../utils/xdr";
 
 interface DelayedTransactionPayload {
   userId: string;
@@ -58,10 +57,10 @@ class DelayedTransactionJobHandler implements JobHandler {
     }
 
     try {
-      const tx = StellarSdk.Transaction.fromXDR(
+      const tx = SafeXdrDecoder.decodeTransaction(
         transactionXdr,
-        config.stellar.networkPassphrase,
-      );
+        { networkPassphrase: config.stellar.networkPassphrase }
+      ) as StellarSdk.Transaction;
       const response = await this.server.submitTransaction(tx);
 
       // Instead of immediately calling notifyConfirmed, start reorg-aware finality tracking
