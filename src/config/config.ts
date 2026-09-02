@@ -55,10 +55,14 @@ if (jwtSecret.length < 32) {
   );
 }
 
-const encryptionKey = process.env.ENCRYPTION_KEY;
-if (!encryptionKey || !/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
+const encryptionKey = process.env.ENCRYPTION_KEY?.trim();
+const encryptionKeysJson = process.env.ENCRYPTION_KEYS_JSON?.trim();
+if (
+  !encryptionKeysJson &&
+  (!encryptionKey || !/^[0-9a-fA-F]{64}$/.test(encryptionKey))
+) {
   throw new Error(
-    "ENCRYPTION_KEY must be set and be a 64-character hex string"
+    "ENCRYPTION_KEY must be a 64-character hex string when ENCRYPTION_KEYS_JSON is not set"
   );
 }
 
@@ -81,7 +85,7 @@ export default {
   port: parsePositiveInt("PORT", "2333"),
   apiKey: requireEnv("ANTHROPIC_API_KEY"),
   node_url: requireEnv("NODE_URL"),
-  encryptionKey: requireEnv("ENCRYPTION_KEY", 64),
+  encryptionKey,
   stellar: {
     network: stellarNetwork,
     horizonUrl: process.env.STELLAR_HORIZON_URL || stellarConfig.horizonUrl,
@@ -127,16 +131,15 @@ export default {
     timeouts: {
       llmCall: parsePositiveInt("AGENT_LLM_TIMEOUT", "30000"),
       toolExecution: parsePositiveInt("AGENT_TOOL_TIMEOUT", "60000"),
-      agentExecution: parsePositiveInt(
-        "AGENT_EXECUTION_TIMEOUT",
-        "120000"
-      ),
+      agentExecution: parsePositiveInt("AGENT_EXECUTION_TIMEOUT", "120000"),
       planExecution: parsePositiveInt("AGENT_PLAN_TIMEOUT", "180000"),
     },
   },
   admin: {
     allowedIps: process.env.ADMIN_ALLOWED_IPS
-      ? process.env.ADMIN_ALLOWED_IPS.split(",").map((ip) => ip.trim()).filter(Boolean)
+      ? process.env.ADMIN_ALLOWED_IPS.split(",")
+          .map((ip) => ip.trim())
+          .filter(Boolean)
       : [],
   },
   externalRequest: {
