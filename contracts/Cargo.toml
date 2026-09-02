@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "telemetry",
     "contract_failure",
     "pause_state",
     "btc_relay",
@@ -22,6 +23,17 @@ members = [
     "unified_auth",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+telemetry = { path = "telemetry" }
+opentelemetry = { version = "0.24", features = ["metrics", "trace"] }
+opentelemetry_sdk = { version = "0.24", features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.16" }
+
+[workspace.metadata.cardinality]
+# Per-metric-family budgets. Keys are metric family names.
+# `*` is the wildcard default.
+"*" = { max_unique_series = 100, max_label_count = 5, max_label_value_length = 64 }
 
 [profile.release]
 opt-level = "z"

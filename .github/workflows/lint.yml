@@ -7,80 +7,65 @@ on:
     branches: ["**"]
 
 jobs:
-  # ── Strict lint: fails the build on any ESLint error or warning ──────────
-  # Scoped to paths that are actively maintained and expected to be clean.
-  # Expand the paths list as more of the codebase is brought up to standard.
   eslint-strict:
-    name: ESLint (strict – new code)
+    name: ESLint (strict - new code)
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - name: Install dependencies
-        # npm install instead of npm ci: lock file may be out of sync with
-        # recently added packages (socket.io, etc.). npm install regenerates
-        # the lock file as needed without failing.
         run: npm install
-
       - name: Run ESLint (zero warnings allowed)
-        # --max-warnings 0 makes any warning a build failure.
-        # Paths listed here are expected to be fully lint-clean.
-        # Add new directories here as they are cleaned up.
         run: |
-          npx eslint \
+          nph eslint \
             src/Agents/sandbox/ \
             src/Agents/registry/ \
             src/Agents/planner/ \
             --max-warnings 0
-
-  # ── Audit lint: reports issues across the whole repo but does NOT fail ───
-  # Gives visibility into existing violations without blocking CI.
-  # Once all issues in a directory are fixed, move it to eslint-strict above.
   eslint-audit:
-    name: ESLint (audit – full repo)
+    name: ESLint (audit - full repo)
     runs-on: ubuntu-latest
-    # Never block merges; this is informational only
     continue-on-error: true
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - name: Install dependencies
         run: npm install
-
-      - name: Run ESLint (full repo – informational)
+      - name: Run ESLint (full repo - informational)
         run: npx eslint . --format stylish || true
-
-  # ── Prettier: check formatting on all tracked source files ───────────────
+  telemetry-lint:
+    name: Telemetry lint (cardinality budgets)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Run telemetry lint
+        run: npm run lint:telemetry
   prettier:
     name: Prettier
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - name: Install dependencies
         run: npm install
-
       - name: Check formatting
-        # --check exits non-zero if any file would be reformatted.
         run: npx prettier --check "src/Agents/sandbox/**" "src/Agents/registry/**" "src/Agents/planner/**"
