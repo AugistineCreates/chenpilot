@@ -3,8 +3,8 @@ import { transactionHistoryService, type TransactionQueryParams, type Transactio
 import AppDataSource from "../config/Datasource";
 import { User } from "../Auth/user.entity";
 import * as StellarSdk from "@stellar/stellar-sdk";
-import { SponsorshipTransactionBuilder } from "../../packages/sdk/src/sponsorship";
 import logger from "../config/logger";
+import { sequenceLeaseService } from "../services/sequence";
 import { auditLogService } from "../AuditLog/auditLog.service";
 import { AuditAction, AuditSeverity } from "../AuditLog/auditLog.entity";
 import { authenticateToken } from "../Auth/auth.middleware";
@@ -108,29 +108,66 @@ router.post(
           ? StellarSdk.Networks.PUBLIC
           : StellarSdk.Networks.TESTNET;
       const sponsorKeypair = StellarSdk.Keypair.fromSecret(sponsorSecret);
+      const sponsorPublicKey = sponsorKeypair.publicKey();
       const server = new StellarSdk.Horizon.Server(
         process.env.HORIZON_URL || "https://horizon-testnet.stellar.org"
       );
-      await server.loadAccount(sponsorKeypair.publicKey());
-      const builder = new SponsorshipTransactionBuilder(
-        sponsorKeypair,
-        networkPassphrase
+
+      // Acquire a sequence lease for the sponsor account to prevent races
+      const sponsorLease = await sequenceLeaseService.acquireLease(
+        sponsorPublicKey,
+        `sponsor:${userId}`,
+        120_000,
+        server
       );
-      builder.addBeginSponsorship({
-        sponsor: sponsorKeypair.publicKey(),
-        sponsoredAccount: user.address,
+
+      // Build account with leased sequence to prevent races across instances
+      const sponsorAccount = new StellarSdk.Account(
+        sponsorPublicKey,
+        sponsorLease.sequenceNumber.toString()
+      );
+
+      const txBuilder = new StellarSdk.TransactionBuilder(sponsorAccount, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase,
       });
-      builder.addSponsoredOperation(
+      txBuilder.addOperation(
+        StellarSdk.Operation.beginSponsoringFutureReserves({
+          source: sponsorPublicKey,
+          sponsored: user.address,
+        })
+      );
+      txBuilder.addOperation(
         StellarSdk.Operation.createAccount({
-          source: sponsorKeypair.publicKey(),
+          source: sponsorPublicKey,
           destination: user.address,
           startingBalance: "0",
         })
       );
-      builder.addEndSponsorship();
-      const tx = builder.build();
+      txBuilder.addOperation(
+        StellarSdk.Operation.endSponsoringFutureReserves({
+          source: user.address,
+        })
+      );
+
+      const tx = txBuilder.setTimeout(300).build();
       tx.sign(sponsorKeypair);
+
+      // Validate lease fencing before submission
+      await sequenceLeaseService.validateLease(
+        sponsorLease.lease.id,
+        sponsorLease.fencingToken
+      );
+
       await server.submitTransaction(tx);
+
+      // Mark lease consumed after successful submission
+      const txHash = tx.hash;
+      await sequenceLeaseService.consumeLease(
+        sponsorLease.lease.id,
+        `sponsor:${userId}`,
+        txHash
+      );
       user.isFunded = true;
       user.updatedAt = new Date();
       await userRepository.save(user);

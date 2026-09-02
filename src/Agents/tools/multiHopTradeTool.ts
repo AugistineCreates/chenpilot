@@ -13,6 +13,7 @@ import {
 } from "../../services/multiHopPathFinder";
 import { assetRevocationService } from "../../Security";
 import logger from "../../config/logger";
+import { sequenceLeaseService } from "../../services/sequence";
 
 interface MultiHopTradePayload extends Record<string, unknown> {
   /** "evaluate" returns the best path without executing. "execute" submits the trade. */
@@ -248,8 +249,21 @@ export class MultiHopTradeTool extends BaseTool<MultiHopTradePayload> {
 
       const bestPath = result.bestPath;
       const keypair = this.getKeypair(userId);
-      const sourceAccount = await this.horizonServer.loadAccount(
-        keypair.publicKey()
+      const publicKey = keypair.publicKey();
+
+      // Acquire a durable sequence lease to prevent sequence races across instances
+      const leaseResult = await sequenceLeaseService.acquireLease(
+        publicKey,
+        userId,
+        60_000,
+        this.horizonServer
+      );
+      const { lease } = leaseResult;
+
+      // Build account with leased sequence to prevent races across instances
+      const sourceAccount = new StellarSdk.Account(
+        publicKey,
+        leaseResult.sequenceNumber.toString()
       );
 
       // 1% slippage tolerance on destination minimum
@@ -279,21 +293,13 @@ export class MultiHopTradeTool extends BaseTool<MultiHopTradePayload> {
 
       tx.sign(keypair);
 
-      // Re-check revocation immediately before submission
-      try {
-        const sourceRevocation = await assetRevocationService.isRevoked(sourceAsset.code, "asset");
-        if (sourceRevocation.revoked) {
-          return this.createErrorResult("multi_hop_execute", `Asset ${sourceAsset.code} has been revoked: ${sourceRevocation.reason}`);
-        }
-        const destRevocation = await assetRevocationService.isRevoked(destAsset.code, "asset");
-        if (destRevocation.revoked) {
-          return this.createErrorResult("multi_hop_execute", `Asset ${destAsset.code} has been revoked: ${destRevocation.reason}`);
-        }
-      } catch (err) {
-        logger.warn("Revocation re-check failed before multi-hop submission", { userId, error: err });
-      }
+      // Validate lease fencing token immediately before submission
+      await sequenceLeaseService.validateLease(lease.id, leaseResult.fencingToken);
 
       const submitted = await this.horizonServer.submitTransaction(tx);
+
+      // Mark lease consumed after successful submission
+      await sequenceLeaseService.consumeLease(lease.id, userId, submitted.hash);
 
       logger.info("Multi-hop trade submitted", {
         userId,

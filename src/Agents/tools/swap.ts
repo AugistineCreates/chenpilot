@@ -9,7 +9,7 @@ import stellarPriceService from "../../services/stellarPrice.service";
 import { flashSwapRiskAnalyzer } from "../../services/flashSwapRiskAnalyzer";
 import { RedisLockService } from "../../services/lock";
 import { transactionLifecycleService } from "../../transactions/TransactionLifecycle.service";
-import { assetRevocationService } from "../../Security";
+import { sequenceLeaseService } from "../../services/sequence";
 
 interface SwapPayload extends Record<string, unknown> {
   from: string;
@@ -372,15 +372,30 @@ export class SwapTool extends BaseTool<SwapPayload> {
       const sourceKeypair = this.getStellarAccount(userId);
       const sourcePublicKey = sourceKeypair.publicKey();
 
+      // Acquire a durable sequence lease to prevent sequence races across instances
+      const leaseResult = await sequenceLeaseService.acquireLease(
+        sourcePublicKey,
+        userId,
+        60_000,
+        this.server
+      );
+      const { lease } = leaseResult;
+
       logger.info("Initiating swap", {
         userId,
         amount: payload.amount,
         from: payload.from,
         to: payload.to,
         riskLevel: riskAnalysis.riskLevel,
+        sequenceNumber: leaseResult.sequenceNumber,
+        fencingToken: leaseResult.fencingToken,
       });
 
-      const sourceAccount = await this.server.loadAccount(sourcePublicKey);
+      // Build account with leased sequence to prevent races across instances
+      const sourceAccount = new StellarSdk.Account(
+        sourcePublicKey,
+        leaseResult.sequenceNumber.toString()
+      );
       const sendAmount = payload.amount.toFixed(7);
       const minDestAmount = (priceQuote.estimatedOutput * 0.99).toFixed(7);
 
@@ -402,28 +417,16 @@ export class SwapTool extends BaseTool<SwapPayload> {
 
       transaction.sign(sourceKeypair);
 
-      // Re-check revocation immediately before submission
-      try {
-        const sourceRevocation = await assetRevocationService.isRevoked(sourceAsset.code, "asset");
-        if (sourceRevocation.revoked) {
-          await transactionLifecycleService.fail(lifecycleId, `Asset ${sourceAsset.code} revoked before submission: ${sourceRevocation.reason}`);
-          return this.createErrorResult("swap", `Asset ${sourceAsset.code} has been revoked: ${sourceRevocation.reason}`);
-        }
-        const destRevocation = await assetRevocationService.isRevoked(destAsset.code, "asset");
-        if (destRevocation.revoked) {
-          await transactionLifecycleService.fail(lifecycleId, `Asset ${destAsset.code} revoked before submission: ${destRevocation.reason}`);
-          return this.createErrorResult("swap", `Asset ${destAsset.code} has been revoked: ${destRevocation.reason}`);
-        }
-      } catch (err) {
-        logger.warn("Revocation re-check failed before swap submission", { userId, error: err });
-      }
-
-      // Submission phase
+      // Submission phase — validate lease fencing token immediately before submission
       await transactionLifecycleService.transition(lifecycleId, "submitting");
+      await sequenceLeaseService.validateLease(lease.id, leaseResult.fencingToken);
 
       const result = await this.server.submitTransaction(transaction);
 
-      // Submitted - start reorg-aware finality tracking instead of immediately confirming
+      // Mark lease consumed after successful submission
+      await sequenceLeaseService.consumeLease(lease.id, userId, result.hash);
+
+      // Confirmed
       await transactionLifecycleService.transition(lifecycleId, "submitted", {
         correlationId: result.hash,
         metadata: { txHash: result.hash, ledger: result.ledger },

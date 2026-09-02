@@ -23,7 +23,8 @@ import {
   AdminWorkflowInstance,
   AdminWorkflowApproval,
 } from "../Agents/admin/workflow.entity";
-import { OutboxEvent } from "../Reliability/outboxEvent.entity";
+import { TransactionLifecycle } from "../transactions/TransactionLifecycle.entity";
+import { SequenceLease } from "../services/sequence/SequenceLease.entity";
 
 const isDev = config.env === "development";
 
@@ -55,7 +56,8 @@ const dbOptions: DataSourceOptions = {
     AdminWorkflowPolicy,
     AdminWorkflowInstance,
     AdminWorkflowApproval,
-    OutboxEvent,
+    TransactionLifecycle,
+    SequenceLease,
   ],
   migrations: [isDev ? "src/migrations/**/*.ts" : "dist/migrations/**/*.js"],
   subscribers: [],
