@@ -12,6 +12,13 @@ import { toolRegistry } from "../../registry/ToolRegistry";
 import { planHashService } from "../planHash";
 import { RiskLevel } from "../../admin/workflow.types";
 import logger from "../../../config/logger";
+import { RiskLevel as RiskLevelType } from "../../../Auth/userPreferences.entity";
+
+const RiskLevel = {
+  LOW: "low" as RiskLevelType,
+  MEDIUM: "medium" as RiskLevelType,
+  HIGH: "high" as RiskLevelType,
+};
 
 // Mock dependencies
 jest.mock("../../agent");

@@ -1,6 +1,7 @@
 node_modules/
-dist/
-build/
-logs/
 .env.local
 .env
+dist/
+coverage/
+logs/
+.DS_Store

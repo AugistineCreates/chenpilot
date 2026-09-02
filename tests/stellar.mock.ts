@@ -1,5 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // chenpilot/tests/stellar.mock.ts
+process.env.JWT_SECRET =
+  process.env.JWT_SECRET || "01234567890123456789012345678901";
+process.env.ENCRYPTION_KEY =
+  process.env.ENCRYPTION_KEY ||
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+process.env.ANTHROPIC_API_KEY =
+  process.env.ANTHROPIC_API_KEY || "test-anthropic-key";
+process.env.NODE_URL = process.env.NODE_URL || "http://localhost:3000";
+process.env.DB_HOST = process.env.DB_HOST || "localhost";
+process.env.DB_USERNAME = process.env.DB_USERNAME || "postgres";
+process.env.DB_NAME = process.env.DB_NAME || "test_db";
+
 import { jest } from "@jest/globals";
 
 export const mockStellarSdk: Record<string, any> = {

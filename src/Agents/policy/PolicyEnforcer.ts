@@ -1,20 +1,21 @@
+// chenpilot/src/Agents/policy/PolicyEnforcer.ts
 import { toolRegistry } from "../registry/ToolRegistry";
 import { userPreferencesService } from "../../Auth/userPreferences.service";
 import { riskEngine, RiskEngine } from "../risk/RiskEngine";
-import { assetRevocationService } from "../../Security";
+import { TrustLevel, ContextProvenance } from "../context/TrustZone";
+import { toolAuthorizationService } from "./ToolAuthorizationService";
+import {
+  securityAuditor,
+  SecurityEventType,
+} from "../../Security/promptIsolation/SecurityAuditor";
 import logger from "../../config/logger";
 
 export interface PolicyContext {
   userId: string;
   action: string;
   payload: Record<string, unknown>;
-  /** Optional capability grant to enforce */
-  grant?: CapabilityGrant | string;
-  planId?: string;
-  subPlanId?: string;
-  stepNumber?: number;
-  targetAgent?: string;
-  network?: string;
+  trustLevel?: TrustLevel;
+  provenance?: ContextProvenance;
   /** Optional pre-fetched market data — passed through to RiskEngine */
   marketData?: {
     liquidityDepth?: number;
@@ -32,24 +33,70 @@ export interface PolicyResult {
   riskAssessment?: ReturnType<typeof riskEngine.assess>;
 }
 
-// Well-known trusted assets — revoked assets are checked dynamically against the revocation feed.
-const WELL_KNOWN_ASSETS = new Set(["XLM", "USDC", "BTC", "ETH", "STRK"]);
+// Assets considered trusted (well-known, liquid)
+const TRUSTED_ASSETS = new Set([
+  "XLM",
+  "USDC",
+  "BTC",
+  "ETH",
+  "STRK",
+  "USDT",
+  "DAI",
+]);
 
 // Tools that are always considered high-risk and require explicit approval
 const HIGH_RISK_TOOLS = new Set([
+  "swap",
   "swap_tool",
+  "wallet",
   "wallet_tool",
   "soroban_invoke",
   "strategyRegistry",
+  "strategy_registry",
+  "multi_hop_trade",
+  "reconciliation",
+  "reconciliation_tool",
 ]);
 
 export class PolicyEnforcer {
+  private normalizeAction(action: string): string {
+    return toolAuthorizationService.normalizeAction(action);
+  }
+
   /**
    * Hard gate: every planned action must pass before execution.
    * Returns PolicyResult — callers MUST abort on allowed === false.
    */
   async enforce(ctx: PolicyContext): Promise<PolicyResult> {
     const { userId, action, payload } = ctx;
+    const canonicalAction = this.normalizeAction(action);
+    const trustLevel = ctx.trustLevel ?? TrustLevel.AUTHENTICATED_USER;
+
+    // 0. Trust zone boundary check — untrusted external triggers cannot execute high-risk tools
+    if (trustLevel === TrustLevel.UNTRUSTED_EXTERNAL) {
+      if (HIGH_RISK_TOOLS.has(action) || HIGH_RISK_TOOLS.has(canonicalAction)) {
+        const reason = `Security policy denial: Action '${action}' is high-risk / state-modifying and cannot be triggered from untrusted external context.`;
+        logger.warn("Policy denied: untrusted context execution attempt", {
+          userId,
+          action,
+          trustLevel,
+          reason,
+        });
+        securityAuditor.logSecurityEvent({
+          eventType: SecurityEventType.UNAUTHORIZED_TOOL_REJECTED,
+          provenance: ctx.provenance ?? ContextProvenance.EXTERNAL_API,
+          trustLevel,
+          rawPayload: JSON.stringify({ action, payload }),
+          threatCategory: "UNAUTHORIZED_TOOL_TRIGGER",
+          userId,
+          action,
+        });
+        return {
+          allowed: false,
+          reason,
+        };
+      }
+    }
 
     // 0. Capability grant check if grant is attached
     if (ctx.grant) {
@@ -144,8 +191,13 @@ export class PolicyEnforcer {
         };
       }
     } catch {
-      // Preferences unavailable — block critical/high actions by default
-      if (assessment.tier === "critical" || assessment.tier === "high") {
+      // Preferences unavailable — block critical/high actions or high-risk tools by default
+      if (
+        assessment.tier === "critical" ||
+        assessment.tier === "high" ||
+        HIGH_RISK_TOOLS.has(action) ||
+        HIGH_RISK_TOOLS.has(canonicalAction)
+      ) {
         return {
           allowed: false,
           reason: `Cannot verify risk tolerance for user '${userId}'. Action '${action}' (score ${assessment.score}) blocked.`,
@@ -154,8 +206,15 @@ export class PolicyEnforcer {
       }
     }
 
-    // 5. Approval check — high/critical risk requires explicit approval unless auto-approved
-    if (assessment.requiresApproval) {
+    // 5. Approval check — high/critical risk or HIGH_RISK_TOOLS requires explicit approval unless auto-approved
+    const isHighRiskAction =
+      assessment.requiresApproval ||
+      assessment.tier === "high" ||
+      assessment.tier === "critical" ||
+      HIGH_RISK_TOOLS.has(action) ||
+      HIGH_RISK_TOOLS.has(canonicalAction);
+
+    if (isHighRiskAction) {
       const approvalResult = await this.checkApprovalRequirement(
         userId,
         action,
@@ -172,41 +231,19 @@ export class PolicyEnforcer {
       }
     }
 
-    logger.debug("Policy allowed", { userId, action, score: assessment.score, tier: assessment.tier });
-    const result: PolicyResult = { allowed: true, riskAssessment: assessment };
-    await this.mirrorPolicy(ctx, result);
-    return result;
-  }
-
-  /**
-   * Mirror this policy decision through the shadow execution path (Issue #686).
-   * Does nothing when shadow execution is disabled; never affects the returned
-   * decision and never runs mutating operations.
-   */
-  private async mirrorPolicy(
-    ctx: PolicyContext,
-    result: PolicyResult
-  ): Promise<void> {
-    await shadowService.mirror({
-      runId: `policy-${ctx.userId}-${Date.now()}`,
-      input: {
-        action: ctx.action,
-        ...ctx.payload,
-        riskScore: result.riskAssessment?.score,
-      },
-      active: {
-        subject: "policy",
-        action: ctx.action,
-        allowed: result.allowed,
-        requiresApproval: result.requiresApproval,
-        reason: result.reason,
-        decisionSignature: `active:${ctx.action}:${result.allowed}:${result.requiresApproval ?? ""}`,
-      },
+    logger.debug("Policy allowed", {
+      userId,
+      action,
+      score: assessment.score,
+      tier: assessment.tier,
     });
+    return { allowed: true, riskAssessment: assessment };
   }
 
   private checkToolCapability(action: string): PolicyResult {
-    const tool = toolRegistry.getTool(action);
+    const canonical = this.normalizeAction(action);
+    const tool =
+      toolRegistry.getTool(action) || toolRegistry.getTool(canonical);
     if (!tool) {
       return {
         allowed: false,
@@ -216,8 +253,14 @@ export class PolicyEnforcer {
     return { allowed: true };
   }
 
-  private async checkAssetTrust(action: string, payload: Record<string, unknown>): Promise<PolicyResult> {
-    if (!HIGH_RISK_TOOLS.has(action)) return { allowed: true };
+  private checkAssetTrust(
+    action: string,
+    payload: Record<string, unknown>
+  ): PolicyResult {
+    const canonical = this.normalizeAction(action);
+    if (!HIGH_RISK_TOOLS.has(action) && !HIGH_RISK_TOOLS.has(canonical)) {
+      return { allowed: true };
+    }
 
     const assetFields = [
       "from",
@@ -283,6 +326,7 @@ export class PolicyEnforcer {
   }
 
   private extractAmount(payload: Record<string, unknown>): number | null {
+    if (!payload) return null;
     for (const field of ["amount", "value", "quantity"]) {
       const val = payload[field];
       if (typeof val === "number" && isFinite(val)) return val;

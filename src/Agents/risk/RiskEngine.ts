@@ -16,16 +16,16 @@ export interface RiskInput {
   };
   /** Pre-fetched market data (optional — engine uses defaults if absent) */
   marketData?: {
-    liquidityDepth?: number;   // total liquidity in USD-equivalent
-    priceImpactPct?: number;   // estimated price impact %
-    spreadPct?: number;        // bid-ask spread %
-    volatility24h?: number;    // 24h price volatility %
+    liquidityDepth?: number; // total liquidity in USD-equivalent
+    priceImpactPct?: number; // estimated price impact %
+    spreadPct?: number; // bid-ask spread %
+    volatility24h?: number; // 24h price volatility %
   };
 }
 
 export interface DimensionScore {
-  score: number;       // 0–1, higher = riskier
-  weight: number;      // contribution weight
+  score: number; // 0–1, higher = riskier
+  weight: number; // contribution weight
   reason: string;
 }
 
@@ -57,19 +57,18 @@ const PROTOCOL_TRUST: Record<string, number> = {
   price: 0,
   sep1: 0,
   "soroban-contract-state": 0,
-  "get_liquidity_pool_stats": 0,
+  get_liquidity_pool_stats: 0,
   "stellar-liquidity": 0,
   contact: 0,
   qa: 0,
   meta: 0,
-  "risk_analysis_tool": 0,
-  checkBalance: 0,
-  getData: 0,
+  risk_analysis_tool: 0,
   // Moderate — multi-hop routing adds complexity
   "multi-hop-trade": 0.4,
   // High-trust execution tools (audited, in production)
-  swap_tool: 0.2,
   swap: 0.2,
+  swap_tool: 0.2,
+  wallet: 0.3,
   wallet_tool: 0.3,
   transfer: 0.3,
   approveSpender: 0.3,
@@ -85,24 +84,26 @@ const PROTOCOL_TRUST: Record<string, number> = {
 const ACTION_TYPE_RISK: Record<string, number> = {
   // Read
   price: 0,
+  price_tool: 0,
   sep1: 0,
+  sep1_tool: 0,
   "soroban-contract-state": 0,
-  "get_liquidity_pool_stats": 0,
+  get_liquidity_pool_stats: 0,
   "stellar-liquidity": 0,
   contact: 0,
   qa: 0,
   meta: 0,
-  "risk_analysis_tool": 0,
-  checkBalance: 0,
-  getData: 0,
+  risk_analysis_tool: 0,
   // Write — moderate
   "multi-hop-trade": 0.45,
+  wallet: 0.5,
   wallet_tool: 0.5,
   transfer: 0.3,
   approveSpender: 0.3,
   provideLiquidity: 0.4,
   stake: 0.3,
   // Write — high
+  swap: 0.6,
   swap_tool: 0.6,
   swap: 0.3,
   soroban_invoke: 0.65,
@@ -111,12 +112,12 @@ const ACTION_TYPE_RISK: Record<string, number> = {
 
 /** Dimension weights — must sum to 1 */
 const WEIGHTS = {
-  liquidity:       0.20,
-  slippage:        0.20,
-  assetTrust:      0.20,
-  protocolTrust:   0.15,
-  userPreference:  0.15,
-  actionType:      0.10,
+  liquidity: 0.2,
+  slippage: 0.2,
+  assetTrust: 0.2,
+  protocolTrust: 0.15,
+  userPreference: 0.15,
+  actionType: 0.1,
 } as const;
 
 // ── Tier thresholds (score 0–100) ──────────────────────────────────────────────
@@ -124,7 +125,7 @@ const TIER_THRESHOLDS: Array<[number, RiskTier]> = [
   [70, "critical"],
   [50, "high"],
   [30, "medium"],
-  [0,  "low"],
+  [0, "low"],
 ];
 
 // ── RiskEngine ─────────────────────────────────────────────────────────────────
@@ -137,30 +138,47 @@ export class RiskEngine {
    */
   assess(input: RiskInput): RiskAssessment {
     const { action, payload, userPreferences, marketData } = input;
-
-    const liquidity    = this.scoreLiquidity(marketData);
-    const slippage     = this.scoreSlippage(payload, userPreferences, marketData);
-    const assetTrust   = this.scoreAssetTrust(action, payload);
+    const safePayload = payload || {};
+    const liquidity = this.scoreLiquidity(marketData);
+    const slippage = this.scoreSlippage(
+      safePayload,
+      userPreferences,
+      marketData
+    );
+    const assetTrust = this.scoreAssetTrust(action, safePayload);
     const protocolTrust = this.scoreProtocolTrust(action);
-    const userPref     = this.scoreUserPreference(action, userPreferences);
-    const actionType   = this.scoreActionType(action);
+    const userPref = this.scoreUserPreference(action, userPreferences);
+    const actionType = this.scoreActionType(action);
 
-    const dimensions = { liquidity, slippage, assetTrust, protocolTrust, userPreference: userPref, actionType };
+    const dimensions = {
+      liquidity,
+      slippage,
+      assetTrust,
+      protocolTrust,
+      userPreference: userPref,
+      actionType,
+    };
 
     const score = Math.round(
-      (liquidity.score    * liquidity.weight +
-       slippage.score     * slippage.weight +
-       assetTrust.score   * assetTrust.weight +
-       protocolTrust.score * protocolTrust.weight +
-       userPref.score     * userPref.weight +
-       actionType.score   * actionType.weight) * 100
+      (liquidity.score * liquidity.weight +
+        slippage.score * slippage.weight +
+        assetTrust.score * assetTrust.weight +
+        protocolTrust.score * protocolTrust.weight +
+        userPref.score * userPref.weight +
+        actionType.score * actionType.weight) *
+        100
     );
 
     const tier = this.toTier(score);
     const warnings = this.collectWarnings(dimensions, score);
     const requiresApproval = tier === "high" || tier === "critical";
 
-    logger.debug("RiskEngine assessment", { action, score, tier, userId: input.userId });
+    logger.debug("RiskEngine assessment", {
+      action,
+      score,
+      tier,
+      userId: input.userId,
+    });
 
     return { score, tier, dimensions, warnings, requiresApproval };
   }
@@ -178,12 +196,27 @@ export class RiskEngine {
     const w = WEIGHTS.liquidity;
     if (!marketData?.liquidityDepth) {
       // No data — conservative: assume thin liquidity
-      return { score: 0.6, weight: w, reason: "Liquidity data unavailable — assuming moderate risk" };
+      return {
+        score: 0.6,
+        weight: w,
+        reason: "Liquidity data unavailable — assuming moderate risk",
+      };
     }
     const depth = marketData.liquidityDepth;
     // < $1k: critical; < $10k: high; < $100k: medium; >= $100k: low
-    const score = depth < 1_000 ? 0.9 : depth < 10_000 ? 0.65 : depth < 100_000 ? 0.35 : 0.1;
-    return { score, weight: w, reason: `Liquidity depth $${depth.toLocaleString()}` };
+    const score =
+      depth < 1_000
+        ? 0.9
+        : depth < 10_000
+          ? 0.65
+          : depth < 100_000
+            ? 0.35
+            : 0.1;
+    return {
+      score,
+      weight: w,
+      reason: `Liquidity depth $${depth.toLocaleString()}`,
+    };
   }
 
   private scoreSlippage(
@@ -193,22 +226,44 @@ export class RiskEngine {
   ): DimensionScore {
     const w = WEIGHTS.slippage;
     // Effective slippage = max(payload slippage, market price impact)
-    const payloadSlippage = this.extractNumber(payload, ["slippage"]) ?? prefs?.defaultSlippage ?? 0.5;
+    const payloadSlippage =
+      this.extractNumber(payload, ["slippage"]) ??
+      prefs?.defaultSlippage ??
+      0.5;
     const priceImpact = marketData?.priceImpactPct ?? 0;
     const effective = Math.max(payloadSlippage, priceImpact);
 
     // 0–0.5%: low; 0.5–2%: medium; 2–5%: high; >5%: critical
-    const score = effective > 5 ? 0.9 : effective > 2 ? 0.65 : effective > 0.5 ? 0.35 : 0.1;
-    return { score, weight: w, reason: `Effective slippage ${effective.toFixed(2)}%` };
+    const score =
+      effective > 5 ? 0.9 : effective > 2 ? 0.65 : effective > 0.5 ? 0.35 : 0.1;
+    return {
+      score,
+      weight: w,
+      reason: `Effective slippage ${effective.toFixed(2)}%`,
+    };
   }
 
-  private scoreAssetTrust(action: string, payload: Record<string, unknown>): DimensionScore {
+  private scoreAssetTrust(
+    action: string,
+    payload: Record<string, unknown>
+  ): DimensionScore {
     const w = WEIGHTS.assetTrust;
     // Only relevant for financial operations
     if (ACTION_TYPE_RISK[action] === 0) {
-      return { score: 0, weight: w, reason: "Read-only action — no asset risk" };
+      return {
+        score: 0,
+        weight: w,
+        reason: "Read-only action — no asset risk",
+      };
     }
-    const assetFields = ["from", "to", "asset", "token", "fromToken", "toToken"];
+    const assetFields = [
+      "from",
+      "to",
+      "asset",
+      "token",
+      "fromToken",
+      "toToken",
+    ];
     const untrusted: string[] = [];
     for (const field of assetFields) {
       const val = payload[field];
@@ -216,7 +271,8 @@ export class RiskEngine {
         if (!TRUSTED_ASSETS.has(val.toUpperCase())) untrusted.push(val);
       }
     }
-    if (untrusted.length === 0) return { score: 0.1, weight: w, reason: "All assets are trusted" };
+    if (untrusted.length === 0)
+      return { score: 0.1, weight: w, reason: "All assets are trusted" };
     return {
       score: Math.min(0.5 + untrusted.length * 0.25, 1),
       weight: w,
@@ -227,10 +283,14 @@ export class RiskEngine {
   private scoreProtocolTrust(action: string): DimensionScore {
     const w = WEIGHTS.protocolTrust;
     const score = PROTOCOL_TRUST[action] ?? 0.8; // unknown protocol = high risk
-    const reason = score === 0 ? "Trusted read-only protocol"
-      : score < 0.4 ? "Audited execution protocol"
-      : score < 0.7 ? "Moderate protocol trust"
-      : "Unknown or unaudited protocol";
+    const reason =
+      score === 0
+        ? "Trusted read-only protocol"
+        : score < 0.4
+          ? "Audited execution protocol"
+          : score < 0.7
+            ? "Moderate protocol trust"
+            : "Unknown or unaudited protocol";
     return { score, weight: w, reason };
   }
 
@@ -239,10 +299,19 @@ export class RiskEngine {
     prefs?: RiskInput["userPreferences"]
   ): DimensionScore {
     const w = WEIGHTS.userPreference;
-    if (!prefs) return { score: 0.5, weight: w, reason: "User preferences unavailable — neutral" };
+    if (!prefs)
+      return {
+        score: 0.5,
+        weight: w,
+        reason: "User preferences unavailable — neutral",
+      };
 
     const actionRisk = ACTION_TYPE_RISK[action] ?? 0.5;
-    const toleranceMap: Record<string, number> = { low: 0.3, medium: 0.6, high: 1.0 };
+    const toleranceMap: Record<string, number> = {
+      low: 0.3,
+      medium: 0.6,
+      high: 1.0,
+    };
     const tolerance = toleranceMap[prefs.riskLevel] ?? 0.6;
 
     // Score = how much the action risk exceeds the user's tolerance
@@ -251,16 +320,21 @@ export class RiskEngine {
     return {
       score,
       weight: w,
-      reason: score > 0
-        ? `Action risk (${(actionRisk * 100).toFixed(0)}%) exceeds user tolerance (${prefs.riskLevel})`
-        : `Action within user risk tolerance (${prefs.riskLevel})`,
+      reason:
+        score > 0
+          ? `Action risk (${(actionRisk * 100).toFixed(0)}%) exceeds user tolerance (${prefs.riskLevel})`
+          : `Action within user risk tolerance (${prefs.riskLevel})`,
     };
   }
 
   private scoreActionType(action: string): DimensionScore {
     const w = WEIGHTS.actionType;
     const score = ACTION_TYPE_RISK[action] ?? 0.5;
-    return { score, weight: w, reason: `Action type base risk: ${(score * 100).toFixed(0)}%` };
+    return {
+      score,
+      weight: w,
+      reason: `Action type base risk: ${(score * 100).toFixed(0)}%`,
+    };
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -277,21 +351,29 @@ export class RiskEngine {
     score: number
   ): string[] {
     const w: string[] = [];
-    if (dims.liquidity.score >= 0.6)     w.push(dims.liquidity.reason);
-    if (dims.slippage.score >= 0.6)      w.push(dims.slippage.reason);
-    if (dims.assetTrust.score >= 0.5)    w.push(dims.assetTrust.reason);
+    if (dims.liquidity.score >= 0.6) w.push(dims.liquidity.reason);
+    if (dims.slippage.score >= 0.6) w.push(dims.slippage.reason);
+    if (dims.assetTrust.score >= 0.5) w.push(dims.assetTrust.reason);
     if (dims.protocolTrust.score >= 0.6) w.push(dims.protocolTrust.reason);
-    if (dims.userPreference.score > 0)   w.push(dims.userPreference.reason);
-    if (score >= 70) w.push("Overall risk is CRITICAL — action blocked pending review");
-    else if (score >= 50) w.push("Overall risk is HIGH — explicit approval required");
+    if (dims.userPreference.score > 0) w.push(dims.userPreference.reason);
+    if (score >= 70)
+      w.push("Overall risk is CRITICAL — action blocked pending review");
+    else if (score >= 50)
+      w.push("Overall risk is HIGH — explicit approval required");
     return w;
   }
 
-  private extractNumber(payload: Record<string, unknown>, fields: string[]): number | null {
+  private extractNumber(
+    payload: Record<string, unknown>,
+    fields: string[]
+  ): number | null {
     for (const f of fields) {
       const v = payload[f];
       if (typeof v === "number" && isFinite(v)) return v;
-      if (typeof v === "string") { const n = parseFloat(v); if (isFinite(n)) return n; }
+      if (typeof v === "string") {
+        const n = parseFloat(v);
+        if (isFinite(n)) return n;
+      }
     }
     return null;
   }
