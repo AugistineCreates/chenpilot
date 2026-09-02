@@ -1,5 +1,13 @@
 import crypto from "crypto";
 
+/** Client-side approval for plan execution */
+export interface ClientApproval {
+  approvedAt: string;
+  approverId: string;
+  signature: string;
+  signedHash: string;
+}
+
 /** Represents an execution plan returned by the AI agent */
 export interface ExecutionPlan {
   planId: string;
@@ -13,6 +21,7 @@ export interface ExecutionPlan {
   signature?: string;
   signedBy?: string;
   signedAt?: string;
+  clientApproval?: ClientApproval;
 }
 
 /** A single step within an execution plan */
@@ -32,6 +41,7 @@ export interface VerificationResult {
   warnings: string[];
   hashMatch: boolean;
   signatureValid: boolean;
+  clientApprovalValid: boolean;
 }
 
 /** Options for customizing plan verification */
@@ -39,6 +49,8 @@ export interface VerificationOptions {
   requireSignature?: boolean;
   publicKey?: string;
   strictMode?: boolean;
+  requireClientApproval?: boolean;
+  clientPublicKey?: string;
 }
 
 /**
@@ -65,6 +77,7 @@ export class PlanVerifier {
     const warnings: string[] = [];
     let hashMatch = false;
     let signatureValid = false;
+    let clientApprovalValid = false;
 
     // 1. Check if plan has a hash
     if (!plan.planHash) {
@@ -75,6 +88,7 @@ export class PlanVerifier {
         warnings,
         hashMatch: false,
         signatureValid: false,
+        clientApprovalValid: false,
       };
     }
 
@@ -110,7 +124,28 @@ export class PlanVerifier {
       }
     }
 
-    // 4. Additional validations in strict mode
+    // 4. Verify client approval if required or present
+    if (options.requireClientApproval || plan.clientApproval) {
+      if (!plan.clientApproval) {
+        errors.push("Client approval required but not present");
+      } else if (!options.clientPublicKey) {
+        warnings.push(
+          "Client approval present but no client public key provided"
+        );
+      } else {
+        clientApprovalValid = this.verifyClientApproval(
+          plan.planHash,
+          plan.clientApproval,
+          options.clientPublicKey
+        );
+
+        if (!clientApprovalValid) {
+          errors.push("Invalid client approval signature");
+        }
+      }
+    }
+
+    // 5. Additional validations in strict mode
     if (options.strictMode) {
       this.performStrictValidations(plan, errors, warnings);
     }
@@ -121,6 +156,7 @@ export class PlanVerifier {
       warnings,
       hashMatch,
       signatureValid: options.publicKey ? signatureValid : true,
+      clientApprovalValid: options.clientPublicKey ? clientApprovalValid : true,
     };
   }
 
@@ -211,6 +247,49 @@ export class PlanVerifier {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Verify client approval signature
+   */
+  private verifyClientApproval(
+    planHash: string,
+    clientApproval: ClientApproval,
+    clientPublicKey: string
+  ): boolean {
+    if (clientApproval.signedHash !== planHash) {
+      return false;
+    }
+
+    try {
+      const verify = crypto.createVerify("RSA-SHA256");
+      verify.update(clientApproval.signedHash);
+      verify.end();
+      return verify.verify(clientPublicKey, clientApproval.signature, "base64");
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Sign a plan on the client side
+   */
+  signClientApproval(
+    planHash: string,
+    approverId: string,
+    privateKey: string
+  ): ClientApproval {
+    const sign = crypto.createSign("RSA-SHA256");
+    sign.update(planHash);
+    sign.end();
+    const signature = sign.sign(privateKey, "base64");
+
+    return {
+      approvedAt: new Date().toISOString(),
+      approverId,
+      signature,
+      signedHash: planHash,
+    };
   }
 
   /**
