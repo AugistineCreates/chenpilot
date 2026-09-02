@@ -12,6 +12,11 @@ import { ToolMetadata, ToolResult } from "../registry/ToolMetadata";
 import ContactService from "../../Contacts/contact.service";
 import config from "../../config/config";
 import logger from "../../config/logger";
+import {
+  formatAmount,
+  formatAddress,
+  formatTransactionHash,
+} from "../../utils/SecuritySensitiveFormatter";
 const tokensMap: Record<supportedTokens, string> = {
   DAI: DAITokenAddress,
   STRK: STRKTokenAddress,
@@ -174,11 +179,12 @@ export class WalletTool extends BaseTool {
       );
 
       const result = this.createSuccessResult("wallet_balance", {
-        balance: `${(Number(balance.balance.toString()) / 10 ** 18).toFixed(
-          2
-        )} ${payload.token}`,
+        balance: formatAmount(
+          Number(balance.balance.toString()) / 10 ** 18,
+          { currencyCode: payload.token, maxDecimals: 7 }
+        ),
         token: contractAddress,
-        address: accountData.precalculatedAddress,
+        address: formatAddress(accountData.precalculatedAddress),
       });
       logger.info("Balance retrieved successfully", {
         token: payload.token,
@@ -235,10 +241,10 @@ export class WalletTool extends BaseTool {
       await starkAccount.waitForTransaction(tx.transaction_hash);
 
       const result = this.createSuccessResult("transfer", {
-        from: starkAccount.address,
-        to: payload.to,
-        amount: payload.amount,
-        txHash: tx.transaction_hash,
+        from: formatAddress(starkAccount.address),
+        to: formatAddress(payload.to),
+        amount: formatAmount(payload.amount, { currencyCode: payload.token || "STRK" }),
+        txHash: formatTransactionHash(tx.transaction_hash),
       });
       logger.info("Transfer completed successfully", {
         to: payload.to,
