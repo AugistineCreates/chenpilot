@@ -6,15 +6,7 @@ packages:
 # This section documents which packages would require scripts if enabled
 # See INSTALL_SCRIPT_ALLOWLIST.md for security review documentation
 allowBuilds:
-  # Native crypto compilation - Security reviewed 2026-08-31
-  # See INSTALL_SCRIPT_ALLOWLIST.md for details
-  bcrypt: false  # Disabled - use ignore-scripts in .pnpmrc instead
-  
-  # Analytics telemetry - NOT APPROVED
   '@scarf/scarf': false
-  
-  # Canvas rendering - NOT REQUIRED in this project
+  bcrypt: false
   canvas: false
-  
-  # DNS resolver - NOT REQUIRED in this project  
   unrs-resolver: false

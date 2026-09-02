@@ -7,6 +7,7 @@ import { durableExecutor } from "./DurableExecutor";
 import { capabilityManager } from "../capability/CapabilityManager";
 import { CapabilityGrant } from "../capability/types";
 import logger from "../../config/logger";
+import { QuoteExpiredError } from "../../domain/quotes/errors";
 
 export interface ExecutionResult {
   planId: string;
@@ -287,6 +288,25 @@ export class PlanExecutor {
           action: step.action,
           status: "failed",
           error: `Policy denied: ${policy.reason}`,
+          duration: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      // Quote commitment deadline gate — fail-closed before tool dispatch
+      const stepDeadline = step.payload?.deadline as number | undefined;
+      if (stepDeadline && Math.floor(Date.now() / 1000) > stepDeadline) {
+        const err = new QuoteExpiredError(stepDeadline);
+        logger.warn("Step rejected: quote commitment expired", {
+          stepNumber: step.stepNumber,
+          action: step.action,
+          deadline: new Date(stepDeadline * 1000).toISOString(),
+        });
+        return {
+          stepNumber: step.stepNumber,
+          action: step.action,
+          status: "failed",
+          error: err.message,
           duration: Date.now() - startTime,
           timestamp: new Date().toISOString(),
         };

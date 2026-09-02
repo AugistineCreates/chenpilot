@@ -9,11 +9,20 @@ import stellarPriceService from "../../services/stellarPrice.service";
 import { flashSwapRiskAnalyzer } from "../../services/flashSwapRiskAnalyzer";
 import { RedisLockService } from "../../services/lock";
 import { transactionLifecycleService } from "../../transactions/TransactionLifecycle.service";
+import {
+  QuoteCommitmentPayload,
+  generateQuoteDigest,
+  validateQuoteCommitment,
+} from "../../domain/quotes/quoteCommitment";
 
 interface SwapPayload extends Record<string, unknown> {
   from: string;
   to: string;
   amount: number;
+  /** SHA-256 digest of the approved QuoteCommitmentPayload (set during approval) */
+  approvedDigest?: string;
+  /** Unix-epoch seconds — quote void after this point */
+  deadline?: number;
 }
 
 interface StellarAccountData {
@@ -79,6 +88,8 @@ export class SwapTool extends BaseTool<SwapPayload> {
   private lockService: RedisLockService;
   private readonly defaultLockTtlMs = 300000;
   private readonly lockHeartbeatIntervalMs = 30000;
+  /** Default quote commitment time-to-live in seconds */
+  private readonly DEFAULT_QUOTE_TTL_SEC = 30;
 
   /**
    * Initialize the swap tool with Stellar Horizon server and Redis lock service
@@ -318,11 +329,47 @@ export class SwapTool extends BaseTool<SwapPayload> {
         logger.warn("High risk swap detected", { userId, riskAnalysis });
       }
 
+      // ── Quote commitment: build the immutable economic intent ──────────
+      const quoteDeadline =
+        payload.deadline ??
+        Math.floor(Date.now() / 1000) + this.DEFAULT_QUOTE_TTL_SEC;
+
+      const commitmentPayload: QuoteCommitmentPayload = {
+        fromAsset: payload.from,
+        toAsset: payload.to,
+        fromAmount: payload.amount.toFixed(7),
+        toAmount: priceQuote.estimatedOutput.toFixed(7),
+        route: priceQuote.path ?? [payload.from, payload.to],
+        fees: StellarSdk.BASE_FEE,
+        deadline: quoteDeadline,
+        network: config.stellar.networkPassphrase,
+        slippage: 1.0, // 1 % — mirrors the 0.99 multiplier below
+      };
+
+      const liveDigest = generateQuoteDigest(commitmentPayload);
+
+      logger.info("Quote commitment generated", {
+        quoteDigest: liveDigest,
+        deadline: new Date(quoteDeadline * 1000).toISOString(),
+      });
+
+      // ── Fail-closed gate: reject drifted or expired quotes ─────────────
+      if (payload.approvedDigest) {
+        // Re-validates deadline + digest; throws QuoteExpiredError / QuoteDriftError
+        validateQuoteCommitment(payload.approvedDigest, commitmentPayload);
+
+        logger.info("Quote commitment verified — approved digest matches", {
+          approvedDigest: payload.approvedDigest.slice(0, 12),
+        });
+      }
+
       // Execution phase — build and sign transaction
       await transactionLifecycleService.transition(lifecycleId, "executing", {
         metadata: {
           estimatedOutput: priceQuote.estimatedOutput,
           riskLevel: riskAnalysis.riskLevel,
+          quoteDigest: liveDigest,
+          deadline: quoteDeadline,
         },
       });
 
@@ -396,6 +443,8 @@ export class SwapTool extends BaseTool<SwapPayload> {
         ledger: result.ledger,
         successful: result.successful,
         lifecycleId: lifecycleId,
+        quoteDigest: liveDigest,
+        deadline: quoteDeadline,
         riskAnalysis: {
           level: riskAnalysis.riskLevel,
           sandwichAttackRisk: riskAnalysis.sandwichAttackRisk,

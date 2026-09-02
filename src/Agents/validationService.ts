@@ -4,6 +4,10 @@ import { promptGenerator } from "./registry/PromptGenerator";
 import { toolAutoDiscovery } from "./registry/ToolAutoDiscovery";
 import logger from "../config/logger";
 import { WorkflowStep } from "./types";
+import {
+  verifyQuoteDigest,
+  QuoteCommitmentPayload,
+} from "../domain/quotes/quoteCommitment";
 
 let initialized = false;
 
@@ -209,6 +213,47 @@ function validateSwapIntent(
       warnings.push(
         `High slippage tolerance (${payload.slippage}%) may result in unfavorable swap rates.`
       );
+    }
+  }
+
+  // ── Quote commitment validation ─────────────────────────────────────
+  if (payload.approvedDigest && typeof payload.approvedDigest === "string") {
+    // Deadline check
+    const deadline = payload.deadline as number | undefined;
+    if (deadline && typeof deadline === "number") {
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (nowSec > deadline) {
+        errors.push({
+          field: "deadline",
+          message: `Quote commitment expired at ${new Date(deadline * 1000).toISOString()}. Request a new quote.`,
+          code: "QUOTE_EXPIRED",
+        });
+      }
+    } else {
+      errors.push({
+        field: "deadline",
+        message: "Deadline is required when approvedDigest is present",
+        code: "MISSING_DEADLINE",
+      });
+    }
+
+    // Digest verification — requires the full commitment payload fields
+    const commitment = payload.quoteCommitment as
+      | QuoteCommitmentPayload
+      | undefined;
+    if (commitment) {
+      const digestValid = verifyQuoteDigest(
+        payload.approvedDigest as string,
+        commitment
+      );
+      if (!digestValid) {
+        errors.push({
+          field: "approvedDigest",
+          message:
+            "Quote digest mismatch — execution parameters have drifted since approval. Obtain a new quote.",
+          code: "QUOTE_DRIFT",
+        });
+      }
     }
   }
 }
