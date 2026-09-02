@@ -1,0 +1,18 @@
+[package]
+name = "protocol_conservation"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+soroban-sdk = "22.0.0"
+contract_failure = { path = "../contract_failure" }
+pause_state = { path = "../pause_state" }
+
+[dev-dependencies]
+soroban-sdk = { version = "22.0.0", features = ["testutils"] }
+core_vault = { path = "../core_vault" }
+fee_distribution = { path = "../fee_distribution" }
+multi_hop_swap = { path = "../multi_hop_swap" }

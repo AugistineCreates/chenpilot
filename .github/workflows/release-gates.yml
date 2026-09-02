@@ -125,6 +125,22 @@ jobs:
       - name: Contract tests
         run: cargo test --manifest-path contracts/Cargo.toml --workspace
 
+  contract-conservation:
+    name: Protocol conservation invariants (release candidate gate)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Run protocol-wide conservation invariants
+        run: cargo test --manifest-path contracts/Cargo.toml -p protocol_conservation
+
   root-artifact-health:
     name: Backend artifact integrity
     runs-on: ubuntu-latest

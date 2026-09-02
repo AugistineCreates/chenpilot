@@ -1012,6 +1012,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "protocol_conservation"
+version = "0.1.0"
+dependencies = [
+ "contract_failure",
+ "core_vault",
+ "fee_distribution",
+ "multi_hop_swap",
+ "pause_state",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
