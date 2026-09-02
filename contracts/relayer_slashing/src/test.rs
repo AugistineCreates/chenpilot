@@ -2,204 +2,90 @@
 
 use super::*;
 use soroban_sdk::testutils::{Address as _, Ledger as _};
-use soroban_sdk::{symbol_short, token, Address, Env, Symbol};
+use soroban_sdk::{token, vec, Address, BytesN, Env, Vec};
 
-fn create_token<'a>(env: &Env, admin: &Address) -> (Address, token::Client<'a>, token::StellarAssetClient<'a>) {
-    let contract_id = env.register_stellar_asset_contract(admin.clone());
+const T0: u64 = 1000;
+const EPOCH_LENGTH: u64 = 100;
+const GRACE_EPOCHS: u32 = 2;
+const SLASH_AFTER_MISSED: u32 = 4;
+const BUDGET: i128 = 1000;
+const PER_WORK: i128 = 300;
+const PER_RELAYER: i128 = 400;
+const MIN_EVENTS: u32 = 2;
+const LIVENESS_SLASH_BPS: u32 = 4000;
+
+struct Setup<'a> {
+    client: RelayerSlashingContractClient<'a>,
+    treasury: Address,
+    token_addr: Address,
+    relayers: Vec<Address>,
+}
+
+fn create_token<'a>(env: &'a Env, admin: &Address) -> (Address, token::Client<'a>, token::StellarAssetClient<'a>) {
+    let sac = env.register_stellar_asset_contract_v2(admin.clone());
+    let contract_id = sac.address();
     let token = token::Client::new(env, &contract_id);
     let stellar_asset_client = token::StellarAssetClient::new(env, &contract_id);
     (contract_id, token, stellar_asset_client)
 }
 
-struct Harness<'a> {
-    _env: &'a Env,
-    client: RelayerSlashingContractClient<'a>,
-    token_client: token::Client<'a>,
-    stellar_asset: token::StellarAssetClient<'a>,
-    token_addr: Address,
-    admin: Address,
-    treasury: Address,
+fn intent(env: &Env, tag: u8, n: u8) -> BytesN<32> {
+    let mut arr = [0u8; 32];
+    arr[0] = tag;
+    arr[1] = n;
+    BytesN::from_array(env, &arr)
 }
 
-fn setup<'a>(env: &'a Env, admin: &Address, treasury: &Address) -> Harness<'a> {
-    let (token_addr, token_client, stellar_asset) = create_token(env, admin);
-    let contract_id = env.register_contract(None, RelayerSlashingContract);
+fn intents(env: &Env, tag: u8, count: u32) -> Vec<BytesN<32>> {
+    let mut out = Vec::new(env);
+    for i in 0..count {
+        out.push_back(intent(env, tag, i as u8));
+    }
+    out
+}
+
+fn make_work(env: &Env, tag: u8, count: u32, epoch: u64) -> WorkSubmission {
+    let ids = intents(env, tag, count);
+    let work_id = RelayerSlashingContract::_canonical_work_id(env, &ids);
+    WorkSubmission { work_id, epoch, intent_ids: ids }
+}
+
+fn liveness_cfg(token: Address) -> LivenessConfig {
+    LivenessConfig {
+        epoch_length: EPOCH_LENGTH,
+        grace_epochs: GRACE_EPOCHS,
+        slash_after_missed: SLASH_AFTER_MISSED,
+        reward_token: token,
+        epoch_reward_budget: BUDGET,
+        max_reward_per_work: PER_WORK,
+        max_reward_per_relayer: PER_RELAYER,
+        min_events_per_submission: MIN_EVENTS,
+        liveness_slash_bps: LIVENESS_SLASH_BPS,
+    }
+}
+
+fn setup_with<'a>(env: &'a Env, relayers: u32) -> Setup<'a> {
+    env.ledger().set_timestamp(T0);
+    env.mock_all_auths();
+    let admin = Address::generate(env);
+    let treasury = Address::generate(env);
+    let (token_addr, _token_client, stellar_asset) = create_token(env, &admin);
+    let contract_id = env.register(RelayerSlashingContract, ());
     let client = RelayerSlashingContractClient::new(env, &contract_id);
-    client.initialize(admin, &token_addr, treasury, &5000, &10);
-    Harness {
-        _env: env,
-        client,
-        token_client,
-        stellar_asset,
-        token_addr,
-        admin: admin.clone(),
-        treasury: treasury.clone(),
-    }
-}
+    client.initialize(&admin, &token_addr, &treasury, &5000, &60);
 
-/// epoch_length=100, budget=1000, reward_per_unit=10, max_units=5,
-/// min_units=1, grace_epochs=2, equivocation_slash=1000bps, liveness_slash=2000bps
-fn enable_liveness(h: &Harness) {
-    h.client.set_liveness_config(&100, &1000, &10, &5, &1, &2, &1000, &2000);
-}
-
-#[test]
-fn test_liveness_rewards_are_bounded_and_duplicates_earn_nothing() {
-    let env = Env::default();
-    env.mock_all_auths();
-    env.ledger().set_timestamp(0);
-    let admin = Address::generate(&env);
-    let relayer = Address::generate(&env);
-    let treasury = Address::generate(&env);
-    let h = setup(&env, &admin, &treasury);
-    enable_liveness(&h);
-    h.stellar_asset.mint(&relayer, &1000);
-    h.client.register_relayer(&relayer, &1000);
-
-    // Submit unique work in epoch 0 (timestamp 0 -> epoch 0).
-    h.client.record_relay_work(&relayer, &symbol_short!("work00"));
-    h.client.record_relay_work(&relayer, &symbol_short!("work01"));
-    // Duplicate submission earns no additional useful unit.
-    h.client.record_relay_work(&relayer, &symbol_short!("work00"));
-    assert_eq!(h.client.get_epoch_units(&0, &relayer), 2);
-
-    // Advance to epoch 1 so epoch 0 is complete and can be settled.
-    env.ledger().set_timestamp(150);
-    h.client.settle_epoch(&0);
-
-    let liveness = h.client.get_liveness(&relayer).unwrap();
-    // 2 useful units * 10 = 20 reward, bounded and positive.
-    assert!(liveness.rewards_accrued > 0);
-    assert!(liveness.rewards_accrued <= 1000); // <= epoch_reward_budget
-    assert_eq!(liveness.rewards_accrued, 20);
-}
-
-#[test]
-fn test_total_reward_never_exceeds_epoch_budget() {
-    let env = Env::default();
-    env.mock_all_auths();
-    env.ledger().set_timestamp(0);
-    let admin = Address::generate(&env);
-    let treasury = Address::generate(&env);
-    let h = setup(&env, &admin, &treasury);
-    enable_liveness(&h);
-
-    // Many relayers all doing useful work push against the shared budget.
-    let works: [&str; 12] = [
-        "wa", "wb", "wc", "wd", "we", "wf", "wg", "wh", "wi", "wj", "wk", "wl",
-    ];
-    for s in works.iter() {
-        let r = Address::generate(&env);
-        h.stellar_asset.mint(&r, &1000);
-        h.client.register_relayer(&r, &1000);
-        h.client.record_relay_work(&r, &Symbol::new(&env, s));
+    let mut relayers_vec = Vec::new(env);
+    for _ in 0..relayers {
+        let relayer = Address::generate(env);
+        stellar_asset.mint(&relayer, &10_000);
+        client.register_relayer(&relayer, &1000);
+        relayers_vec.push_back(relayer);
     }
 
-    env.ledger().set_timestamp(150);
-    h.client.settle_epoch(&0);
+    client.configure_liveness(&liveness_cfg(token_addr.clone()));
 
-    // Bounded invariant: reported epoch reward never exceeds the configured budget.
-    let snap = h.client.get_epoch_info(&0);
-    assert!(snap.total_reward >= 0);
-    assert!(snap.total_reward <= 1000);
+    Setup { client, treasury, token_addr, relayers: relayers_vec }
 }
-
-#[test]
-fn test_equivocation_duplicate_across_relayers_earns_no_reward() {
-    let env = Env::default();
-    env.mock_all_auths();
-    env.ledger().set_timestamp(0);
-    let admin = Address::generate(&env);
-    let treasury = Address::generate(&env);
-    let h = setup(&env, &admin, &treasury);
-    enable_liveness(&h);
-
-    let relayer_a = Address::generate(&env);
-    let relayer_b = Address::generate(&env);
-    h.stellar_asset.mint(&relayer_a, &1000);
-    h.stellar_asset.mint(&relayer_b, &1000);
-    h.client.register_relayer(&relayer_a, &1000);
-    h.client.register_relayer(&relayer_b, &1000);
-
-    // A relays the work first.
-    h.client.record_relay_work(&relayer_a, &symbol_short!("tx123"));
-    // B re-submits the same work -> duplicate / equivocation, no new unit, penalty counted.
-    h.client.record_relay_work(&relayer_b, &symbol_short!("tx123"));
-
-    // A retains one useful unit; B has none.
-    assert_eq!(h.client.get_epoch_units(&0, &relayer_a), 1);
-    assert_eq!(h.client.get_epoch_units(&0, &relayer_b), 0);
-    // B's equivocation was counted.
-    assert_eq!(h.client.get_liveness(&relayer_b).unwrap().equivocation_count, 1);
-
-    // B's only "work" is the duplicate, so B should earn no reward after settlement.
-    env.ledger().set_timestamp(150);
-    h.client.settle_epoch(&0);
-    assert_eq!(h.client.get_liveness(&relayer_b).unwrap().rewards_accrued, 0);
-    assert!(h.client.get_liveness(&relayer_a).unwrap().rewards_accrued > 0);
-
-    // Equivocation slashed a bounded fraction (10%) of B's stake.
-    let b_info = h.client.get_relayer_info(&relayer_b).unwrap();
-    assert_eq!(b_info.stake_amount, 900);
-}
-
-#[test]
-fn test_liveness_tolerates_temporary_partition_within_grace() {
-    let env = Env::default();
-    env.mock_all_auths();
-    env.ledger().set_timestamp(0);
-    let admin = Address::generate(&env);
-    let treasury = Address::generate(&env);
-    let h = setup(&env, &admin, &treasury);
-    enable_liveness(&h);
-
-    let relayer = Address::generate(&env);
-    h.stellar_asset.mint(&relayer, &1000);
-    h.client.register_relayer(&relayer, &1000);
-    h.client.record_relay_work(&relayer, &symbol_short!("workA"));
-
-    // Temporary partition: skip 2 epochs (within grace_epochs = 2).
-    env.ledger().set_timestamp(300); // epoch 3
-    let liveness = h.client.get_liveness(&relayer).unwrap();
-    // Consecutive missed = 3 - 0 = 3 > grace 2 -> marked not live (persistent failure).
-    assert_eq!(liveness.live, false);
-
-    // Within grace window (only 1 epoch missed).
-    let relayer2 = Address::generate(&env);
-    h.stellar_asset.mint(&relayer2, &1000);
-    h.client.register_relayer(&relayer2, &1000);
-    h.client.record_relay_work(&relayer2, &symbol_short!("workB")); // epoch 3
-    let liveness2 = h.client.get_liveness(&relayer2).unwrap();
-    assert_eq!(liveness2.live, true);
-}
-
-#[test]
-fn test_persistent_activity_restores_liveness() {
-    let env = Env::default();
-    env.mock_all_auths();
-    env.ledger().set_timestamp(0);
-    let admin = Address::generate(&env);
-    let treasury = Address::generate(&env);
-    let h = setup(&env, &admin, &treasury);
-    enable_liveness(&h);
-
-    let relayer = Address::generate(&env);
-    h.stellar_asset.mint(&relayer, &1000);
-    h.client.register_relayer(&relayer, &1000);
-    h.client.record_relay_work(&relayer, &symbol_short!("workA"));
-
-    // Long downtime -> liveness lost.
-    env.ledger().set_timestamp(500); // epoch 5
-    let liveness = h.client.get_liveness(&relayer).unwrap();
-    assert_eq!(liveness.live, false);
-
-    // Recovery: submitting new work restores active liveness (consecutive_missed reset).
-    h.client.record_relay_work(&relayer, &symbol_short!("workC"));
-    let recovered = h.client.get_liveness(&relayer).unwrap();
-    assert_eq!(recovered.live, true);
-    assert_eq!(recovered.consecutive_missed, 0);
-}
-
 
 #[test]
 fn test_registration_and_staking() {
@@ -209,7 +95,7 @@ fn test_registration_and_staking() {
     let relayer = Address::generate(&env);
     let treasury = Address::generate(&env);
     let (token_addr, token_client, stellar_asset) = create_token(&env, &admin);
-    let contract_id = env.register_contract(None, RelayerSlashingContract);
+    let contract_id = env.register(RelayerSlashingContract, ());
     let client = RelayerSlashingContractClient::new(&env, &contract_id);
     client.initialize(&admin, &token_addr, &treasury, &5000, &10);
     stellar_asset.mint(&relayer, &1000);
@@ -228,7 +114,7 @@ fn test_dispute_and_slash_relayer() {
     let relayer = Address::generate(&env);
     let treasury = Address::generate(&env);
     let (token_addr, token_client, stellar_asset) = create_token(&env, &admin);
-    let contract_id = env.register_contract(None, RelayerSlashingContract);
+    let contract_id = env.register(RelayerSlashingContract, ());
     let client = RelayerSlashingContractClient::new(&env, &contract_id);
     client.initialize(&admin, &token_addr, &treasury, &5000, &10);
     stellar_asset.mint(&relayer, &1000);
@@ -249,7 +135,7 @@ fn test_withdraw_success_after_unbonding() {
     let admin = Address::generate(&env);
     let relayer = Address::generate(&env);
     let (token_addr, token_client, stellar_asset) = create_token(&env, &admin);
-    let contract_id = env.register_contract(None, RelayerSlashingContract);
+    let contract_id = env.register(RelayerSlashingContract, ());
     let client = RelayerSlashingContractClient::new(&env, &contract_id);
     client.initialize(&admin, &token_addr, &admin, &5000, &60);
     stellar_asset.mint(&relayer, &1000);
@@ -270,7 +156,7 @@ fn test_withdraw_fails_within_unbonding_period() {
     let admin = Address::generate(&env);
     let relayer = Address::generate(&env);
     let (token_addr, _token_client, stellar_asset) = create_token(&env, &admin);
-    let contract_id = env.register_contract(None, RelayerSlashingContract);
+    let contract_id = env.register(RelayerSlashingContract, ());
     let client = RelayerSlashingContractClient::new(&env, &contract_id);
     client.initialize(&admin, &token_addr, &admin, &5000, &60);
     stellar_asset.mint(&relayer, &1000);
@@ -278,4 +164,222 @@ fn test_withdraw_fails_within_unbonding_period() {
     client.request_unstake(&relayer);
     env.ledger().set_timestamp(30);
     client.withdraw_stake(&relayer);
+}
+
+#[test]
+fn test_duplicate_batch_earns_no_reward() {
+    let env = Env::default();
+    let setup = setup_with(&env, 1);
+    let relayer = setup.relayers.get(0).unwrap();
+    let first = setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS, 0));
+    assert_eq!(first.reward, PER_WORK);
+    assert!(!first.duplicate);
+    let second = setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS, 0));
+    assert_eq!(second.reward, 0);
+    assert!(second.duplicate);
+}
+
+#[test]
+#[should_panic(expected = "insufficient or excessive intent count")]
+fn test_unnecessary_work_rejected() {
+    let env = Env::default();
+    let setup = setup_with(&env, 1);
+    let relayer = setup.relayers.get(0).unwrap();
+    setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS - 1, 0));
+}
+
+#[test]
+#[should_panic(expected = "work must target the current epoch")]
+fn test_stale_work_rejected() {
+    let env = Env::default();
+    let setup = setup_with(&env, 1);
+    let relayer = setup.relayers.get(0).unwrap();
+    setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS, 1));
+}
+
+#[test]
+fn test_reward_bounded_by_work_and_relayer_caps() {
+    let env = Env::default();
+    let setup = setup_with(&env, 1);
+    let relayer = setup.relayers.get(0).unwrap();
+    let r1 = setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS, 0));
+    let r2 = setup.client.submit_work(&relayer, &make_work(&env, 2, MIN_EVENTS, 0));
+    let r3 = setup.client.submit_work(&relayer, &make_work(&env, 3, MIN_EVENTS, 0));
+    assert_eq!(r1.reward, PER_WORK);
+    assert_eq!(r2.reward, PER_RELAYER - PER_WORK);
+    assert_eq!(r3.reward, 0);
+    let rec = setup.client.get_relayer_epoch_record(&relayer).unwrap();
+    assert_eq!(rec.reward_earned, PER_RELAYER);
+}
+
+#[test]
+fn test_epoch_budget_shared_across_cartel() {
+    let env = Env::default();
+    let setup = setup_with(&env, 6);
+    let mut total: i128 = 0;
+    let mut last: WorkOutcome = WorkOutcome { reward: 0, new_intents: 0, duplicate: false, equivocated: false, rejected: false };
+    for i in 0..6 {
+        let relayer = setup.relayers.get(i).unwrap();
+        let out = setup.client.submit_work(&relayer, &make_work(&env, (i as u8) + 1, MIN_EVENTS, 0));
+        assert!(out.reward <= PER_WORK);
+        total += out.reward;
+        last = out;
+    }
+    let er = setup.client.get_epoch_reward().unwrap();
+    assert_eq!(er.budget_spent, BUDGET);
+    assert_eq!(total, BUDGET);
+    assert_eq!(last.reward, 0);
+}
+
+#[test]
+fn test_equivocation_earns_nothing() {
+    let env = Env::default();
+    let setup = setup_with(&env, 1);
+    let relayer = setup.relayers.get(0).unwrap();
+    let first = setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS, 0));
+    assert_eq!(first.reward, PER_WORK);
+
+    let shared = intent(&env, 1, 0);
+    let extra = intent(&env, 9, 0);
+    let ids = vec![&env, shared, extra];
+    let work_id = RelayerSlashingContract::_canonical_work_id(&env, &ids);
+    let second = setup.client.submit_work(
+        &relayer,
+        &WorkSubmission { work_id, epoch: 0, intent_ids: ids },
+    );
+    assert!(second.equivocated);
+    assert_eq!(second.reward, 0);
+    let live = setup.client.get_relayer_liveness(&relayer).unwrap();
+    assert_eq!(live.equivocation_count, 1);
+}
+
+#[test]
+fn test_cross_relayer_duplicate_earns_nothing() {
+    let env = Env::default();
+    let setup = setup_with(&env, 2);
+    let relayer_a = setup.relayers.get(0).unwrap();
+    let relayer_b = setup.relayers.get(1).unwrap();
+    let first = setup.client.submit_work(&relayer_a, &make_work(&env, 1, MIN_EVENTS, 0));
+    assert_eq!(first.reward, PER_WORK);
+    let second = setup.client.submit_work(&relayer_b, &make_work(&env, 1, MIN_EVENTS, 0));
+    assert_eq!(second.reward, 0);
+    assert!(second.duplicate);
+}
+
+#[test]
+fn test_partition_grace_and_recovery() {
+    let env = Env::default();
+    let setup = setup_with(&env, 1);
+    let relayer = setup.relayers.get(0).unwrap();
+    let out = setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS, 0));
+    assert_eq!(out.reward, PER_WORK);
+
+    env.ledger().set_timestamp(T0 + 2 * EPOCH_LENGTH + 50);
+    let a1 = setup.client.evaluate_liveness(&relayer);
+    assert!(!a1.failed);
+
+    let fail_ts = T0 + (GRACE_EPOCHS as u64 + SLASH_AFTER_MISSED as u64 + 1) * EPOCH_LENGTH + 50;
+    env.ledger().set_timestamp(fail_ts);
+    let a2 = setup.client.evaluate_liveness(&relayer);
+    assert!(a2.failed);
+    let live = setup.client.get_relayer_liveness(&relayer).unwrap();
+    assert_eq!(live.consecutive_missed, SLASH_AFTER_MISSED);
+    assert_eq!(live.liveness_failures, 1);
+
+    env.ledger().set_timestamp(fail_ts + 10);
+    let recovered = setup.client.submit_work(&relayer, &make_work(&env, 2, MIN_EVENTS, a2.epoch));
+    assert_eq!(recovered.reward, PER_WORK);
+    assert!(!recovered.equivocated);
+    let live2 = setup.client.get_relayer_liveness(&relayer).unwrap();
+    assert!(!live2.failure_locked);
+
+    let a3 = setup.client.evaluate_liveness(&relayer);
+    assert!(!a3.failed);
+    assert_eq!(a3.missed_epochs, 0);
+}
+
+#[test]
+fn test_persistent_failure_slashing() {
+    let env = Env::default();
+    let setup = setup_with(&env, 1);
+    let relayer = setup.relayers.get(0).unwrap();
+    let out = setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS, 0));
+    assert_eq!(out.reward, PER_WORK);
+
+    let fail_ts = T0 + (GRACE_EPOCHS as u64 + SLASH_AFTER_MISSED as u64 + 1) * EPOCH_LENGTH + 50;
+    env.ledger().set_timestamp(fail_ts);
+    let a = setup.client.evaluate_liveness(&relayer);
+    assert!(a.failed);
+
+    let token_client = token::Client::new(&env, &setup.token_addr);
+    assert_eq!(token_client.balance(&setup.treasury), 0);
+    setup.client.slash_relayer_for_liveness(&relayer);
+    let info = setup.client.get_relayer_info(&relayer).unwrap();
+    assert_eq!(info.status, RelayerStatus::Slashed);
+    assert_eq!(info.stake_amount, 600);
+    assert_eq!(token_client.balance(&setup.treasury), 400);
+
+    setup.client.slash_relayer_for_liveness(&relayer);
+    let info2 = setup.client.get_relayer_info(&relayer).unwrap();
+    assert_eq!(info2.status, RelayerStatus::Slashed);
+    assert_eq!(info2.stake_amount, 600);
+}
+
+#[test]
+#[should_panic(expected = "no active persistent liveness failure")]
+fn test_recovered_relayer_cannot_be_slashed() {
+    let env = Env::default();
+    let setup = setup_with(&env, 1);
+    let relayer = setup.relayers.get(0).unwrap();
+    setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS, 0));
+    let fail_ts = T0 + (GRACE_EPOCHS as u64 + SLASH_AFTER_MISSED as u64 + 1) * EPOCH_LENGTH + 50;
+    env.ledger().set_timestamp(fail_ts);
+    let a = setup.client.evaluate_liveness(&relayer);
+    assert!(a.failed);
+    env.ledger().set_timestamp(fail_ts + 10);
+    setup.client.submit_work(&relayer, &make_work(&env, 2, MIN_EVENTS, a.epoch));
+    setup.client.slash_relayer_for_liveness(&relayer);
+}
+
+#[test]
+fn test_claim_rewards() {
+    let env = Env::default();
+    let setup = setup_with(&env, 1);
+    let relayer = setup.relayers.get(0).unwrap();
+    let out = setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS, 0));
+    assert_eq!(out.reward, PER_WORK);
+
+    let token_client = token::Client::new(&env, &setup.token_addr);
+    let before = token_client.balance(&relayer);
+    let claimed = setup.client.claim_rewards(&relayer);
+    assert_eq!(claimed, PER_WORK);
+    assert_eq!(token_client.balance(&relayer), before + PER_WORK);
+    let live = setup.client.get_relayer_liveness(&relayer).unwrap();
+    assert_eq!(live.pending_reward, 0);
+}
+
+#[test]
+#[should_panic(expected = "no pending rewards")]
+fn test_claim_rewards_twice_rejected() {
+    let env = Env::default();
+    let setup = setup_with(&env, 1);
+    let relayer = setup.relayers.get(0).unwrap();
+    setup.client.submit_work(&relayer, &make_work(&env, 1, MIN_EVENTS, 0));
+    setup.client.claim_rewards(&relayer);
+    setup.client.claim_rewards(&relayer);
+}
+
+#[test]
+fn test_liveness_batch_evaluation() {
+    let env = Env::default();
+    let setup = setup_with(&env, 2);
+    let relayer_a = setup.relayers.get(0).unwrap();
+    let relayer_b = setup.relayers.get(1).unwrap();
+    setup.client.submit_work(&relayer_a, &make_work(&env, 1, MIN_EVENTS, 0));
+    env.ledger().set_timestamp(T0 + 2 * EPOCH_LENGTH + 50);
+    let targets = vec![&env, relayer_a, relayer_b];
+    let res = setup.client.evaluate_liveness_batch(&targets);
+    assert_eq!(res.len(), 2);
+    assert!(!res.get(0).unwrap().failed);
+    assert!(!res.get(1).unwrap().failed);
 }
