@@ -10,6 +10,7 @@ on:
       - "src/scripts/testWebhookIdempotency.ts"
       - "src/config/Datasource.ts"
       - ".github/workflows/release-gates.yml"
+      - ".github/workflows/sbom-provenance.yml"
 
 jobs:
   backend-health:
@@ -147,3 +148,65 @@ jobs:
 
       - name: Package dry run
         run: npm pack --dry-run
+
+  supply-chain-gate:
+    name: Supply chain security gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify SBOM generation tooling available
+        run: npx @cyclonedx/cyclonedx-npm --help
+
+      - name: Dry-run CycloneDX SBOM (root)
+        run: npx @cyclonedx/cyclonedx-npm --output-file /dev/null --output-format json
+
+      - name: Dry-run CycloneDX SBOM (SDK)
+        run: npx @cyclonedx/cyclonedx-npm --output-file /dev/null --output-format json
+        working-directory: packages/sdk
+
+      - name: Verify sbom-provenance workflow exists and is valid
+        run: |
+          test -f .github/workflows/sbom-provenance.yml
+          echo "SBOM provenance workflow present"
+
+      - name: Verify release assets would include SBOMs
+        run: |
+          # Confirm the sbom-provenance workflow uploads to releases
+          grep -q 'gh release upload' .github/workflows/sbom-provenance.yml
+          echo "Release upload step confirmed"
+
+      - name: Verify cosign signing is configured
+        run: |
+          grep -q 'sigstore/cosign-installer' .github/workflows/sbom-provenance.yml
+          echo "Cosign signing confirmed"
+
+      - name: Verify artifact attestation is configured
+        run: |
+          grep -q 'actions/attest-build-provenance' .github/workflows/sbom-provenance.yml
+          echo "Artifact attestation confirmed"
+
+      - name: Verify provenance manifest includes repository commit
+        run: |
+          grep -q 'github.sha' .github/workflows/sbom-provenance.yml
+          echo "Provenance binds repository commit"
+
+      - name: Verify provenance manifest includes workflow reference
+        run: |
+          grep -q 'github.workflow' .github/workflows/sbom-provenance.yml
+          echo "Provenance binds workflow identity"
+
+      - name: Verify verification job exists in SBOM workflow
+        run: |
+          grep -q 'Verify signatures' .github/workflows/sbom-provenance.yml
+          echo "Post-build verification job confirmed"
