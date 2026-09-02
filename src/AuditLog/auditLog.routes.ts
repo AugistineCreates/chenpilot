@@ -23,12 +23,17 @@ import {
 } from "../Gateway/middleware/rbac.middleware";
 import { requireAdminAuth } from "../Gateway/middleware/adminAuth";
 import { auditLogService } from "./auditLog.service";
-import { AuditAction, AuditSeverity } from "./auditLog.entity";
+import { AuditAction } from "./auditLog.entity";
 import {
-  EventCategory,
-  AuditEventSeverity,
-  AuditEventAction,
-} from "./auditEvent.types";
+  ok,
+  ApiError,
+  validateQuery,
+  validateParams,
+  PaginationQueryDto,
+  UserIdParamDto,
+  AuditLogListQueryDto,
+} from "../contracts";
+import { asyncHandler } from "../utils/expressAsync";
 
 const router = Router();
 
@@ -43,86 +48,44 @@ const router = Router();
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: correlationId
- *         schema: { type: string }
- *         description: Filter by distributed trace ID
- *       - in: query
- *         name: category
- *         schema: { type: string, enum: [Auth, Admin, Execution, Policy, Integration] }
- *       - in: query
- *         name: userId
- *         schema: { type: string }
- *       - in: query
- *         name: action
- *         schema: { type: string }
- *       - in: query
- *         name: severity
- *         schema: { type: string, enum: [info, warning, error, critical] }
- *       - in: query
- *         name: startDate
- *         schema: { type: string, format: date-time }
- *       - in: query
- *         name: endDate
- *         schema: { type: string, format: date-time }
- *       - in: query
- *         name: success
- *         schema: { type: boolean }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 50 }
- *       - in: query
- *         name: offset
- *         schema: { type: integer, default: 0 }
+ *       - { in: query, name: userId,    schema: { type: string } }
+ *       - { in: query, name: action,   schema: { type: string } }
+ *       - { in: query, name: severity, schema: { type: string, enum: [info, warning, error, critical] } }
+ *       - { in: query, name: startDate, schema: { type: string, format: date-time } }
+ *       - { in: query, name: endDate,   schema: { type: string, format: date-time } }
+ *       - { in: query, name: success,  schema: { type: boolean } }
+ *       - { in: query, name: limit,    schema: { type: integer, default: 50,  maximum: 500 } }
+ *       - { in: query, name: offset,   schema: { type: integer, default: 0 } }
  *     responses:
- *       200:
- *         description: Events retrieved
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Admin access required
+ *       200: { description: Audit logs retrieved successfully }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden - Admin access required }
  */
 router.get(
   "/events",
   authenticateToken,
   requireAdmin,
-  async (req: Request, res: Response) => {
-    try {
-      const {
-        correlationId,
-        category,
-        userId,
-        action,
-        severity,
-        startDate,
-        endDate,
-        success,
-        limit,
-        offset,
-      } = req.query;
+  validateQuery(AuditLogListQueryDto),
+  asyncHandler(async (req: Request, res: Response) => {
+    const q = req.query as unknown as AuditLogListQueryDto;
 
-      const result = await auditLogService.queryEvents({
-        correlationId: correlationId as string,
-        category: category as EventCategory,
-        userId: userId as string,
-        action: action as AuditEventAction,
-        severity: severity as AuditEventSeverity,
-        startDate: startDate ? new Date(startDate as string) : undefined,
-        endDate: endDate ? new Date(endDate as string) : undefined,
-        success:
-          success === "true" ? true : success === "false" ? false : undefined,
-        limit: limit ? parseInt(limit as string, 10) : 50,
-        offset: offset ? parseInt(offset as string, 10) : 0,
-      });
-
-      return res.status(200).json({ success: true, ...result });
-    } catch (error) {
-      console.error("Error fetching audit events:", error);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to fetch audit events" });
+    if (q.startDate && q.endDate && q.startDate > q.endDate) {
+      throw ApiError.badRequest("startDate must be before or equal to endDate");
     }
-  }
+
+    const result = await auditLogService.query({
+      userId: q.userId,
+      action: q.action as AuditAction | undefined,
+      severity: q.severity,
+      startDate: q.startDate ? new Date(q.startDate) : undefined,
+      endDate: q.endDate ? new Date(q.endDate) : undefined,
+      success: q.success,
+      limit: q.limit ?? 50,
+      offset: q.offset ?? 0,
+    });
+
+    return ok(res, result);
+  })
 );
 
 // ─── NEW: Distributed trace reconstruction ────────────────────────────────────
@@ -136,32 +99,30 @@ router.get(
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: correlationId
- *         required: true
- *         schema: { type: string }
+ *       - { in: path,  name: userId, required: true, schema: { type: string } }
+ *       - { in: query, name: limit,  schema: { type: integer, default: 50, maximum: 500 } }
+ *       - { in: query, name: offset, schema: { type: integer, default: 0 } }
  *     responses:
- *       200:
- *         description: Trace events retrieved
+ *       200: { description: User audit logs retrieved successfully }
  */
 router.get(
   "/correlation/:correlationId",
   authenticateToken,
-  requireAdmin,
-  async (req: Request, res: Response) => {
-    try {
-      const { correlationId } = req.params;
-      const events = await auditLogService.getByCorrelationId(correlationId);
-      return res
-        .status(200)
-        .json({ success: true, correlationId, events, total: events.length });
-    } catch (error) {
-      console.error("Error fetching correlated events:", error);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to fetch correlated events" });
-    }
-  }
+  requireOwnerOrElevated("userId"),
+  validateParams(UserIdParamDto),
+  validateQuery(PaginationQueryDto),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { userId } = req.params as unknown as UserIdParamDto;
+    const { limit, offset } = req.query as unknown as PaginationQueryDto;
+
+    const result = await auditLogService.getUserAuditLogs(
+      userId,
+      limit ?? 50,
+      offset ?? 0
+    );
+
+    return ok(res, result);
+  })
 );
 
 // ─── NEW: Category bucket ─────────────────────────────────────────────────────
@@ -175,90 +136,29 @@ router.get(
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: category
- *         required: true
- *         schema: { type: string, enum: [Auth, Admin, Execution, Policy, Integration] }
- *       - in: query
- *         name: hours
- *         schema: { type: integer, default: 24 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 100 }
+ *       - { in: query, name: hours, schema: { type: integer, default: 24 } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 100, maximum: 500 } }
+ *     responses:
+ *       200: { description: Security events retrieved successfully }
  */
 router.get(
   "/category/:category",
   authenticateToken,
   requireAdmin,
-  async (req: Request, res: Response) => {
-    try {
-      const { category } = req.params;
-      const { hours, limit } = req.query;
+  validateQuery(PaginationQueryDto),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { limit } = req.query as unknown as PaginationQueryDto;
+    // `hours` isn't part of `PaginationQueryDto`; parse defensively.
+    const hoursRaw = (req.query as Record<string, unknown>).hours;
+    const hours =
+      typeof hoursRaw === "string"
+        ? Math.max(1, parseInt(hoursRaw, 10) || 24)
+        : 24;
 
-      const validCategories = Object.values(EventCategory) as string[];
-      if (!validCategories.includes(category)) {
-        return res.status(400).json({
-          success: false,
-          message: `Invalid category. Must be one of: ${validCategories.join(", ")}`,
-        });
-      }
+    const events = await auditLogService.getSecurityEvents(hours, limit ?? 100);
 
-      const events = await auditLogService.getByCategory(
-        category as EventCategory,
-        hours ? parseInt(hours as string, 10) : 24,
-        limit ? parseInt(limit as string, 10) : 100
-      );
-      return res
-        .status(200)
-        .json({ success: true, category, events, total: events.length });
-    } catch (error) {
-      console.error("Error fetching events by category:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to fetch events by category",
-      });
-    }
-  }
-);
-
-// ─── NEW: Actor timeline ──────────────────────────────────────────────────────
-
-/**
- * @swagger
- * /api/audit/actor/{actorId}:
- *   get:
- *     summary: Get the full event timeline for an actor
- *     tags: [Audit]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: actorId
- *         required: true
- *         schema: { type: string }
- */
-router.get(
-  "/actor/:actorId",
-  authenticateToken,
-  requireAdmin,
-  async (req: Request, res: Response) => {
-    try {
-      const { actorId } = req.params;
-      const { limit, offset } = req.query;
-
-      const result = await auditLogService.getActorTimeline(
-        actorId,
-        limit ? parseInt(limit as string, 10) : 50,
-        offset ? parseInt(offset as string, 10) : 0
-      );
-      return res.status(200).json({ success: true, actorId, ...result });
-    } catch (error) {
-      console.error("Error fetching actor timeline:", error);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to fetch actor timeline" });
-    }
-  }
+    return ok(res, { events, total: events.length });
+  })
 );
 
 // ─── NEW: Hash-chain integrity verification ───────────────────────────────────
@@ -272,139 +172,28 @@ router.get(
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 1000 }
- *         description: Number of recent events to verify
+ *       - { in: query, name: userId, schema: { type: string } }
+ *       - { in: query, name: hours,  schema: { type: integer, default: 24 } }
+ *     responses:
+ *       200: { description: Failed auth attempts retrieved successfully }
  */
 router.get(
   "/chain/verify",
   authenticateToken,
   requireAdmin,
-  async (req: Request, res: Response) => {
-    try {
-      const { limit } = req.query;
-      const result = await auditLogService.verifyChainIntegrity(
-        limit ? parseInt(limit as string, 10) : 1000
-      );
-      return res.status(200).json({ success: true, ...result });
-    } catch (error) {
-      console.error("Error verifying audit chain:", error);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to verify audit chain" });
-    }
-  }
-);
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId =
+      typeof req.query.userId === "string" ? req.query.userId : undefined;
+    const hoursRaw = (req.query as Record<string, unknown>).hours;
+    const hours =
+      typeof hoursRaw === "string"
+        ? Math.max(1, parseInt(hoursRaw, 10) || 24)
+        : 24;
 
-// ─── LEGACY: All original endpoints unchanged ─────────────────────────────────
+    const attempts = await auditLogService.getFailedAuthAttempts(userId, hours);
 
-router.get("/logs", requireAdminAuth(), async (req: Request, res: Response) => {
-  try {
-    const {
-      userId,
-      action,
-      severity,
-      startDate,
-      endDate,
-      success,
-      limit,
-      offset,
-    } = req.query;
-
-    const result = await auditLogService.query({
-      userId: userId as string,
-      action: action as AuditAction,
-      severity: severity as AuditSeverity,
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-      success:
-        success === "true" ? true : success === "false" ? false : undefined,
-      limit: limit ? parseInt(limit as string, 10) : 50,
-      offset: offset ? parseInt(offset as string, 10) : 0,
-    });
-
-    return res.status(200).json({ success: true, ...result });
-  } catch (error) {
-    console.error("Error fetching audit logs:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch audit logs" });
-  }
-});
-
-router.get(
-  "/user/:userId",
-  authenticateToken,
-  requireOwnerOrElevated("userId"),
-  async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.params;
-      const { limit, offset } = req.query;
-
-      const result = await auditLogService.getUserAuditLogs(
-        userId,
-        limit ? parseInt(limit as string, 10) : 50,
-        offset ? parseInt(offset as string, 10) : 0
-      );
-
-      return res.status(200).json({ success: true, ...result });
-    } catch (error) {
-      console.error("Error fetching user audit logs:", error);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to fetch user audit logs" });
-    }
-  }
-);
-
-router.get(
-  "/security-events",
-  requireAdminAuth(),
-  async (req: Request, res: Response) => {
-    try {
-      const { hours, limit } = req.query;
-
-      const events = await auditLogService.getSecurityEvents(
-        hours ? parseInt(hours as string, 10) : 24,
-        limit ? parseInt(limit as string, 10) : 100
-      );
-
-      return res
-        .status(200)
-        .json({ success: true, events, total: events.length });
-    } catch (error) {
-      console.error("Error fetching security events:", error);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to fetch security events" });
-    }
-  }
-);
-
-router.get(
-  "/failed-auth",
-  requireAdminAuth(),
-  async (req: Request, res: Response) => {
-    try {
-      const { userId, hours } = req.query;
-
-      const attempts = await auditLogService.getFailedAuthAttempts(
-        userId as string,
-        hours ? parseInt(hours as string, 10) : 24
-      );
-
-      return res
-        .status(200)
-        .json({ success: true, attempts, total: attempts.length });
-    } catch (error) {
-      console.error("Error fetching failed auth attempts:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to fetch failed auth attempts",
-      });
-    }
-  }
+    return ok(res, { attempts, total: attempts.length });
+  })
 );
 
 export default router;

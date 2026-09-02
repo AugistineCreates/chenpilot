@@ -26,17 +26,25 @@ import experimentRoutes from "../Agents/admin/experiment.routes";
 import simulationRoutes from "../Agents/admin/simulation.routes";
 import workflowRoutes from "../Agents/admin/workflow.routes";
 import { stellarLiquidityTool } from "../Agents/tools/stellarLiquidityTool";
+import { authenticateToken } from "../Auth/auth.middleware";
+import { validateBody, validateQuery } from "./middleware/validation";
+import {
+  requireAdmin,
+  requireOwnerOrElevated,
+} from "./middleware/rbac.middleware";
 import { auditLogService } from "../AuditLog/auditLog.service";
 import { AuditAction, AuditSeverity } from "../AuditLog/auditLog.entity";
-import kycRoutes from "../services/kyc/kyc.routes";
-import { getSocketManager } from "./socketManager";
+
 import { BotSessionService } from "../Bot/botSession.service";
-import { BotSessionType, BotPlatform } from "../Bot/botSession.entity";
-import { operatorReportingService } from "../services/operatorReporting.service";
-import { authenticateToken } from "../Auth/auth.middleware";
-import { requireAdmin, requireOwnerOrElevated } from "./middleware/rbac.middleware";
-import { requireAdminAuth } from "./middleware/adminAuth";
-import { verifyWebhookSignature } from "./middleware/webhookSignature";
+import { BotPlatform } from "../Bot/botSession.entity";
+import {
+  BotMetricsDto,
+  CreateBotSessionDto,
+  QueryBotSessionDto,
+  UpdateBotSessionDto,
+} from "../validators/dto/BotDto";
+import { SignupDto } from "../validators/dto/AuthDto";
+import { TransactionQueryDto } from "../validators/dto/TransactionDto";
 
 const router = Router();
 router.use(helmet());
@@ -121,30 +129,16 @@ router.get(
 );
 
 // #149: Bot command performance metrics endpoint
-router.post("/bot/metrics", async (req: Request, res: Response) => {
-  try {
-    const {
-      command,
-      platform,
-      userId,
-      executionTimeMs,
-      success,
-      error,
-      timestamp,
-    } = req.body;
+router.post(
+  "/bot/metrics",
+  validateBody(BotMetricsDto),
+  async (req: Request, res: Response) => {
+    try {
+      const metrics = req.body as BotMetricsDto;
+      const success = metrics.success === "true" || metrics.success === true;
 
-    // Validate required fields
-    if (!command || !platform || !userId || executionTimeMs === undefined) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Missing required fields: command, platform, userId, executionTimeMs",
-      });
-    }
-
-    // Map bot command to audit action
-    const auditAction = (
-      {
+      // Map bot command to audit action
+      const commandMap: Record<string, AuditAction> = {
         "!start": AuditAction.BOT_COMMAND_START,
         "/start": AuditAction.BOT_COMMAND_START,
         "!help": AuditAction.BOT_COMMAND_HELP,
@@ -161,185 +155,161 @@ router.post("/bot/metrics", async (req: Request, res: Response) => {
         "/balance": AuditAction.BOT_COMMAND_BALANCE,
         "!swap": AuditAction.BOT_COMMAND_SWAP,
         "/swap": AuditAction.BOT_COMMAND_SWAP,
-      } as Record<string, AuditAction>
-    )[command];
+      };
 
-    // Realtime
-    router.use("/realtime", realtimeRoutes);
+      const auditAction =
+        commandMap[metrics.command] || AuditAction.BOT_COMMAND_START;
 
-    // Log to audit log
-    await auditLogService.log({
-      userId,
-      action: auditAction,
-      severity: success ? AuditSeverity.INFO : AuditSeverity.WARNING,
-      resource: `${platform}:${command}`,
-      metadata: {
-        platform,
-        command,
-        executionTimeMs,
-        timestamp,
-      },
-      errorMessage: error,
-      success,
-    });
+      // Log to audit log
+      await auditLogService.log({
+        userId: metrics.userId,
+        action: auditAction,
+        severity: success ? AuditSeverity.INFO : AuditSeverity.WARNING,
+        resource: `${metrics.platform}:${metrics.command}`,
+        metadata: {
+          platform: metrics.platform,
+          command: metrics.command,
+          executionTimeMs: metrics.executionTimeMs,
+          timestamp: metrics.timestamp,
+        },
+        errorMessage: metrics.error,
+        success,
+      });
 
-    // Also log to application logger for visibility
-    logger.info("Bot command performance metrics received", {
-      platform,
-      command,
-      userId,
-      executionTimeMs,
-      success,
-    });
+      // Also log to application logger for visibility
+      logger.info("Bot command performance metrics received", {
+        platform: metrics.platform,
+        command: metrics.command,
+        userId: metrics.userId,
+        executionTimeMs: metrics.executionTimeMs,
+        success,
+      });
 
-    return res.status(200).json({
-      success: true,
-      message: "Metrics logged successfully",
-    });
-  } catch (error) {
-    logger.error("Error logging bot metrics", { error, body: req.body });
-    return res.status(500).json({
-      success: false,
-      message: "Failed to log metrics",
-    });
+      return res.status(200).json({
+        success: true,
+        message: "Metrics logged successfully",
+      });
+    } catch (error) {
+      logger.error("Error logging bot metrics", { error, body: req.body });
+      return res.status(500).json({
+        success: false,
+        message: "Failed to log metrics",
+      });
+    }
   }
-});
+);
 
 // #126: Bot session management endpoints
 const botSessionService = new BotSessionService();
 
 // Create or update a bot session
-router.post("/bot/session", async (req: Request, res: Response) => {
-  try {
-    const { userId, platform, sessionType, step, sessionData, expiresAt } =
-      req.body;
+router.post(
+  "/bot/session",
+  validateBody(CreateBotSessionDto),
+  async (req: Request, res: Response) => {
+    try {
+      const sessionDto = req.body as CreateBotSessionDto;
 
-    // Validate required fields
-    if (
-      !userId ||
-      !platform ||
-      !sessionType ||
-      step === undefined ||
-      !sessionData
-    ) {
-      return res.status(400).json({
+      // Set default expiration (24 hours from now) if not provided
+      const expiration = sessionDto.expiresAt
+        ? new Date(sessionDto.expiresAt)
+        : new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const session = await botSessionService.create({
+        userId: sessionDto.userId,
+        platform: sessionDto.platform,
+        sessionType: sessionDto.sessionType,
+        step: sessionDto.step,
+        sessionData: sessionDto.sessionData,
+        expiresAt: expiration,
+      });
+
+      return res.status(200).json({
+        success: true,
+        session,
+      });
+    } catch (error) {
+      logger.error("Error creating bot session", { error, body: req.body });
+      return res.status(500).json({
         success: false,
-        message:
-          "Missing required fields: userId, platform, sessionType, step, sessionData",
+        message: "Failed to create session",
       });
     }
-
-    // Validate platform
-    if (!Object.values(BotPlatform).includes(platform)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid platform. Must be one of: ${Object.values(BotPlatform).join(", ")}`,
-      });
-    }
-
-    // Validate session type
-    if (!Object.values(BotSessionType).includes(sessionType)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid session type. Must be one of: ${Object.values(BotSessionType).join(", ")}`,
-      });
-    }
-
-    // Set default expiration (24 hours from now) if not provided
-    const expiration = expiresAt
-      ? new Date(expiresAt)
-      : new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    const session = await botSessionService.create({
-      userId,
-      platform,
-      sessionType,
-      step,
-      sessionData,
-      expiresAt: expiration,
-    });
-
-    return res.status(200).json({
-      success: true,
-      session,
-    });
-  } catch (error) {
-    logger.error("Error creating bot session", { error, body: req.body });
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create session",
-    });
   }
-});
+);
 
 // Get active session for a user
-router.get("/bot/session", async (req: Request, res: Response) => {
-  try {
-    const { userId, platform, sessionType } = req.query;
+router.get(
+  "/bot/session",
+  validateQuery(QueryBotSessionDto),
+  async (req: Request, res: Response) => {
+    try {
+      const query = req.query as unknown as QueryBotSessionDto;
 
-    if (!userId || !platform || !sessionType) {
-      return res.status(400).json({
+      const session = await botSessionService.findActiveSession(
+        query.userId,
+        query.platform,
+        query.sessionType
+      );
+
+      if (!session) {
+        return res.status(404).json({
+          success: false,
+          message: "No active session found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        session,
+      });
+    } catch (error) {
+      logger.error("Error getting bot session", { error, query: req.query });
+      return res.status(500).json({
         success: false,
-        message:
-          "Missing required query parameters: userId, platform, sessionType",
+        message: "Failed to get session",
       });
     }
-
-    const session = await botSessionService.findActiveSession(
-      userId as string,
-      platform as BotPlatform,
-      sessionType as BotSessionType
-    );
-
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        message: "No active session found",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      session,
-    });
-  } catch (error) {
-    logger.error("Error getting bot session", { error, query: req.query });
-    return res.status(500).json({
-      success: false,
-      message: "Failed to get session",
-    });
   }
-});
+);
 
 // Update a bot session
-router.put("/bot/session/:sessionId", async (req: Request, res: Response) => {
-  try {
-    const { sessionId } = req.params;
-    const { step, sessionData, expiresAt, isActive } = req.body;
+router.put(
+  "/bot/session/:sessionId",
+  validateBody(UpdateBotSessionDto),
+  async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      const updateDto = req.body as UpdateBotSessionDto;
+      const isActive =
+        updateDto.isActive === "true" || updateDto.isActive === true;
 
-    const session = await botSessionService.update(sessionId, {
-      step,
-      sessionData,
-      expiresAt: expiresAt ? new Date(expiresAt) : undefined,
-      isActive,
-    });
+      const session = await botSessionService.update(sessionId, {
+        step: updateDto.step,
+        sessionData: updateDto.sessionData,
+        expiresAt: updateDto.expiresAt
+          ? new Date(updateDto.expiresAt)
+          : undefined,
+        isActive,
+      });
 
-    return res.status(200).json({
-      success: true,
-      session,
-    });
-  } catch (error) {
-    logger.error("Error updating bot session", {
-      error,
-      params: req.params,
-      body: req.body,
-    });
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update session",
-    });
+      return res.status(200).json({
+        success: true,
+        session,
+      });
+    } catch (error) {
+      logger.error("Error updating bot session", {
+        error,
+        params: req.params,
+        body: req.body,
+      });
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update session",
+      });
+    }
   }
-});
+);
 
 // Deactivate a bot session
 router.delete(
@@ -513,27 +483,115 @@ router.post(
   }
 );
 
+router.post(
+  "/signup",
+  validateBody(SignupDto),
+  async (req: Request, res: Response) => {
+    try {
+      const signupDto = req.body as SignupDto;
+
+      const userRepository = AppDataSource.getRepository(User);
+
+      // Check for existing user (name is unique)
+      const existingUser = await userRepository.findOne({
+        where: { name: signupDto.name },
+      });
+
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          message: "User with this name already exists",
+        });
+      }
+
+      // Create user
+      const user = userRepository.create({
+        name: signupDto.name,
+        address: signupDto.address,
+        pk: signupDto.pk,
+        // isDeployed and tokenType will use defaults
+      });
+
+      // Save user
+      const savedUser = await userRepository.save(user);
+
+      // Log user creation
+      await auditLogService.log({
+        userId: savedUser.id,
+        action: AuditAction.USER_CREATED,
+        severity: AuditSeverity.INFO,
+        ipAddress:
+          (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+          (req.headers["x-real-ip"] as string) ||
+          req.socket.remoteAddress ||
+          "unknown",
+        userAgent: req.headers["user-agent"],
+        metadata: { username: signupDto.name, address: signupDto.address },
+      });
+
+      //  Return success
+      return res.status(201).json({
+        success: true,
+        userId: savedUser.id,
+      });
+    } catch (error) {
+      logger.error("Signup error", { error, name: req.body?.name });
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+      });
+    }
+  }
+);
+
 /**
  * @swagger
- * /api/signup:
- *   post:
- *     summary: Register a new user with wallet details
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - name
- *             properties:
- *               name:
- *                 type: string
- *                 description: Unique username
+ * /api/account/{userId}/transactions:
+ *   get:
+ *     summary: Get paginated Stellar transaction history
+ *     tags: [Transactions]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the user
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [funding, deployment, swap, transfer, all]
+ *         description: Filter by transaction type
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Start date filter (ISO 8601)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: End date filter (ISO 8601)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Number of transactions per page
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor from previous response
  *     responses:
- *       201:
- *         description: User registered successfully
+ *       200:
+ *         description: Paginated transaction list
  *         content:
  *           application/json:
  *             schema:
@@ -541,18 +599,29 @@ router.post(
  *               properties:
  *                 success:
  *                   type: boolean
- *                   example: true
- *                 userId:
- *                   type: string
- *                   format: uuid
+ *                 transactions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/TransactionHistoryItem'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     nextCursor:
+ *                       type: string
+ *                     prevCursor:
+ *                       type: string
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
  *       400:
- *         description: Missing required fields
+ *         description: Invalid query parameters
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *       409:
- *         description: User with this name already exists
+ *       404:
+ *         description: User not found
  *         content:
  *           application/json:
  *             schema:
@@ -564,59 +633,111 @@ router.post(
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post("/signup", async (req: Request, res: Response) => {
-  try {
-    const { name } = req.body;
+router.get(
+  "/account/:userId/transactions",
+  authenticateToken,
+  requireOwnerOrElevated("userId"),
+  validateQuery(TransactionQueryDto),
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
 
-    if (!name) {
-      return res.status(400).json({
+      // Ensure userId is a string
+      if (!userId || Array.isArray(userId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid userId parameter",
+        });
+      }
+
+      // Extract validated query parameters
+      const query = req.query as unknown as TransactionQueryDto;
+
+      // Validate type parameter
+      const validTypes = ["funding", "deployment", "swap", "transfer", "all"];
+      if (query.type && !validTypes.includes(query.type)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid type. Must be one of: ${validTypes.join(", ")}`,
+        });
+      }
+
+      // Validate limit parameter
+      const parsedLimit = query.limit ? parseInt(query.limit, 10) : 20;
+      if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+        return res.status(400).json({
+          success: false,
+          message: "Limit must be a number between 1 and 100",
+        });
+      }
+
+      // Validate date parameters
+      if (query.startDate && isNaN(Date.parse(query.startDate))) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid startDate format. Use ISO 8601 format (e.g., 2024-01-01T00:00:00Z)",
+        });
+      }
+
+      if (query.endDate && isNaN(Date.parse(query.endDate))) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid endDate format. Use ISO 8601 format (e.g., 2024-01-01T00:00:00Z)",
+        });
+      }
+
+      // Build query parameters
+      const queryParams: TransactionQueryParams = {
+        type: query.type as TransactionType,
+        startDate: query.startDate,
+        endDate: query.endDate,
+        limit: parsedLimit,
+        cursor: query.cursor,
+      };
+
+      // Fetch transaction history
+      const result = await transactionHistoryService.getTransactionHistory(
+        userId,
+        queryParams
+      );
+
+      return res.status(200).json({
+        success: true,
+        ...result,
+      });
+    } catch (error) {
+      console.error("Transaction history error:", error);
+      const message =
+        error instanceof Error ? error.message : "Internal server error";
+      const statusCode = message.includes("User not found") ? 404 : 500;
+
+      return res.status(statusCode).json({
         success: false,
-        message: "name is required",
+        message,
       });
     }
-
-    const userService = container.resolve(UserService);
-    const user = await userService.createUser({ name });
-
-    await auditLogService.log({
-      userId: user.id,
-      action: AuditAction.USER_CREATED,
-      severity: AuditSeverity.INFO,
-      ipAddress:
-        (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
-        (req.headers["x-real-ip"] as string) ||
-        req.socket.remoteAddress ||
-        "unknown",
-      userAgent: req.headers["user-agent"],
-      metadata: { username: name, address: user.address },
-    });
-
-    return res.status(201).json({
-      success: true,
-      userId: user.id,
-    });
-  } catch (error) {
-    logger.error("Signup error", { error, name: req.body?.name });
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
   }
-});
+);
 
-// Liquidity
+// Liquidity pool endpoint
 router.post("/liquidity", async (req: Request, res: Response) => {
   try {
     const { assetCode, assetIssuer, depthLimit } = req.body;
+
     const result = await stellarLiquidityTool.execute({
       assetCode,
       assetIssuer,
       depthLimit,
     });
+
     res.json(result);
   } catch (err) {
+    // Check if it's a standard Error object
     const errorMessage =
       err instanceof Error ? err.message : "An unknown error occurred";
+
     res.status(500).json({ error: errorMessage });
   }
 });

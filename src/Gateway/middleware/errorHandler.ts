@@ -1,48 +1,25 @@
 import { Request, Response, NextFunction } from "express";
 import logger from "../../config/logger";
-import {
-  ApplicationError,
-  toCategorizedErrorResponse,
-  ErrorCategory,
-} from "../../utils/error";
+import { ApiErrorCode, isApiError } from "../../contracts/errorContract";
 
 /**
- * Interface for the standardized error response with taxonomy fields
- */
-interface StandardErrorResponse {
-  success: boolean;
-  status: number;
-  error: {
-    message: string;
-    code: string;
-    category: string;
-    recoverable: boolean;
-    details?: unknown;
-    stack?: string;
-  };
-}
-
-/**
- * Derive an ErrorCategory from a raw DB error code.
- */
-function dbCodeToCategory(dbCode: string): ErrorCategory {
-  switch (dbCode) {
-    case "23502":
-    case "23503":
-    case "22001":
-    case "22007":
-    case "22P02":
-    case "23514":
-      return "VALIDATION";
-    case "23505":
-      return "POLICY";
-    default:
-      return "UNKNOWN";
-  }
-}
-
-/**
- * Centralized error handling middleware
+ * Central error-rendering middleware.
+ *
+ * Renders *any* thrown error into the canonical JSON envelope:
+ *
+ *   { success:false, status:N, error:{ message, code, details? } }
+ *
+ * Priority order:
+ *   1. `ApiError` (and any subclass) — exact envelope
+ *   2. Postgres-style errors (`{ code }`) — translated to friendly code
+ *   3. Bare `Error.message` — passed through
+ *   4. Anything else — generic 500
+ *
+ * Mounted at the very end of the Express pipeline (`src/Gateway/api.ts`).
+ *
+ * Note: every legacy `ApplicationError` subclass now extends `ApiError`, so
+ * a separate `instanceof ApplicationError` branch is `unreachable` — one
+ * `isApiError` check covers both.
  */
 export async function ErrorHandler(
   err: unknown,
@@ -50,8 +27,23 @@ export async function ErrorHandler(
   res: Response,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   next: NextFunction
-) {
-  const error = err as {
+): Promise<void> {
+  // 1) Platform contract — preferred path (covers legacy subclasses too)
+  if (isApiError(err)) {
+    const includeStack = process.env.NODE_ENV !== "production";
+    logger.warn("Handled ApiError", {
+      code: err.code,
+      status: err.statusCode,
+      method: req.method,
+      url: req.originalUrl,
+      message: err.message,
+    });
+    res.status(err.statusCode).json(err.toResponse(includeStack));
+    return;
+  }
+
+  // 2) Postgres-style errors passed through ORMs
+  const pgish = err as {
     message?: string;
     stack?: string;
     code?: string;
@@ -59,90 +51,71 @@ export async function ErrorHandler(
   };
   let statusCode = 500;
   let message = "Internal server error";
-  let errorCode = "INTERNAL_SERVER_ERROR";
-  let category: ErrorCategory = "UNKNOWN";
-  let recoverable = false;
-  const details: unknown = undefined;
+  let errorCode: string = ApiErrorCode.INTERNAL_SERVER_ERROR;
 
-  if (error instanceof ApplicationError) {
-    const categorized = toCategorizedErrorResponse(error);
-    statusCode = categorized.statusCode;
-    message = categorized.message;
-    errorCode = categorized.code;
-    category = categorized.category as ErrorCategory;
-    recoverable = statusCode >= 500 || statusCode === 429;
-  } else if (error.code) {
-    category = dbCodeToCategory(error.code);
-    recoverable = false;
-
-    switch (error.code) {
+  if (pgish && typeof pgish === "object" && pgish.code) {
+    switch (pgish.code) {
       case "23502":
-        message = error.column
-          ? `Field '${error.column}' cannot be empty.`
+        message = pgish.column
+          ? `Field '${pgish.column}' cannot be empty.`
           : "A required field is missing.";
         statusCode = 400;
-        errorCode = "MISSING_FIELD";
+        errorCode = ApiErrorCode.MISSING_FIELD;
         break;
       case "23505":
         message = "Duplicate entry. This record already exists.";
         statusCode = 409;
-        errorCode = "DUPLICATE_ENTRY";
+        errorCode = ApiErrorCode.DUPLICATE_ENTRY;
         break;
       case "23503":
         message = "Invalid reference. The related record does not exist.";
         statusCode = 400;
-        errorCode = "INVALID_REFERENCE";
+        errorCode = ApiErrorCode.INVALID_REFERENCE;
         break;
       case "22001":
         message = "Data is too long for the specified field.";
         statusCode = 400;
-        errorCode = "VALUE_TOO_LONG";
+        errorCode = ApiErrorCode.VALUE_TOO_LONG;
         break;
       case "22007":
         message = "Invalid date/time format.";
         statusCode = 400;
-        errorCode = "INVALID_DATE_FORMAT";
+        errorCode = ApiErrorCode.INVALID_DATE_FORMAT;
         break;
       case "22P02":
         message = "Invalid input format.";
         statusCode = 400;
-        errorCode = "INVALID_INPUT_FORMAT";
+        errorCode = ApiErrorCode.INVALID_INPUT_FORMAT;
         break;
       case "23514":
         message = "Field value does not meet required constraints.";
         statusCode = 400;
-        errorCode = "CONSTRAINT_VIOLATION";
+        errorCode = ApiErrorCode.CONSTRAINT_VIOLATION;
         break;
       default:
-        if (error.message) message = error.message;
-        break;
+        if (pgish.message) message = pgish.message;
     }
-  } else if (error.message) {
-    message = error.message;
+  } else if (pgish && pgish.message) {
+    message = pgish.message;
   }
 
-  logger.error("Request error", {
-    message: error.message || "No message provided",
+  logger.error("Unhandled error", {
+    message: pgish?.message || "No message provided",
     statusCode,
     errorCode,
     category,
     method: req.method,
     url: req.originalUrl,
-    stack: error.stack,
+    stack: pgish?.stack,
   });
 
-  const response: StandardErrorResponse = {
+  res.status(statusCode).json({
     success: false,
     status: statusCode,
     error: {
       message,
       code: errorCode,
-      category,
-      recoverable,
-      details,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      stack: process.env.NODE_ENV === "production" ? undefined : pgish?.stack,
     },
-  };
-
-  return res.status(statusCode).json(response);
+  });
 }

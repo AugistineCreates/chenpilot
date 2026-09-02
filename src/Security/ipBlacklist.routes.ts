@@ -1,294 +1,218 @@
-import express, { Router, Request, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { ipBlacklistService } from "./ipBlacklist.service";
-import { BlacklistReason } from "./ipBlacklist.entity";
-import { requireAdminAuth } from "../Gateway/middleware/adminAuth";
-import { authenticateToken } from "../Auth/auth.middleware";
+import { authenticate } from "../Auth/auth";
+import {
+  ApiError,
+  ok,
+  created,
+  validateBody,
+  validateQuery,
+  validateParams,
+  IpAddressParamDto,
+  BlacklistAddBodyDto,
+  BlacklistBulkAddBodyDto,
+  BlacklistListQueryDto,
+} from "../contracts";
+import { asyncHandler } from "../utils/expressAsync";
 import logger from "../config/logger";
+
+// The auth middleware in `src/Auth/auth.middleware.ts` augments
+// `express-serve-static-core.Request` with `{ user?: { userId, name, role, username } }`.
+// We accept either `user.id` (some legacy services) or `user.userId` here for
+// backwards compatibility, and centralise the resolution into `actorId()`.
+type RequestWithUser = Request & {
+  user?: {
+    id?: string;
+    userId?: string;
+    role?: string;
+  };
+};
+
+const actorId = (req: Request): string | undefined => {
+  const u = (req as RequestWithUser).user;
+  return u?.id ?? u?.userId;
+};
 
 const router = Router();
 
 /**
- * Check if an IP is blacklisted
+ * Admin gate — replaces the previous hand-rolled `isAdmin` which used
+ * a bespoke `{ success:false, error:"Forbidden", message:"..." }`
+ * envelope. Non-admins now reach `ApiError.forbidden` and the central
+ * handler renders the canonical envelope.
+ */
+const isAdmin = (req: Request, _res: Response, next: NextFunction): void => {
+  const user = (req as RequestWithUser).user;
+  if (!user || user.role !== "admin") {
+    return next(
+      ApiError.forbidden("Only administrators can manage IP blacklist")
+    );
+  }
+  next();
+};
+
+/**
  * GET /security/blacklist/check/:ip
  */
-router.get("/check/:ip", authenticateToken, async (req: Request, res: Response) => {
-  try {
-    const { ip } = req.params;
+router.get(
+  "/check/:ip",
+  authenticate,
+  validateParams(IpAddressParamDto),
+  asyncHandler(async (req, res) => {
+    const { ip } = req.params as unknown as IpAddressParamDto;
 
     const isBlacklisted = await ipBlacklistService.isBlacklisted(ip);
     const entry = await ipBlacklistService.getBlacklistEntry(ip);
 
-    res.json({
-      success: true,
-      data: {
-        isBlacklisted,
-        entry,
-      },
-    });
-  } catch (error) {
-    logger.error("Error checking blacklist status", { error });
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
-      message: "Failed to check blacklist status",
-    });
-  }
-});
+    return ok(res, { isBlacklisted, entry });
+  })
+);
 
 /**
- * List all blacklisted IPs
- * GET /security/blacklist?limit=50&offset=0&activeOnly=true&reason=malicious_activity
+ * GET /security/blacklist — list blacklisted IPs
  */
-router.get("/", requireAdminAuth(), async (req: Request, res: Response) => {
-  try {
-    const { limit = 50, offset = 0, activeOnly = "true", reason } = req.query;
+router.get(
+  "/",
+  authenticate,
+  isAdmin,
+  validateQuery(BlacklistListQueryDto),
+  asyncHandler(async (req, res) => {
+    const q = req.query as unknown as BlacklistListQueryDto;
 
-    const options = {
-      limit: Math.min(parseInt(limit as string) || 50, 500),
-      offset: Math.max(parseInt(offset as string) || 0, 0),
-      activeOnly: activeOnly === "true",
-      reason: reason as BlacklistReason | undefined,
-    };
-
-    const result = await ipBlacklistService.listBlacklist(options);
-
-    res.json({
-      success: true,
-      data: result,
+    const result = await ipBlacklistService.listBlacklist({
+      limit: q.limit ?? 50,
+      offset: q.offset ?? 0,
+      activeOnly: q.activeOnly ?? true,
+      reason: q.reason,
     });
-  } catch (error) {
-    logger.error("Error listing blacklist", { error });
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
-      message: "Failed to list blacklist",
-    });
-  }
-});
+
+    return ok(res, result);
+  })
+);
 
 /**
- * Get blacklist statistics
  * GET /security/blacklist/stats
  */
 router.get(
   "/stats",
-  requireAdminAuth(),
-  async (req: Request, res: Response) => {
-    try {
-      const stats = await ipBlacklistService.getStatistics();
-
-      res.json({
-        success: true,
-        data: stats,
-      });
-    } catch (error) {
-      logger.error("Error getting blacklist statistics", { error });
-      res.status(500).json({
-        success: false,
-        error: "Internal server error",
-        message: "Failed to retrieve statistics",
-      });
-    }
-  }
+  authenticate,
+  isAdmin,
+  asyncHandler(async (_req, res) => {
+    const stats = await ipBlacklistService.getStatistics();
+    return ok(res, stats);
+  })
 );
 
 /**
- * Add an IP to the blacklist
- * POST /security/blacklist
+ * POST /security/blacklist — add IP to blacklist
  */
-router.post("/", requireAdminAuth(), async (req: Request, res: Response) => {
-  try {
-    const {
-      ipAddress,
-      reason = BlacklistReason.MALICIOUS_ACTIVITY,
-      description,
-      expiresAt,
-      metadata,
-    } = req.body;
+router.post(
+  "/",
+  authenticate,
+  isAdmin,
+  validateBody(BlacklistAddBodyDto),
+  asyncHandler(async (req, res) => {
+    const body = req.body as BlacklistAddBodyDto;
+    const addedBy = actorId(req);
 
-    // Validate input
-    if (!ipAddress || typeof ipAddress !== "string") {
-      return res.status(400).json({
-        success: false,
-        error: "Bad request",
-        message: "Valid ipAddress is required",
-      });
-    }
-
-    // Validate reason
-    if (reason && !Object.values(BlacklistReason).includes(reason)) {
-      return res.status(400).json({
-        success: false,
-        error: "Bad request",
-        message: "Invalid blacklist reason",
-      });
-    }
-
-    const entry = await ipBlacklistService.addToBlacklist(ipAddress, {
-      reason,
-      description,
-      expiresAt: expiresAt ? new Date(expiresAt) : undefined,
-      addedBy: req.user?.id,
-      metadata,
+    const entry = await ipBlacklistService.addToBlacklist(body.ipAddress, {
+      reason: body.reason,
+      description: body.description,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+      addedBy,
+      metadata: body.metadata,
     });
 
     logger.info("IP added to blacklist via API", {
-      ipAddress,
-      reason,
-      addedBy: req.user?.id,
+      ipAddress: body.ipAddress,
+      reason: body.reason,
+      addedBy,
     });
 
-    res.status(201).json({
-      success: true,
-      data: entry,
-      message: "IP address added to blacklist",
-    });
-  } catch (error) {
-    logger.error("Error adding IP to blacklist", { error });
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
-      message: "Failed to add IP to blacklist",
-    });
-  }
-});
-
-/**
- * Bulk add IPs to the blacklist
- * POST /security/blacklist/bulk
- */
-router.post(
-  "/bulk",
-  requireAdminAuth(),
-  async (req: Request, res: Response) => {
-    try {
-      const {
-        ips,
-        reason = BlacklistReason.MALICIOUS_ACTIVITY,
-        description,
-      } = req.body;
-
-      // Validate input
-      if (!Array.isArray(ips) || ips.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: "Bad request",
-          message: "Array of IP addresses is required",
-        });
-      }
-
-      if (ips.length > 1000) {
-        return res.status(400).json({
-          success: false,
-          error: "Bad request",
-          message: "Maximum 1000 IPs per bulk request",
-        });
-      }
-
-      const entries = await ipBlacklistService.bulkAddToBlacklist(
-        ips.map((ip: string) => ({
-          ip,
-          options: {
-            reason,
-            description,
-            addedBy: req.user?.id,
-          },
-        }))
-      );
-
-      logger.info("Bulk IPs added to blacklist via API", {
-        count: entries.length,
-        reason,
-        addedBy: req.user?.id,
-      });
-
-      res.status(201).json({
-        success: true,
-        data: { added: entries.length, entries },
-        message: `${entries.length} IP addresses added to blacklist`,
-      });
-    } catch (error) {
-      logger.error("Error bulk adding IPs to blacklist", { error });
-      res.status(500).json({
-        success: false,
-        error: "Internal server error",
-        message: "Failed to bulk add IPs to blacklist",
-      });
-    }
-  }
+    return created(res, entry, "IP address added to blacklist");
+  })
 );
 
 /**
- * Remove an IP from the blacklist
+ * POST /security/blacklist/bulk — bulk-add IPs to blacklist
+ */
+router.post(
+  "/bulk",
+  authenticate,
+  isAdmin,
+  validateBody(BlacklistBulkAddBodyDto),
+  asyncHandler(async (req, res) => {
+    const body = req.body as BlacklistBulkAddBodyDto;
+    const addedBy = actorId(req);
+
+    const entries = await ipBlacklistService.bulkAddToBlacklist(
+      body.ips.map((ip) => ({
+        ip,
+        options: {
+          reason: body.reason,
+          description: body.description,
+          addedBy,
+        },
+      }))
+    );
+
+    logger.info("Bulk IPs added to blacklist via API", {
+      count: entries.length,
+      reason: body.reason,
+      addedBy,
+    });
+
+    return created(
+      res,
+      { added: entries.length, entries },
+      `${entries.length} IP addresses added to blacklist`
+    );
+  })
+);
+
+/**
  * DELETE /security/blacklist/:ip
  */
 router.delete(
   "/:ip",
-  requireAdminAuth(),
-  async (req: Request, res: Response) => {
-    try {
-      const { ip } = req.params;
+  authenticate,
+  isAdmin,
+  validateParams(IpAddressParamDto),
+  asyncHandler(async (req, res) => {
+    const { ip } = req.params as unknown as IpAddressParamDto;
 
-      const removed = await ipBlacklistService.removeFromBlacklist(ip);
+    const removed = await ipBlacklistService.removeFromBlacklist(ip);
 
-      if (!removed) {
-        return res.status(404).json({
-          success: false,
-          error: "Not found",
-          message: "IP address not found in blacklist",
-        });
-      }
-
-      logger.info("IP removed from blacklist via API", {
-        ip,
-        removedBy: req.user?.id,
-      });
-
-      res.json({
-        success: true,
-        message: "IP address removed from blacklist",
-      });
-    } catch (error) {
-      logger.error("Error removing IP from blacklist", { error });
-      res.status(500).json({
-        success: false,
-        error: "Internal server error",
-        message: "Failed to remove IP from blacklist",
-      });
+    if (!removed) {
+      throw ApiError.notFound("IP address not found in blacklist");
     }
-  }
+
+    logger.info("IP removed from blacklist via API", {
+      ip,
+      removedBy: actorId(req),
+    });
+
+    return ok(res, undefined, "IP address removed from blacklist");
+  })
 );
 
 /**
- * Cleanup expired entries
- * POST /security/blacklist/cleanup
+ * POST /security/blacklist/cleanup — cleanup expired entries
  */
 router.post(
   "/cleanup",
-  requireAdminAuth(),
-  async (req: Request, res: Response) => {
-    try {
-      const count = await ipBlacklistService.cleanupExpiredEntries();
+  authenticate,
+  isAdmin,
+  asyncHandler(async (req, res) => {
+    const count = await ipBlacklistService.cleanupExpiredEntries();
 
-      logger.info("Cleaned up expired blacklist entries", {
-        count,
-        cleanedBy: req.user?.id,
-      });
+    logger.info("Cleaned up expired blacklist entries", {
+      count,
+      cleanedBy: actorId(req),
+    });
 
-      res.json({
-        success: true,
-        data: { cleaned: count },
-        message: `${count} expired entries cleaned up`,
-      });
-    } catch (error) {
-      logger.error("Error cleaning up expired entries", { error });
-      res.status(500).json({
-        success: false,
-        error: "Internal server error",
-        message: "Failed to cleanup expired entries",
-      });
-    }
-  }
+    return ok(res, { cleaned: count }, `${count} expired entries cleaned up`);
+  })
 );
 
 export default router;

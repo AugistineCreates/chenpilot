@@ -1,8 +1,15 @@
-import { Router, Request, Response } from "express";
+import { Router } from "express";
 import { container } from "tsyringe";
 import JwtService from "./jwt.service";
 import UserService from "./user.service";
 import { authenticateToken } from "./auth.middleware";
+import { validateBody, ApiError, ok } from "../contracts";
+import {
+  LoginDto,
+  RefreshTokenDto,
+  LogoutDto,
+} from "../validators/dto/AuthDto";
+import { asyncHandler } from "../utils/expressAsync";
 import logger from "../config/logger";
 import { auditLogService } from "../AuditLog/auditLog.service";
 import { AuditAction, AuditSeverity } from "../AuditLog/auditLog.entity";
@@ -10,34 +17,31 @@ import { AuditAction, AuditSeverity } from "../AuditLog/auditLog.entity";
 const router = Router();
 
 /**
- * POST /auth/login - Login and get token pair
+ * POST /auth/login — Login and get token pair
+ *
+ * Contract:
+ *   - body: `{ name: string }` (validated by `LoginDto`)
+ *   - 200 OK on success: `{ success: true, data: { user, ...tokens } }`
+ *   - 404 NOT_FOUND: `{ success: false, status: 404, error: { code: "NOT_FOUND", ... } }`
+ *   - 422 VALIDATION_ERROR: same envelope, auto via `validateBody`
+ *   - 500 INTERNAL_SERVER_ERROR: same envelope via central handler
  */
-router.post("/login", async (req: Request, res: Response) => {
-  try {
-    const { name } = req.body;
-
-    if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: "Username is required",
-      });
-    }
-
+router.post(
+  "/login",
+  validateBody(LoginDto),
+  asyncHandler(async (req, res) => {
+    const { name } = req.body as LoginDto;
     const userService = container.resolve(UserService);
     const user = await userService.getUserByName(name);
 
     if (!user) {
-      // Log failed login attempt
       await auditLogService.logFromRequest(req, AuditAction.LOGIN_FAILED, {
         severity: AuditSeverity.WARNING,
         success: false,
         metadata: { username: name, reason: "User not found" },
       });
 
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      throw ApiError.notFound("User not found");
     }
 
     const jwtService = container.resolve(JwtService);
@@ -47,7 +51,6 @@ router.post("/login", async (req: Request, res: Response) => {
       user.role
     );
 
-    // Log successful login
     await auditLogService.logFromRequest(req, AuditAction.LOGIN_SUCCESS, {
       userId: user.id,
       severity: AuditSeverity.INFO,
@@ -60,175 +63,112 @@ router.post("/login", async (req: Request, res: Response) => {
       role: user.role,
     });
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        user: {
-          id: user.id,
-          name: user.name,
-          address: user.address,
-        },
-        ...tokens,
+    return ok(res, {
+      user: {
+        id: user.id,
+        name: user.name,
+        address: user.address,
       },
+      ...tokens,
     });
-  } catch (error) {
-    logger.error("Login error", { error, name: req.body?.name });
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
-});
+  })
+);
 
 /**
- * POST /auth/refresh - Rotate refresh token and get new token pair
+ * POST /auth/refresh — Rotate refresh token and get new token pair
  */
-router.post("/refresh", async (req: Request, res: Response) => {
-  try {
-    const { refreshToken } = req.body;
-
-    if (!refreshToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Refresh token is required",
-      });
-    }
-
+router.post(
+  "/refresh",
+  validateBody(RefreshTokenDto),
+  asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body as RefreshTokenDto;
     const jwtService = container.resolve(JwtService);
+
+    // Errors thrown by `rotateRefreshToken` (`UnauthorizedError`,
+    // `BadError`) are `ApiError` subclasses and will be rendered by the
+    // central error-handler middleware with the canonical envelope.
     const tokens = await jwtService.rotateRefreshToken(refreshToken);
 
-    // Log token refresh
     await auditLogService.logFromRequest(req, AuditAction.TOKEN_REFRESH, {
       severity: AuditSeverity.INFO,
     });
 
-    return res.status(200).json({
-      success: true,
-      data: tokens,
-    });
-  } catch (error) {
-    logger.error("Token refresh error", { error });
-    const statusCode =
-      error instanceof Error && error.message.includes("revoked") ? 401 : 401;
-    return res.status(statusCode).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Token refresh failed",
-    });
-  }
-});
+    return ok(res, tokens, "Tokens refreshed");
+  })
+);
 
 /**
- * POST /auth/logout - Revoke current refresh token
+ * POST /auth/logout — Revoke current refresh token
  */
-router.post("/logout", async (req: Request, res: Response) => {
-  try {
-    const { refreshToken } = req.body;
-
-    if (!refreshToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Refresh token is required",
-      });
-    }
-
+router.post(
+  "/logout",
+  validateBody(LogoutDto),
+  asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body as LogoutDto;
     const jwtService = container.resolve(JwtService);
+
+    // `BadError("Token not found")` and `UnauthorizedError` flow through
+    // the central error handler with the canonical envelope, so we just
+    // let them propagate.
     await jwtService.revokeToken(refreshToken, "User logout");
 
-    // Log logout
     await auditLogService.logFromRequest(req, AuditAction.LOGOUT, {
       severity: AuditSeverity.INFO,
     });
 
     logger.info("User logged out");
 
-    return res.status(200).json({
-      success: true,
-      message: "Logged out successfully",
-    });
-  } catch (error) {
-    logger.error("Logout error", { error });
-    return res.status(500).json({
-      success: false,
-      message: "Logout failed",
-    });
-  }
-});
+    return ok(res, undefined, "Logged out successfully");
+  })
+);
 
 /**
- * POST /auth/logout-all - Revoke all refresh tokens for user (logout from all devices)
+ * POST /auth/logout-all — Revoke all refresh tokens for user (logout from all devices)
  */
 router.post(
   "/logout-all",
   authenticateToken,
-  async (req: Request, res: Response) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message: "Authentication required",
-        });
-      }
-
-      const jwtService = container.resolve(JwtService);
-      await jwtService.revokeAllUserTokens(
-        req.user.userId,
-        "User logout from all devices"
-      );
-
-      logger.info("User logged out from all devices", {
-        userId: req.user.userId,
-      });
-
-      return res.status(200).json({
-        success: true,
-        message: "Logged out from all devices successfully",
-      });
-    } catch (error) {
-      logger.error("Logout all error", { error });
-      return res.status(500).json({
-        success: false,
-        message: "Logout failed",
-      });
+  asyncHandler(async (req, res) => {
+    if (!req.user) {
+      throw ApiError.unauthorized();
     }
-  }
+
+    const jwtService = container.resolve(JwtService);
+    await jwtService.revokeAllUserTokens(
+      req.user.userId,
+      "User logout from all devices"
+    );
+
+    logger.info("User logged out from all devices", {
+      userId: req.user.userId,
+    });
+
+    return ok(res, undefined, "Logged out from all devices successfully");
+  })
 );
 
 /**
- * GET /auth/sessions - Get all active sessions (refresh tokens) for current user
+ * GET /auth/sessions — Get all active sessions for current user
  */
 router.get(
   "/sessions",
   authenticateToken,
-  async (req: Request, res: Response) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({
-          success: false,
-          message: "Authentication required",
-        });
-      }
-
-      const jwtService = container.resolve(JwtService);
-      const tokens = await jwtService.getUserActiveTokens(req.user.userId);
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          sessions: tokens.map((token) => ({
-            id: token.id,
-            createdAt: token.createdAt,
-            expiresAt: token.expiresAt,
-          })),
-        },
-      });
-    } catch (error) {
-      logger.error("Get sessions error", { error });
-      return res.status(500).json({
-        success: false,
-        message: "Failed to retrieve sessions",
-      });
+  asyncHandler(async (req, res) => {
+    if (!req.user) {
+      throw ApiError.unauthorized();
     }
-  }
+
+    const jwtService = container.resolve(JwtService);
+    const tokens = await jwtService.getUserActiveTokens(req.user.userId);
+
+    return ok(res, {
+      sessions: tokens.map((token) => ({
+        id: token.id,
+        createdAt: token.createdAt,
+        expiresAt: token.expiresAt,
+      })),
+    });
+  })
 );
 
 export default router;
