@@ -1,39 +1,17 @@
-import { Client, GatewayIntentBits, Message, TextChannel } from 'discord.js';
+import { Client, GatewayIntentBits, Message, TextChannel, Collection, Invite, GuildMember } from 'discord.js';
 import { TransactionNotificationData } from './types';
 import { createTrustlineOperation } from '@chen-pilot/sdk-core';
 import { normalizeCommand } from '../commands';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:2333';
+
 export class DiscordAdapter {
   private client: Client;
   private userChannels: Map<string, string> = new Map(); // userId -> channelId
   private token: string;
-  private auditLogChannelId?: string;
-  // #145: Track last command timestamp per user
-  private lastCommandTime: Map<string, number> = new Map();
-  // #123: Rate limiters for bot commands
-  private defaultRateLimiter: RateLimiter;
-  private strictRateLimiter: RateLimiter;
-  private verificationService: AssetVerificationService;
-  // #124: Scam detection service
-  private scamDetectionService: ScamDetectionService;
-  // #128: Market overview service
-  private marketOverviewService: MarketOverviewService;
-  // Price chart service for generating static price charts
-  private priceChartService: PriceChartService;
-  // #118: User preferred currency (userId -> currency)
-  private userCurrency: Map<string, "USD" | "XLM" | "BTC"> = new Map();
-  private userCurrency: Map<string, 'USD' | 'XLM' | 'BTC'> = new Map();
-  // #113: Map of userId -> threadId for transaction logs
-  private transactionThreads: Map<string, string> = new Map();
-  // #119: Active price alerts
-  private priceAlerts: Map<string, PriceAlert> = new Map();
-  private alertCheckInterval?: ReturnType<typeof setInterval>;
-  // Button handlers map: buttonId -> ButtonHandler
-  private buttonHandlers: Map<string, ButtonHandler> = new Map();
-  // #114: AI agent client
-  private agentClient: AgentClient;
+  private invites: Map<string, Collection<string, Invite>> = new Map();
 
   constructor(token: string, auditLogChannelId?: string) {
     this.token = token;
@@ -44,6 +22,8 @@ export class DiscordAdapter {
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildInvites,
       ],
     });
     this.verificationService = new AssetVerificationService(HORIZON_URL);
@@ -207,9 +187,57 @@ export class DiscordAdapter {
       return;
     }
 
-    this.client.once("ready", () => {
+    this.client.once("ready", async () => {
       console.log(`✅ Discord bot logged in as ${this.client.user?.tag}`);
-      this.startStatusUpdates();
+      await this.cacheInvites();
+      console.log("📥 Discord: Initialized invite cache.");
+    });
+
+    this.client.on("inviteCreate", async (invite: Invite) => {
+      const guildInvites = this.invites.get(invite.guild?.id || "");
+      if (guildInvites) {
+        guildInvites.set(invite.code, invite);
+      }
+    });
+
+    this.client.on("inviteDelete", async (invite: Invite) => {
+      const guildInvites = this.invites.get(invite.guild?.id || "");
+      if (guildInvites) {
+        guildInvites.delete(invite.code);
+      }
+    });
+
+    this.client.on("guildMemberAdd", async (member: GuildMember) => {
+      try {
+        const cachedInvites = this.invites.get(member.guild.id);
+        const newInvites = await member.guild.invites.fetch();
+        
+        // Find which invite's usage count increased
+        const usedInvite = newInvites.find(inv => {
+          const cached = cachedInvites?.get(inv.code);
+          return cached ? (inv.uses || 0) > (cached.uses || 0) : (inv.uses || 0) > 0;
+        });
+
+        // Update cache
+        this.invites.set(member.guild.id, newInvites);
+
+        if (usedInvite) {
+          const inviter = usedInvite.inviter;
+          console.log(`👤 Referral: ${member.user.tag} joined via ${usedInvite.code} (Inviter: ${inviter?.tag || 'Unknown'})`);
+          
+          await this.logReferral(member.id, inviter?.id || 'unknown', usedInvite.code);
+          
+          // Optionally send a welcome message or log to a channel
+          const systemChannel = member.guild.systemChannel;
+          if (systemChannel) {
+            await systemChannel.send(`Welcome ${member}! You were invited by ${inviter || 'an unknown hero'}.`);
+          }
+        } else {
+          console.log(`👤 Member ${member.user.tag} joined (No invite matched)`);
+        }
+      } catch (error) {
+        console.error("Error tracking referral:", error);
+      }
     });
 
     this.client.on("messageCreate", async (message: Message) => {
@@ -1480,246 +1508,48 @@ export class DiscordAdapter {
   }
 
   /**
-   * Start periodic status updates
+   * Initial cache of all invites for all guilds the bot is in
    */
-  private startStatusUpdates() {
-    // Initial update
-    this.updateBotStatus();
-
-    // Update every 5 minutes
-    setInterval(
-      () => {
-        this.updateBotStatus();
-      },
-      5 * 60 * 1000
-    );
-  }
-
-  /**
-   * Update the bot's Discord activity status
-   */
-  private async updateBotStatus() {
-    if (!this.client.user) return;
-
-    try {
-      // Toggle between network status and a welcoming message
-      const useNetworkStatus = Math.random() > 0.5;
-
-      if (useNetworkStatus) {
-        const status = await getNetworkStatus({ network: "mainnet" });
-        const healthEmoji = status.health.isHealthy ? "🟢" : "🔴";
-        const ledgerInfo = `L:${status.health.latestLedger}`;
-
-        this.client.user.setActivity(
-          `${healthEmoji} Stellar Network | ${ledgerInfo}`,
-          {
-            type: ActivityType.Watching,
-          }
-        );
-      } else {
-        this.client.user.setActivity("🚀 Stellar DeFi | !help", {
-          type: ActivityType.Playing,
-        });
-      }
-    } catch (error) {
-      console.error("Error updating bot status:", error);
-      // Fallback status
-      this.client.user.setActivity("Stellar DeFi Assistant", {
-        type: ActivityType.Custom,
-      });
-    }
-  }
-
-  // #117: Send interactive welcome message to new server members
-  private async sendWelcomeMessage(member: GuildMember): Promise<void> {
-    const username = member.user.username;
-    const welcomeChannel = member.guild.systemChannel;
-
-    // Try to DM the member first, fall back to the server's system channel
-    const sendMessage = async (content: string) => {
+  private async cacheInvites() {
+    if (!this.client.isReady()) return;
+    
+    for (const guild of this.client.guilds.cache.values()) {
       try {
-        await member.send(content);
-        return "dm";
-      } catch {
-        // Cannot DM — member likely has DMs disabled
-        if (welcomeChannel) {
-          await welcomeChannel.send({
-            content,
-            allowedMentions: { users: [member.id] },
-          });
-          return "channel";
-        }
-        return null;
+        const guildInvites = await guild.invites.fetch();
+        this.invites.set(guild.id, guildInvites);
+      } catch (error) {
+        console.error(`⚠️ Discord: Failed to fetch invites for guild ${guild.id}:`, error);
       }
-    };
-
-    // Step 1: Initial welcome greeting
-    const greeting = `🎉 **Welcome to the Chen Pilot Community, ${username}!** 🎉
-
-I'm **Chen Pilot**, your AI-powered Stellar DeFi assistant! I'm here to help you navigate the Stellar ecosystem, manage your assets, and discover decentralized finance opportunities.
-
-Let me walk you through everything you can do with me! 🚀`;
-
-    const sentVia = await sendMessage(greeting);
-    if (!sentVia) {
-      console.warn(
-        `⚠️ Could not send welcome message to ${member.id}: no DM access and no system channel`
-      );
-      return;
     }
-
-    // Log welcome event
-    await this.logAuditAction({
-      action: "WELCOME_MESSAGE_SENT",
-      triggeredBy: member.id,
-      details: `Username: ${username}, Sent via: ${sentVia === "dm" ? "DM" : "system channel"}`,
-      success: true,
-      timestamp: new Date().toISOString(),
-    });
-
-    // Small delay between messages for readability
-    const delay = (ms: number) =>
-      new Promise((resolve) => setTimeout(resolve, ms));
-    await delay(1000);
-
-    // Step 2: Wallet connection guide
-    const walletGuide = `**🔗 Step 1: Connect Your Stellar Wallet**
-
-To get started with DeFi on Stellar, you need a wallet. Here's how:
-
-1️⃣ **Get a Wallet**: Download *Freighter* (Stellar's official browser extension) from \`freighter.app\`
-2️⃣ **Fund Your Account**: Use \`!sponsor\` to request free account sponsorship (covers minimum balance)
-3️⃣ **Trustlines**: Use \`!trustline <assetCode> <issuer>\` to add assets like **USDC**, **XLM**, etc.
-4️⃣ **Verify**: Use \`!validate <assetCode> <issuer>\` to check if an asset is safe before interacting
-
-> 💡 *Tip: Always verify unknown assets with \`!validate\` to avoid scams!*`;
-
-    await sendMessage(walletGuide);
-    await delay(1000);
-
-    // Step 3: Essential commands overview
-    const commandsOverview = `**📋 Step 2: Essential Commands**
-
-Here are the key commands to get started:
-
-• **!help** — List all available features
-• **!balance** — Check your wallet balance (DM only)
-• **!report** — Portfolio summary in your chosen currency
-• **!currency <USD|XLM|BTC>** — Set your preferred reporting currency
-• **!ping** — Check bot latency and backend health
-• **!alert <asset> <above|below> <price>** — Set price alerts
-• **!alerts** — View your active alerts
-• **!discover** — Explore trending Stellar assets (requires role)
-• **!dashboard** — Open the admin dashboard
-
-> 🔒 *Commands marked "DM only" must be sent in a private message for security.*`;
-
-    await sendMessage(commandsOverview);
-    await delay(1000);
-
-    // Step 4: Advanced features teaser
-    const advancedTeaser = `**⚡ Step 3: Advanced Features**
-
-Ready to level up? Here's what else I can do:
-
-• **🔐 Multi-Sig Wallets**: Use \`!multisig\` in DMs to set up multi-signature security
-• **🧵 Support Threads**: Type \`!thread\` to create a dedicated support session
-• **📊 Price Alerts**: Stay on top of market movements with \`!alert\`
-• **🔍 Asset Verification**: Protect yourself with \`!validate\`
-• **📈 Market Overview**: Get daily market digests (if configured)
-
-New features are constantly being added — type **!help** anytime to see what's new!
-
----
-
-**🚀 Ready to dive in?** Start by setting your reporting currency with \`!currency\`, then use \`!sponsor\` to fund your account, and you're on your way!`;
-
-    await sendMessage(advancedTeaser);
-    await delay(1000);
-
-    // Step 5: Final tips
-    const finalTips = `**💡 Pro Tips**
-
-✅ **Use DMs for sensitive commands** — Commands like \`!balance\` and \`!sponsor\` only work in DMs for your safety
-✅ **Rate limits apply** — Please wait 2 seconds between commands to avoid flooding
-✅ **Report scams** — Suspicious links are automatically detected and flagged
-✅ **Stay updated** — Type \`!help\` anytime for the latest features
-
-If you ever need help, just send \`!help\` or type \`!thread\` to start a support conversation.
-
-**Welcome aboard, ${username}! Let's build the future of DeFi on Stellar together! 🌟**
-
-— *Chen Pilot Team*`;
-
-    await sendMessage(finalTips);
   }
 
   /**
-   * Register a handler for button interactions
+   * Log referral data to the backend for future rewards
    */
-  registerButtonHandler(buttonId: string, handler: ButtonHandler): void {
-    this.buttonHandlers.set(buttonId, handler);
-  }
-
-  /**
-   * Send a message with buttons to a specific channel
-   */
-  async sendWithButtons(channelId: string, content: string, buttons: Button[]): Promise<boolean> {
-    if (!this.client) {
-      console.warn("⚠️ Discord bot not initialized");
-      return false;
-    }
-
+  private async logReferral(newMemberId: string, inviterId: string, inviteCode: string) {
     try {
-      const channel = this.client.channels.cache.get(channelId) as TextChannel;
-      if (!channel) {
-        console.warn(`⚠️ Channel ${channelId} not found`);
-        return false;
-      }
-
-      // Build the button components
-      const row = new ActionRowBuilder<ButtonBuilder>();
-
-      for (const btn of buttons) {
-        const button = new ButtonBuilder();
-
-        if (btn.url) {
-          button.setStyle(ButtonStyle.Link).setURL(btn.url);
-        } else {
-          button.setCustomId(btn.id);
-
-          // Map our generic style to Discord's ButtonStyle
-          switch (btn.style) {
-            case 'primary':
-              button.setStyle(ButtonStyle.Primary);
-              break;
-            case 'secondary':
-              button.setStyle(ButtonStyle.Secondary);
-              break;
-            case 'success':
-              button.setStyle(ButtonStyle.Success);
-              break;
-            case 'danger':
-              button.setStyle(ButtonStyle.Danger);
-              break;
-            default:
-              button.setStyle(ButtonStyle.Primary);
-          }
-        }
-
-        button.setLabel(btn.label);
-        row.addComponents(button);
-      }
-
-      await channel.send({
-        content: content,
-        components: [row]
+      console.log(`📡 Sending referral data to backend: ${newMemberId} invited by ${inviterId}`);
+      
+      const response = await fetch(`${BACKEND_URL}/api/referrals/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newMemberId,
+          inviterId,
+          inviteCode,
+          platform: 'discord',
+          timestamp: new Date().toISOString()
+        })
       });
 
-      return true;
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`⚠️ Backend referral log failed: ${response.status} ${errorText}`);
+      } else {
+        console.log(`✅ Referral logged successfully for ${newMemberId}`);
+      }
     } catch (error) {
-      console.error("Error sending message with buttons:", error);
-      return false;
+      console.error("❌ Error logging referral to backend:", error);
     }
   }
 }
