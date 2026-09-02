@@ -40,15 +40,51 @@ export const mockStellarSdk: Record<string, any> = {
     this.issuer = issuer;
     this.isNative = () => !code;
   },
-  TransactionBuilder: jest.fn().mockImplementation(() => ({
-    addOperation: jest.fn().mockReturnThis(),
-    addMemo: jest.fn().mockReturnThis(),
-    setTimeout: jest.fn().mockReturnThis(),
-    build: jest.fn().mockReturnValue({ type: "mock_tx" }),
-    sign: jest.fn().mockReturnThis(),
-  })),
+  Memo: {
+    text: jest.fn((t: string) => ({ type: "text", value: t })),
+    id: jest.fn((id: string) => ({ type: "id", value: id })),
+    hash: jest.fn((h: string) => ({ type: "hash", value: h })),
+    none: jest.fn(() => ({ type: "none" })),
+  },
+  TransactionBuilder: Object.assign(
+    jest.fn().mockImplementation(() => {
+      const mockTx = {
+        type: "mock_tx",
+        sign: jest.fn().mockReturnThis(),
+        toEnvelope: jest.fn().mockReturnValue({
+          toXDR: jest.fn().mockReturnValue("mock_base64_xdr_envelope"),
+        }),
+      };
+      return {
+        addOperation: jest.fn().mockReturnThis(),
+        addMemo: jest.fn().mockReturnThis(),
+        setTimeout: jest.fn().mockReturnThis(),
+        build: jest.fn().mockReturnValue(mockTx),
+        sign: jest.fn().mockReturnThis(),
+      };
+    }),
+    {
+      cloneFrom: jest.fn().mockImplementation(() => {
+        const mockTx = {
+          type: "mock_tx",
+          sign: jest.fn().mockReturnThis(),
+          toEnvelope: jest.fn().mockReturnValue({
+            toXDR: jest.fn().mockReturnValue("mock_base64_xdr_envelope"),
+          }),
+        };
+        return {
+          addOperation: jest.fn().mockReturnThis(),
+          addMemo: jest.fn().mockReturnThis(),
+          setTimeout: jest.fn().mockReturnThis(),
+          build: jest.fn().mockReturnValue(mockTx),
+        };
+      }),
+      fromXDR: jest.fn(),
+    }
+  ),
   Operation: {
     payment: jest.fn().mockReturnValue({ type: "payment" }),
+    changeTrust: jest.fn().mockReturnValue({ type: "changeTrust" }),
     pathPaymentStrictReceive: jest
       .fn()
       .mockReturnValue({ type: "pathPayment" }),
@@ -69,9 +105,9 @@ export const mockStellarSdk: Record<string, any> = {
     contractId,
     call: jest.fn((method: string, ...args: any[]) => ({
       type: "invoke",
-      contractId: args[0],
-      method: callArgs[0],
-      args: callArgs.slice(1),
+      contractId,
+      method,
+      args,
     })),
   })),
   SorobanRpc: {
@@ -80,6 +116,7 @@ export const mockStellarSdk: Record<string, any> = {
         result: { retval: "mock_scval" },
       }),
     })),
+    assembleTransaction: jest.fn((tx: any) => tx),
   },
   scValToNative: jest.fn((val: any) => val),
   nativeToScVal: jest.fn((val: any) => val),

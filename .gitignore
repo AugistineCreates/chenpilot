@@ -1,20 +1,6 @@
-# Dependencies
 node_modules/
-
-# Local environment / secrets
-.env.local
-.env
-.env.*.local
-
-# Build artifacts
 dist/
 build/
-coverage/
-
-# Runtime logs
 logs/
-*.log
-
-# OS / editor
-.DS_Store
-Thumbs.db
+.env.local
+.env

@@ -74,7 +74,7 @@ export class PlanExecutor {
       userId,
       totalSteps: plan.totalSteps,
       dryRun: options.dryRun || false,
-      hashVerification: shouldVerifyHash,
+      hashVerification: options.verifyHash || false,
       durable: options.durable || false,
     });
 

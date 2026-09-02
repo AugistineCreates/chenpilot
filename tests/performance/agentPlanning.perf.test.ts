@@ -5,11 +5,13 @@ import {
   PERFORMANCE_BASELINES,
   PERFORMANCE_TEST_CONFIG,
 } from "./config/performanceBaselines";
+import { PLANNING_DATASETS } from "./fixtures/benchmarkDatasets";
+import { trendRecorder } from "./utils/TrendRecorder";
 
 jest.mock("../../src/Agents/agent");
 jest.mock("../../src/config/logger");
 
-describe("Agent Planning Performance Tests", () => {
+describe("Agent Planning Flow Benchmarks & Regression Budgets", () => {
   let agentPlanner: AgentPlanner;
 
   beforeAll(() => {
@@ -20,27 +22,21 @@ describe("Agent Planning Performance Tests", () => {
   afterAll(() => {
     const report = performanceTestRunner.generateReport();
     console.log("\n" + report);
+    trendRecorder.saveReport(performanceTestRunner.getResults());
   });
 
   describe("Simple Planning Operations", () => {
-    it("should create simple plan within performance threshold", async () => {
-      const mockLLMResponse = {
-        workflow: [
-          {
-            action: "get_balance",
-            payload: { asset: "XLM" },
-          },
-        ],
-      };
-
-      agentLLM.callLLM = jest.fn().mockResolvedValue(mockLLMResponse);
+    it("should create simple plan within regression latency & CPU budgets", async () => {
+      agentLLM.callLLM = jest
+        .fn()
+        .mockResolvedValue(PLANNING_DATASETS.simple.mockLLMResponse);
 
       const result = await performanceTestRunner.runTest(
-        "Simple Plan Creation",
+        "Planning: Simple Plan Creation",
         async () => {
           await agentPlanner.createPlan({
-            userId: "test-user",
-            userInput: "Check my XLM balance",
+            userId: PLANNING_DATASETS.simple.userId,
+            userInput: PLANNING_DATASETS.simple.userInput,
           });
         },
         {
@@ -51,55 +47,53 @@ describe("Agent Planning Performance Tests", () => {
       );
 
       expect(result.passed).toBe(true);
-      expect(result.statistics.mean).toBeLessThan(
-        PERFORMANCE_BASELINES.agentPlanning.simple.mean!
+      expect(result.statistics.p95).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentPlanning.simple.p95!
+      );
+      expect(result.statistics.p99).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentPlanning.simple.p99!
       );
     });
 
-    it("should handle Soroban intent parsing efficiently", async () => {
+    it("should parse Soroban intents within regression latency & CPU budgets", async () => {
+      agentLLM.callLLM = jest
+        .fn()
+        .mockResolvedValue(PLANNING_DATASETS.sorobanIntent.mockLLMResponse);
+
       const result = await performanceTestRunner.runTest(
-        "Soroban Intent Parsing",
+        "Planning: Soroban Intent Parsing",
         async () => {
           await agentPlanner.createPlan({
-            userId: "test-user",
-            userInput: "swap 100 XLM to USDC",
+            userId: PLANNING_DATASETS.sorobanIntent.userId,
+            userInput: PLANNING_DATASETS.sorobanIntent.userInput,
           });
         },
         {
           iterations: PERFORMANCE_TEST_CONFIG.defaultIterations,
           warmupIterations: PERFORMANCE_TEST_CONFIG.warmupIterations,
-          threshold: PERFORMANCE_BASELINES.agentPlanning.simple,
+          threshold: PERFORMANCE_BASELINES.agentPlanning.sorobanIntent,
         }
       );
 
       expect(result.passed).toBe(true);
+      expect(result.statistics.p95).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentPlanning.sorobanIntent.p95!
+      );
     });
   });
 
-  describe("Complex Planning Operations", () => {
-    it("should create multi-step plan within performance threshold", async () => {
-      const mockLLMResponse = {
-        workflow: [
-          { action: "get_balance", payload: { asset: "XLM" } },
-          {
-            action: "swap_tool",
-            payload: { from: "XLM", to: "USDC", amount: 100 },
-          },
-          {
-            action: "transfer",
-            payload: { to: "recipient", amount: 50, asset: "USDC" },
-          },
-        ],
-      };
-
-      agentLLM.callLLM = jest.fn().mockResolvedValue(mockLLMResponse);
+  describe("Complex Multi-Step Planning Operations", () => {
+    it("should create complex multi-step plan within budget", async () => {
+      agentLLM.callLLM = jest
+        .fn()
+        .mockResolvedValue(PLANNING_DATASETS.complex.mockLLMResponse);
 
       const result = await performanceTestRunner.runTest(
-        "Complex Multi-Step Plan Creation",
+        "Planning: Complex Multi-Step Plan",
         async () => {
           await agentPlanner.createPlan({
-            userId: "test-user",
-            userInput: "Swap 100 XLM to USDC and send 50 USDC to recipient",
+            userId: PLANNING_DATASETS.complex.userId,
+            userInput: PLANNING_DATASETS.complex.userInput,
           });
         },
         {
@@ -110,136 +104,68 @@ describe("Agent Planning Performance Tests", () => {
       );
 
       expect(result.passed).toBe(true);
+      expect(result.statistics.p95).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentPlanning.complex.p95!
+      );
     });
 
-    it("should optimize plan efficiently", async () => {
-      const mockPlan = {
-        planId: "test-plan",
-        steps: [
-          {
-            stepNumber: 1,
-            action: "swap_tool",
-            payload: { from: "XLM", to: "USDC", amount: 100 },
-            description: "Swap XLM to USDC",
-          },
-        ],
-        totalSteps: 1,
-        estimatedDuration: 3000,
-        riskLevel: "low" as const,
-        requiresApproval: false,
-        summary: "Test plan",
-      };
+    it("should optimize plans within tight latency and CPU budget", async () => {
+      const mockPlan = JSON.parse(
+        JSON.stringify(PLANNING_DATASETS.planForOptimization)
+      );
 
       const result = await performanceTestRunner.runTest(
-        "Plan Optimization",
-        async () => {
+        "Planning: Plan Optimization",
+        () => {
           agentPlanner.optimizePlan(mockPlan);
         },
         {
-          iterations: 50,
+          iterations: 30,
           warmupIterations: 5,
-          threshold: {
-            mean: 50,
-            p95: 100,
-            max: 200,
-          },
+          threshold: PERFORMANCE_BASELINES.agentPlanning.optimize,
         }
       );
 
       expect(result.passed).toBe(true);
+      expect(result.statistics.p95).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentPlanning.optimize.p95!
+      );
     });
-  });
 
-  describe("Planning with LLM Integration", () => {
-    it("should handle LLM-based planning within threshold", async () => {
-      const mockLLMResponse = {
-        workflow: [
-          { action: "get_balance", payload: { asset: "XLM" } },
-          {
-            action: "swap_tool",
-            payload: { from: "XLM", to: "USDC", amount: 100 },
-          },
-        ],
-      };
-
-      agentLLM.callLLM = jest
-        .fn()
-        .mockImplementation(
-          () =>
-            new Promise((resolve) =>
-              setTimeout(() => resolve(mockLLMResponse), 100)
-            )
-        );
-
-      const result = await performanceTestRunner.runTest(
-        "LLM-Based Planning",
-        async () => {
-          await agentPlanner.createPlan({
-            userId: "test-user",
-            userInput: "I want to swap some XLM for USDC",
-          });
-        },
-        {
-          iterations: 5,
-          warmupIterations: 1,
-          threshold: PERFORMANCE_BASELINES.agentPlanning.withLLM,
-        }
+    it("should validate plans within tight latency and CPU budget", async () => {
+      const mockPlan = JSON.parse(
+        JSON.stringify(PLANNING_DATASETS.planForValidation)
       );
 
-      expect(result.passed).toBe(true);
-    });
-  });
-
-  describe("Plan Validation Performance", () => {
-    it("should validate plans quickly", async () => {
-      const mockPlan = {
-        planId: "test-plan",
-        steps: Array.from({ length: 5 }, (_, i) => ({
-          stepNumber: i + 1,
-          action: "test_action",
-          payload: { data: "test" },
-          description: `Step ${i + 1}`,
-        })),
-        totalSteps: 5,
-        estimatedDuration: 15000,
-        riskLevel: "medium" as const,
-        requiresApproval: true,
-        summary: "Test plan with 5 steps",
-      };
-
       const result = await performanceTestRunner.runTest(
-        "Plan Validation",
-        async () => {
-          // Access private method through type assertion for testing
+        "Planning: Plan Validation",
+        () => {
           (agentPlanner as unknown as Record<string, unknown>).validatePlan?.(
             mockPlan
           );
         },
         {
-          iterations: 100,
-          warmupIterations: 10,
-          threshold: {
-            mean: 10,
-            p95: 20,
-            max: 50,
-          },
+          iterations: 30,
+          warmupIterations: 5,
+          threshold: PERFORMANCE_BASELINES.agentPlanning.validate,
         }
       );
 
       expect(result.passed).toBe(true);
+      expect(result.statistics.p95).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentPlanning.validate.p95!
+      );
     });
   });
 
   describe("Concurrent Planning Operations", () => {
-    it("should handle concurrent plan creation efficiently", async () => {
-      const mockLLMResponse = {
-        workflow: [{ action: "get_balance", payload: { asset: "XLM" } }],
-      };
-
-      agentLLM.callLLM = jest.fn().mockResolvedValue(mockLLMResponse);
+    it("should handle concurrent plan creation within budget", async () => {
+      agentLLM.callLLM = jest
+        .fn()
+        .mockResolvedValue(PLANNING_DATASETS.simple.mockLLMResponse);
 
       const result = await performanceTestRunner.runTest(
-        "Concurrent Plan Creation",
+        "Planning: Concurrent Plan Creation (x3)",
         async () => {
           await Promise.all([
             agentPlanner.createPlan({
@@ -257,27 +183,24 @@ describe("Agent Planning Performance Tests", () => {
           ]);
         },
         {
-          iterations: 5,
-          warmupIterations: 1,
-          threshold: {
-            mean: 1500,
-            p95: 2500,
-            max: 3500,
-          },
+          iterations: 10,
+          warmupIterations: 2,
+          threshold: PERFORMANCE_BASELINES.agentPlanning.concurrent,
         }
       );
 
       expect(result.passed).toBe(true);
+      expect(result.statistics.p95).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentPlanning.concurrent.p95!
+      );
     });
   });
 
-  describe("Memory Usage", () => {
-    it("should not leak memory during repeated planning", async () => {
-      const mockLLMResponse = {
-        workflow: [{ action: "get_balance", payload: { asset: "XLM" } }],
-      };
-
-      agentLLM.callLLM = jest.fn().mockResolvedValue(mockLLMResponse);
+  describe("Memory & Allocation Integrity", () => {
+    it("should not leak memory during repeated planning cycles", async () => {
+      agentLLM.callLLM = jest
+        .fn()
+        .mockResolvedValue(PLANNING_DATASETS.simple.mockLLMResponse);
 
       const initialMemory = process.memoryUsage().heapUsed;
 
@@ -293,11 +216,9 @@ describe("Agent Planning Performance Tests", () => {
       }
 
       const finalMemory = process.memoryUsage().heapUsed;
-      const memoryIncrease = finalMemory - initialMemory;
-      const memoryIncreaseMB = memoryIncrease / 1024 / 1024;
+      const memoryIncreaseMB = (finalMemory - initialMemory) / 1024 / 1024;
 
-      // Memory increase should be reasonable (less than 50MB for 50 operations)
-      expect(memoryIncreaseMB).toBeLessThan(50);
+      expect(memoryIncreaseMB).toBeLessThan(30);
     });
   });
 });

@@ -1,0 +1,559 @@
+{
+  "commitSha": "c902c3f8b6a5fb98ab9dad174a2b527c82bb969b",
+  "branch": "feat/issue-688-performance-regression-budgets",
+  "timestamp": "2026-08-30T02:10:36.838Z",
+  "environment": {
+    "nodeVersion": "v22.23.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "benchmarks": [
+    {
+      "testName": "Trend Benchmark",
+      "iterations": 10,
+      "passed": true,
+      "statistics": {
+        "mean": 2.5,
+        "median": 2.4,
+        "p95": 4,
+        "p99": 4.8,
+        "min": 1,
+        "max": 5,
+        "stdDev": 0.8,
+        "cpuTotalMeanMs": 1.5,
+        "cpuTotalP95Ms": 2.8,
+        "heapUsedDeltaP95Bytes": 2048
+      },
+      "threshold": {
+        "mean": 10,
+        "p95": 20
+      },
+      "violations": []
+    },
+    {
+      "testName": "Decoding: Primitive ScVals Batch (i32, i64, u128, u256, symbol, str, addr)",
+      "iterations": 50,
+      "passed": true,
+      "statistics": {
+        "mean": 0.04,
+        "median": 0.03,
+        "p95": 0.07,
+        "p99": 0.11,
+        "min": 0.01,
+        "max": 0.13,
+        "stdDev": 0.02,
+        "cpuTotalMeanMs": 0.07,
+        "cpuTotalP95Ms": 0.13,
+        "heapUsedDeltaP95Bytes": 14049
+      },
+      "threshold": {
+        "mean": 5,
+        "p95": 15,
+        "p99": 30,
+        "maxCpuMs": 10,
+        "maxMemoryDeltaBytes": 3145728
+      },
+      "violations": []
+    },
+    {
+      "testName": "Decoding: Complex Nested ScVal Structure",
+      "iterations": 50,
+      "passed": true,
+      "statistics": {
+        "mean": 0.03,
+        "median": 0.03,
+        "p95": 0.04,
+        "p99": 0.1,
+        "min": 0.01,
+        "max": 0.14,
+        "stdDev": 0.02,
+        "cpuTotalMeanMs": 0.05,
+        "cpuTotalP95Ms": 0.08,
+        "heapUsedDeltaP95Bytes": 2000
+      },
+      "threshold": {
+        "mean": 15,
+        "p95": 35,
+        "p99": 70,
+        "maxCpuMs": 20,
+        "maxMemoryDeltaBytes": 8388608
+      },
+      "violations": []
+    },
+    {
+      "testName": "Decoding: Simulation Return Value",
+      "iterations": 50,
+      "passed": true,
+      "statistics": {
+        "mean": 0.03,
+        "median": 0.03,
+        "p95": 0.04,
+        "p99": 0.06,
+        "min": 0.01,
+        "max": 0.07,
+        "stdDev": 0.01,
+        "cpuTotalMeanMs": 0.05,
+        "cpuTotalP95Ms": 0.08,
+        "heapUsedDeltaP95Bytes": 2097
+      },
+      "threshold": {
+        "mean": 10,
+        "p95": 25,
+        "p99": 50,
+        "maxCpuMs": 15,
+        "maxMemoryDeltaBytes": 5242880
+      },
+      "violations": []
+    },
+    {
+      "testName": "Decoding: Contract Event Normalization",
+      "iterations": 50,
+      "passed": true,
+      "statistics": {
+        "mean": 0.05,
+        "median": 0.05,
+        "p95": 0.08,
+        "p99": 0.11,
+        "min": 0.01,
+        "max": 0.13,
+        "stdDev": 0.02,
+        "cpuTotalMeanMs": 0.09,
+        "cpuTotalP95Ms": 0.14,
+        "heapUsedDeltaP95Bytes": 3900
+      },
+      "threshold": {
+        "mean": 12,
+        "p95": 30,
+        "p99": 60,
+        "maxCpuMs": 18,
+        "maxMemoryDeltaBytes": 5242880
+      },
+      "violations": []
+    },
+    {
+      "testName": "Planning: Simple Plan Creation",
+      "iterations": 20,
+      "passed": true,
+      "statistics": {
+        "mean": 0.16,
+        "median": 0.11,
+        "p95": 0.34,
+        "p99": 0.45,
+        "min": 0.07,
+        "max": 0.48,
+        "stdDev": 0.11,
+        "cpuTotalMeanMs": 0.22,
+        "cpuTotalP95Ms": 0.53,
+        "heapUsedDeltaP95Bytes": 50385
+      },
+      "threshold": {
+        "mean": 25,
+        "p95": 50,
+        "p99": 100,
+        "maxCpuMs": 30,
+        "maxMemoryDeltaBytes": 10485760
+      },
+      "violations": []
+    },
+    {
+      "testName": "Planning: Soroban Intent Parsing",
+      "iterations": 20,
+      "passed": true,
+      "statistics": {
+        "mean": 0.12,
+        "median": 0.1,
+        "p95": 0.21,
+        "p99": 0.23,
+        "min": 0.06,
+        "max": 0.23,
+        "stdDev": 0.05,
+        "cpuTotalMeanMs": 0.15,
+        "cpuTotalP95Ms": 0.26,
+        "heapUsedDeltaP95Bytes": 26435
+      },
+      "threshold": {
+        "mean": 20,
+        "p95": 40,
+        "p99": 80,
+        "maxCpuMs": 25,
+        "maxMemoryDeltaBytes": 10485760
+      },
+      "violations": []
+    },
+    {
+      "testName": "Planning: Complex Multi-Step Plan",
+      "iterations": 20,
+      "passed": true,
+      "statistics": {
+        "mean": 0.1,
+        "median": 0.07,
+        "p95": 0.22,
+        "p99": 0.23,
+        "min": 0.05,
+        "max": 0.24,
+        "stdDev": 0.06,
+        "cpuTotalMeanMs": 0.14,
+        "cpuTotalP95Ms": 0.29,
+        "heapUsedDeltaP95Bytes": 15738
+      },
+      "threshold": {
+        "mean": 40,
+        "p95": 80,
+        "p99": 150,
+        "maxCpuMs": 50,
+        "maxMemoryDeltaBytes": 15728640
+      },
+      "violations": []
+    },
+    {
+      "testName": "Planning: Plan Optimization",
+      "iterations": 30,
+      "passed": true,
+      "statistics": {
+        "mean": 0.01,
+        "median": 0.01,
+        "p95": 0.02,
+        "p99": 0.02,
+        "min": 0,
+        "max": 0.02,
+        "stdDev": 0.01,
+        "cpuTotalMeanMs": 0.04,
+        "cpuTotalP95Ms": 0.05,
+        "heapUsedDeltaP95Bytes": 1643
+      },
+      "threshold": {
+        "mean": 10,
+        "p95": 25,
+        "p99": 50,
+        "maxCpuMs": 15,
+        "maxMemoryDeltaBytes": 5242880
+      },
+      "violations": []
+    },
+    {
+      "testName": "Planning: Plan Validation",
+      "iterations": 30,
+      "passed": true,
+      "statistics": {
+        "mean": 0.01,
+        "median": 0.01,
+        "p95": 0.01,
+        "p99": 0.02,
+        "min": 0,
+        "max": 0.03,
+        "stdDev": 0,
+        "cpuTotalMeanMs": 0.02,
+        "cpuTotalP95Ms": 0.04,
+        "heapUsedDeltaP95Bytes": 1818
+      },
+      "threshold": {
+        "mean": 10,
+        "p95": 25,
+        "p99": 50,
+        "maxCpuMs": 15,
+        "maxMemoryDeltaBytes": 5242880
+      },
+      "violations": []
+    },
+    {
+      "testName": "Planning: Concurrent Plan Creation (x3)",
+      "iterations": 10,
+      "passed": true,
+      "statistics": {
+        "mean": 0.17,
+        "median": 0.16,
+        "p95": 0.23,
+        "p99": 0.25,
+        "min": 0.11,
+        "max": 0.25,
+        "stdDev": 0.04,
+        "cpuTotalMeanMs": 0.24,
+        "cpuTotalP95Ms": 0.58,
+        "heapUsedDeltaP95Bytes": 63030
+      },
+      "threshold": {
+        "mean": 100,
+        "p95": 250,
+        "p99": 400,
+        "maxCpuMs": 150,
+        "maxMemoryDeltaBytes": 26214400
+      },
+      "violations": []
+    },
+    {
+      "testName": "Execution: Single Step Execution",
+      "iterations": 20,
+      "passed": true,
+      "statistics": {
+        "mean": 0.07,
+        "median": 0.05,
+        "p95": 0.18,
+        "p99": 0.2,
+        "min": 0.03,
+        "max": 0.2,
+        "stdDev": 0.05,
+        "cpuTotalMeanMs": 0.08,
+        "cpuTotalP95Ms": 0.2,
+        "heapUsedDeltaP95Bytes": 21834
+      },
+      "threshold": {
+        "mean": 30,
+        "p95": 60,
+        "p99": 100,
+        "maxCpuMs": 40,
+        "maxMemoryDeltaBytes": 10485760
+      },
+      "violations": []
+    },
+    {
+      "testName": "Execution: Error Handling Path",
+      "iterations": 20,
+      "passed": true,
+      "statistics": {
+        "mean": 0.07,
+        "median": 0.06,
+        "p95": 0.11,
+        "p99": 0.11,
+        "min": 0.04,
+        "max": 0.12,
+        "stdDev": 0.02,
+        "cpuTotalMeanMs": 0.08,
+        "cpuTotalP95Ms": 0.13,
+        "heapUsedDeltaP95Bytes": 14122
+      },
+      "threshold": {
+        "mean": 30,
+        "p95": 60,
+        "p99": 100,
+        "maxCpuMs": 40,
+        "maxMemoryDeltaBytes": 10485760
+      },
+      "violations": []
+    },
+    {
+      "testName": "Execution: Multi-Step Execution (3 steps)",
+      "iterations": 20,
+      "passed": true,
+      "statistics": {
+        "mean": 0.12,
+        "median": 0.11,
+        "p95": 0.21,
+        "p99": 0.22,
+        "min": 0.05,
+        "max": 0.23,
+        "stdDev": 0.05,
+        "cpuTotalMeanMs": 0.15,
+        "cpuTotalP95Ms": 0.26,
+        "heapUsedDeltaP95Bytes": 22700
+      },
+      "threshold": {
+        "mean": 80,
+        "p95": 150,
+        "p99": 250,
+        "maxCpuMs": 100,
+        "maxMemoryDeltaBytes": 20971520
+      },
+      "violations": []
+    },
+    {
+      "testName": "Execution: Dry Run Flow (5 steps)",
+      "iterations": 25,
+      "passed": true,
+      "statistics": {
+        "mean": 0.11,
+        "median": 0.1,
+        "p95": 0.2,
+        "p99": 0.22,
+        "min": 0.05,
+        "max": 0.22,
+        "stdDev": 0.05,
+        "cpuTotalMeanMs": 0.15,
+        "cpuTotalP95Ms": 0.25,
+        "heapUsedDeltaP95Bytes": 24002
+      },
+      "threshold": {
+        "mean": 20,
+        "p95": 40,
+        "p99": 80,
+        "maxCpuMs": 25,
+        "maxMemoryDeltaBytes": 8388608
+      },
+      "violations": []
+    },
+    {
+      "testName": "Simulation: Soroban Simple Contract Call",
+      "iterations": 20,
+      "passed": true,
+      "statistics": {
+        "mean": 0.22,
+        "median": 0.19,
+        "p95": 0.38,
+        "p99": 0.39,
+        "min": 0.14,
+        "max": 0.39,
+        "stdDev": 0.07,
+        "cpuTotalMeanMs": 0.27,
+        "cpuTotalP95Ms": 0.43,
+        "heapUsedDeltaP95Bytes": 93834
+      },
+      "threshold": {
+        "mean": 30,
+        "p95": 60,
+        "p99": 100,
+        "maxCpuMs": 40,
+        "maxMemoryDeltaBytes": 10485760
+      },
+      "violations": []
+    },
+    {
+      "testName": "Simulation: Soroban Complex Contract Call",
+      "iterations": 20,
+      "passed": true,
+      "statistics": {
+        "mean": 0.19,
+        "median": 0.18,
+        "p95": 0.24,
+        "p99": 0.3,
+        "min": 0.13,
+        "max": 0.31,
+        "stdDev": 0.04,
+        "cpuTotalMeanMs": 0.24,
+        "cpuTotalP95Ms": 0.34,
+        "heapUsedDeltaP95Bytes": 79725
+      },
+      "threshold": {
+        "mean": 50,
+        "p95": 100,
+        "p99": 180,
+        "maxCpuMs": 60,
+        "maxMemoryDeltaBytes": 15728640
+      },
+      "violations": []
+    },
+    {
+      "testName": "Simulation: SimulationEngine Request Processing",
+      "iterations": 20,
+      "passed": true,
+      "statistics": {
+        "mean": 0.18,
+        "median": 0.16,
+        "p95": 0.29,
+        "p99": 0.54,
+        "min": 0.08,
+        "max": 0.6,
+        "stdDev": 0.12,
+        "cpuTotalMeanMs": 0.23,
+        "cpuTotalP95Ms": 0.62,
+        "heapUsedDeltaP95Bytes": 28525
+      },
+      "threshold": {
+        "mean": 40,
+        "p95": 80,
+        "p99": 150,
+        "maxCpuMs": 50,
+        "maxMemoryDeltaBytes": 12582912
+      },
+      "violations": []
+    },
+    {
+      "testName": "Simulation: Gas Estimation",
+      "iterations": 30,
+      "passed": true,
+      "statistics": {
+        "mean": 0.05,
+        "median": 0.04,
+        "p95": 0.07,
+        "p99": 0.07,
+        "min": 0.03,
+        "max": 0.08,
+        "stdDev": 0.01,
+        "cpuTotalMeanMs": 0.07,
+        "cpuTotalP95Ms": 0.1,
+        "heapUsedDeltaP95Bytes": 6547
+      },
+      "threshold": {
+        "mean": 15,
+        "p95": 30,
+        "p99": 60,
+        "maxCpuMs": 20,
+        "maxMemoryDeltaBytes": 5242880
+      },
+      "violations": []
+    },
+    {
+      "testName": "Tx Construction: Soroban Unsigned Invoke Transaction",
+      "iterations": 30,
+      "passed": true,
+      "statistics": {
+        "mean": 0.1,
+        "median": 0.09,
+        "p95": 0.18,
+        "p99": 0.23,
+        "min": 0.06,
+        "max": 0.24,
+        "stdDev": 0.04,
+        "cpuTotalMeanMs": 0.13,
+        "cpuTotalP95Ms": 0.24,
+        "heapUsedDeltaP95Bytes": 59098
+      },
+      "threshold": {
+        "mean": 25,
+        "p95": 50,
+        "p99": 90,
+        "maxCpuMs": 30,
+        "maxMemoryDeltaBytes": 8388608
+      },
+      "violations": []
+    },
+    {
+      "testName": "Tx Construction: Footprint Assembly & Signature",
+      "iterations": 30,
+      "passed": true,
+      "statistics": {
+        "mean": 0.08,
+        "median": 0.07,
+        "p95": 0.15,
+        "p99": 0.19,
+        "min": 0.04,
+        "max": 0.2,
+        "stdDev": 0.04,
+        "cpuTotalMeanMs": 0.1,
+        "cpuTotalP95Ms": 0.19,
+        "heapUsedDeltaP95Bytes": 16822
+      },
+      "threshold": {
+        "mean": 35,
+        "p95": 70,
+        "p99": 120,
+        "maxCpuMs": 45,
+        "maxMemoryDeltaBytes": 12582912
+      },
+      "violations": []
+    },
+    {
+      "testName": "Tx Construction: Multi-Operation Envelope (Trustline + Payment + Memo)",
+      "iterations": 30,
+      "passed": true,
+      "statistics": {
+        "mean": 0.17,
+        "median": 0.16,
+        "p95": 0.28,
+        "p99": 0.29,
+        "min": 0.08,
+        "max": 0.3,
+        "stdDev": 0.06,
+        "cpuTotalMeanMs": 0.22,
+        "cpuTotalP95Ms": 0.36,
+        "heapUsedDeltaP95Bytes": 55357
+      },
+      "threshold": {
+        "mean": 30,
+        "p95": 60,
+        "p99": 100,
+        "maxCpuMs": 35,
+        "maxMemoryDeltaBytes": 10485760
+      },
+      "violations": []
+    }
+  ]
+}
