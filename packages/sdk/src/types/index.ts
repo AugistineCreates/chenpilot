@@ -325,122 +325,79 @@ export interface MetadataListResponse {
   /** Whether more results are available (for pagination) */
   hasMore: boolean;
 }
-/** Capability identifier for a contract */
-export type ContractCapability = string;
 
-/** Metadata for a specific contract version */
-export interface ContractVersionMetadata {
-  /** Semantic version, e.g., "1.2.3" */
-  version: string;
-  /** Optional description of this version */
-  description?: string;
-  /** Capabilities supported by this version */
-  capabilities: ContractCapability[];
-  /** Arbitrary compatibility metadata */
+// ─── Multi-step Idempotency types ──────────────────────────────────────────
+
+export type IdempotencyStepStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+export interface IdempotencyStep {
+  stepId: string;
+  stepName: string;
+  status: IdempotencyStepStatus;
+  idempotencyKey: string;
+  result?: unknown;
+  error?: string;
+  lastUpdated: number;
+  retryCount: number;
+}
+
+export interface IdempotencyTrackerConfig {
+  namespace: string;
+  workflowId: string;
+  clientRequestId?: string;
+  ttl?: number;
+}
+
+export interface IdempotencyWorkflow {
+  idempotencyKey: string;
+  namespace: string;
+  workflowId: string;
+  status: "active" | "completed" | "failed";
+  steps: Map<string, IdempotencyStep>;
   metadata?: Record<string, unknown>;
+  createdAt: number;
+  lastUpdated: number;
+  ttl: number;
 }
 
-/** Compatibility metadata for a contract across versions */
-export interface ContractCompatibilityMetadata {
-  /** Contract identifier (Stellar contract ID) */
-  contractId: string;
-  /** List of supported versions */
-  versions: ContractVersionMetadata[];
-  /** Default version to use when none specified */
-  defaultVersion?: string;
-}
-
-
-// ─── Cohesive SDK types for querying, simulation, execution, idempotency, vault workflows ────────
-
-export interface RequestOptions {
-  userId: string;
-  idempotencyKey?: string;
-  timeoutMs?: number;
+export interface StepExecutionOptions {
+  skipIfCompleted?: boolean;
   maxRetries?: number;
   retryDelayMs?: number;
-  signal?: AbortSignalLike;
+  timeoutMs?: number;
 }
 
-export interface SimulationRequest {
-  type: "swap" | "vault-operation";
-  params: CrossChainSwapRequest | Record<string, unknown>;
+export interface StepRecoveryPlan {
+  stepsToRetry: string[];
+  stepsToSkip: string[];
+  canContinue: boolean;
+  recommendation: string;
 }
 
-export interface SimulationResult {
-  success: boolean;
-  estimatedOutput?: string;
-  fees?: Record<string, string>;
-  warnings?: string[];
-  details?: Record<string, unknown>;
-}
+export type StepExecutor = (
+  stepId: string,
+  step: IdempotencyStep,
+  attempt: number
+) => Promise<unknown>;
 
-export interface ExecutionRequest {
-  type: "swap" | "vault-operation";
-  params: CrossChainSwapRequest | Record<string, unknown>;
-}
-
-export interface ExecutionResult {
-  success: boolean;
-  transactionId?: string;
-  status: "pending" | "completed" | "failed";
-  details?: Record<string, unknown>;
+export interface StepRecoveryStrategyFn {
+  maxRetries?: number;
+  retryDelayMs?: number;
+  canRetry?: boolean;
+  shouldRetry?: (error: Error, attempt: number) => boolean;
+  onFailure?: (step: IdempotencyStep, error: Error) => Promise<void>;
 }
 
 export interface VaultOperationRequest {
-  operation: "deposit" | "withdraw" | "transfer" | "get-balance";
-  params: Record<string, unknown>;
-}
-
-export interface VaultOperationResult {
-  success: boolean;
-  balance?: string;
-  transactionId?: string;
-  details?: Record<string, unknown>;
-}
-
-export interface AbortSignalLike {
-  aborted: boolean;
-  addEventListener?: (
-    type: "abort",
-    listener: () => void,
-    options?: { once?: boolean }
-  ) => void;
-}
-
-/** Failure classification types */
-export enum FailureType {
-  CONNECTION = "connection",
-  AUTHENTICATION = "authentication",
-  HARDWARE_WALLET = "hardware_wallet",
-  NETWORK = "network",
-  TRANSACTION = "transaction",
-  CROSS_CHAIN = "cross_chain",
-  UNKNOWN = "unknown"
-}
-
-/** Structured retry guidance for the client */
-export interface RetryGuidance {
-  shouldRetry: boolean;
-  retryAfterMs?: number;
-  maxRetries: number;
-  currentAttempt: number;
-  backoffStrategy?: "fixed" | "exponential" | "exponential_with_jitter";
-}
-
-/** User/Operator recovery instructions */
-export interface RecoveryInstructions {
-  userActions: string[];
-  operatorActions?: string[];
-  nextSteps: string[];
-}
-
-/** Structured failure analysis result */
-export interface FailureAnalysis {
-  type: FailureType;
-  isRecoverable: boolean;
-  requiresManualIntervention: boolean;
-  retryGuidance?: RetryGuidance;
-  recoveryInstructions: RecoveryInstructions;
+  vaultId: string;
+  operationType: string;
+  asset: string;
+  amount: string;
+  destination?: string;
   metadata?: Record<string, unknown>;
 }
