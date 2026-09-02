@@ -4,6 +4,7 @@ import {
   getAdapterConfig,
 } from "../../../config/defiAdapters";
 import { resilienceEngine } from "./resilience/ResilienceEngine";
+import { createBudget, budgetedFetch, BudgetExhaustedError, type RequestBudget } from "../../../utils/budget";
 import { z } from "zod";
 
 /**
@@ -118,57 +119,44 @@ export abstract class DeFiAdapter {
   protected async fetchWithSchema<T>(
     endpoint: string,
     schema?: z.ZodTypeAny,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    budget?: RequestBudget
   ): Promise<T> {
     const { timeout, retry } = this.config;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const requestBudget = budget ?? createBudget({
+      deadlineMs: timeout,
+      attempts: retry.maxAttempts,
+      bytes: 5 * 1024 * 1024,
+      downstreamCalls: 10,
+      path: `defi.${this.config.id}.${endpoint.split("?")[0]}`,
+    });
 
-    let lastError: Error | undefined;
-
-    for (let attempt = 1; attempt <= retry.maxAttempts; attempt++) {
-      try {
-        const response = await fetch(`${this.config.apiUrl}${endpoint}`, {
-          ...options,
-          signal: controller.signal,
-          headers: {
-            "Content-Type": "application/json",
-            ...options.headers,
-          },
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return await response.json();
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        if (attempt < retry.maxAttempts) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, retry.backoffMs * attempt)
-          );
     const key = `${this.config.id}:${endpoint.split("?")[0]}`;
 
     return resilienceEngine.execute(
       key,
       async () => {
-        const timeout = this.config.timeout;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeout);
 
         try {
-          const response = await fetch(`${this.config.apiUrl}${endpoint}`, {
-            ...options,
-            signal: controller.signal,
-            headers: {
-              "Content-Type": "application/json",
-              ...options.headers,
-            },
-          });
+          const response = budget
+            ? await budgetedFetch(requestBudget, `${this.config.apiUrl}${endpoint}`, {
+                ...options,
+                signal: controller.signal,
+                headers: {
+                  "Content-Type": "application/json",
+                  ...options.headers,
+                },
+              })
+            : await fetch(`${this.config.apiUrl}${endpoint}`, {
+                ...options,
+                signal: controller.signal,
+                headers: {
+                  "Content-Type": "application/json",
+                  ...options.headers,
+                },
+              });
 
           clearTimeout(timeoutId);
 
@@ -185,8 +173,8 @@ export abstract class DeFiAdapter {
       schema,
       {
         retry: {
-          maxAttempts: this.config.retry.maxAttempts,
-          baseDelayMs: this.config.retry.backoffMs,
+          maxAttempts: retry.maxAttempts,
+          baseDelayMs: retry.backoffMs,
         },
       }
     ) as Promise<T>;
@@ -197,9 +185,10 @@ export abstract class DeFiAdapter {
    */
   protected async fetchWithRetry<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    budget?: RequestBudget
   ): Promise<T> {
-    return this.fetchWithSchema<T>(endpoint, undefined, options);
+    return this.fetchWithSchema<T>(endpoint, undefined, options, budget);
   }
 
   /**

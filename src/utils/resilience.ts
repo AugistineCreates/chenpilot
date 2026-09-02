@@ -1,4 +1,5 @@
 import logger from "../config/logger";
+import { BudgetExhaustedError } from "./budget";
 
 export enum CircuitState {
   CLOSED = "CLOSED",
@@ -175,7 +176,7 @@ export async function withRetry<T>(
     initialDelayMs,
     maxDelayMs = 30000,
     backoffMultiplier = 2,
-    retryableErrors = () => true,
+    retryableErrors = (error) => !(error instanceof BudgetExhaustedError),
     onRetry,
   } = options;
 
@@ -213,6 +214,69 @@ export async function withRetryAndCircuitBreaker<T>(
   circuitBreaker: CircuitBreaker,
 ): Promise<T> {
   return await circuitBreaker.execute(() => withRetry(fn, retryOptions));
+}
+
+export interface BudgetedRetryOptions extends Omit<RetryOptions, "maxAttempts"> {
+  budget: {
+    attempts: number;
+    deadline: number;
+  };
+}
+
+export async function withBudgetedRetry<T>(
+  fn: () => Promise<T>,
+  options: BudgetedRetryOptions,
+): Promise<T> {
+  const { budget, initialDelayMs, maxDelayMs = 30000, backoffMultiplier = 2, retryableErrors, onRetry } = options;
+
+  let lastError: Error | undefined;
+  let delay = initialDelayMs;
+  const maxAttempts = budget.attempts;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (Date.now() > budget.deadline) {
+        throw new BudgetExhaustedError(
+          `Budget deadline exhausted during retry on attempt ${attempt}`,
+          "deadline",
+          {
+            deadline: budget.deadline,
+            attempts: maxAttempts - attempt,
+            bytes: 0,
+            downstreamCalls: 0,
+            path: options as unknown as string,
+            consumedAttempts: attempt,
+            consumedBytes: 0,
+            consumedDownstreamCalls: 0,
+          },
+        );
+      }
+
+      const shouldRetry = retryableErrors
+        ? retryableErrors(lastError)
+        : !(lastError instanceof BudgetExhaustedError);
+
+      if (!shouldRetry || attempt === maxAttempts) {
+        throw lastError;
+      }
+
+      onRetry?.(attempt, lastError, delay);
+      logger.warn(
+        `Budgeted retrying operation (attempt ${attempt}/${maxAttempts})`,
+        { attempt, maxAttempts, delayMs: delay, error: lastError.message },
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      delay = Math.min(delay * backoffMultiplier, maxDelayMs);
+    }
+  }
+
+  throw lastError;
 }
 
 export const createResilientFunction = <T extends (...args: any[]) => Promise<any>>(

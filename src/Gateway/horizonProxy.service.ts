@@ -1,4 +1,5 @@
 import config from "../config/config";
+import { createBudget, budgetedFetch, BudgetExhaustedError, type RequestBudget } from "../utils/budget";
 
 const BLOCKED_QUERY_KEYS = [
   "api_key",
@@ -26,12 +27,21 @@ export class HorizonProxyError extends Error {
   }
 }
 
+const DEFAULT_BUDGET: RequestBudget = createBudget({
+  deadlineMs: config.externalRequest.defaultBudget.deadlineMs,
+  attempts: config.externalRequest.defaultBudget.attempts,
+  bytes: config.externalRequest.defaultBudget.bytes,
+  downstreamCalls: config.externalRequest.defaultBudget.downstreamCalls,
+  path: "horizon.proxy",
+});
+
 export class HorizonProxyService {
   private readonly requestTimeoutMs = 10000;
 
   async proxyGet(
     path: string,
-    query: Record<string, string | string[] | undefined>
+    query: Record<string, string | string[] | undefined>,
+    budget: RequestBudget = DEFAULT_BUDGET
   ): Promise<unknown> {
     this.validatePath(path);
 
@@ -46,19 +56,12 @@ export class HorizonProxyService {
       url.searchParams.set(key, sanitizedQuery[key]);
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      this.requestTimeoutMs
-    );
-
     try {
-      const response = await fetch(url.toString(), {
+      const response = await budgetedFetch(budget, url.toString(), {
         method: "GET",
         headers: {
           Accept: "application/json",
         },
-        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -79,13 +82,18 @@ export class HorizonProxyService {
         throw error;
       }
 
+      if (error instanceof BudgetExhaustedError) {
+        throw new HorizonProxyError(
+          `Horizon request budget exhausted: ${error.resource}`,
+          504
+        );
+      }
+
       if (error instanceof Error && error.name === "AbortError") {
         throw new HorizonProxyError("Horizon request timed out", 504);
       }
 
       throw new HorizonProxyError("Failed to proxy Horizon request", 502);
-    } finally {
-      clearTimeout(timeoutId);
     }
   }
 

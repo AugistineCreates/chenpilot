@@ -139,19 +139,15 @@ export default {
       ? process.env.ADMIN_ALLOWED_IPS.split(",").map((ip) => ip.trim()).filter(Boolean)
       : [],
   },
-  models: {
-    primary: process.env.MODEL_PRIMARY || "claude-3-5-haiku-20241022",
-    fallbacks: process.env.MODEL_FALLBACKS
-      ? process.env.MODEL_FALLBACKS.split(",").map((m) => m.trim()).filter(Boolean)
-      : ["claude-3-5-sonnet-20241022"],
-    selectionStrategy: (process.env.MODEL_SELECTION_STRATEGY || "quality_first") as
-      | "quality_first"
-      | "latency_first"
-      | "cost_first"
-      | "balanced",
-    verifyEquivalence: process.env.MODEL_VERIFY_EQUIVALENCE !== "false",
-    maxRetries: parsePositiveInt("MODEL_MAX_RETRIES", "2"),
-    differentialEvalOnStartup: process.env.MODEL_DIFFERENTIAL_EVAL_ON_STARTUP === "true",
-    minQualityScore: parseFloat(process.env.MODEL_MIN_QUALITY_SCORE || "0.7"),
+  externalRequest: {
+    defaultBudget: {
+      deadlineMs: parsePositiveInt("EXTERNAL_REQUEST_DEADLINE_MS", "10000"),
+      attempts: Number.parseInt(process.env.EXTERNAL_REQUEST_ATTEMPTS || "3", 10),
+      bytes: Number.parseInt(process.env.EXTERNAL_REQUEST_BYTES || "5242880", 10),
+      downstreamCalls: Number.parseInt(
+        process.env.EXTERNAL_REQUEST_DOWNSTREAM_CALLS || "10",
+        10
+      ),
+    },
   },
 };

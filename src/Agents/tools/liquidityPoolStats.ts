@@ -2,6 +2,7 @@ import { BaseTool } from "./base/BaseTool";
 import { ToolMetadata, ToolResult } from "../registry/ToolMetadata";
 import config from "../../config/config";
 import logger from "../../config/logger";
+import { createBudget, budgetedFetch, BudgetExhaustedError } from "../../utils/budget";
 
 interface LiquidityPoolStatsPayload extends Record<string, unknown> {
   poolId: string;
@@ -18,6 +19,14 @@ interface HorizonPoolRecord {
 
 const POOL_ID_REGEX = /^[0-9a-f]{64}$/i;
 const FEE_PERCENTAGE = 0.003; // 0.30% standard Stellar AMM fee
+
+const POOL_STATS_BUDGET = createBudget({
+  deadlineMs: 10000,
+  attempts: 2,
+  bytes: 512 * 1024,
+  downstreamCalls: 5,
+  path: "liquidityPoolStats.horizon",
+});
 
 /**
  * Tool for fetching statistics for a Stellar AMM liquidity pool including reserves, volume, and estimated APR
@@ -88,7 +97,7 @@ export class LiquidityPoolStatsTool extends BaseTool<LiquidityPoolStatsPayload> 
 
     try {
       const url = `${config.stellar.horizonUrl}/liquidity_pools/${poolId}`;
-      const response = await fetch(url);
+      const response = await budgetedFetch(POOL_STATS_BUDGET, url);
 
       if (response.status === 404) {
         return this.createErrorResult(
@@ -150,6 +159,13 @@ export class LiquidityPoolStatsTool extends BaseTool<LiquidityPoolStatsPayload> 
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
+      if (error instanceof BudgetExhaustedError) {
+        logger.error("LiquidityPoolStats budget exhausted", { poolId, resource: error.resource });
+        return this.createErrorResult(
+          "get_liquidity_pool_stats",
+          `Request budget exhausted: ${error.resource}`
+        );
+      }
       logger.error("LiquidityPoolStatsTool error", { poolId, error });
 
       const message =

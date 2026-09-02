@@ -1,4 +1,13 @@
 import logger from "../config/logger";
+import { createBudget, budgetedFetch, BudgetExhaustedError } from "../utils/budget";
+
+const TRANSCRIPTION_BUDGET = createBudget({
+  deadlineMs: 30000,
+  attempts: 2,
+  bytes: 25 * 1024 * 1024,
+  downstreamCalls: 5,
+  path: "voiceTranscription.openai",
+});
 
 export interface TranscriptionResult {
   success: boolean;
@@ -42,7 +51,7 @@ export class VoiceTranscriptionService {
       form.append("model", "whisper-1");
       form.append("language", "en"); // Default to English, can be made configurable
 
-      const response = await fetch(this.apiUrl, {
+      const response = await budgetedFetch(TRANSCRIPTION_BUDGET, this.apiUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
@@ -73,6 +82,16 @@ export class VoiceTranscriptionService {
         text: data.text,
       };
     } catch (error) {
+      if (error instanceof BudgetExhaustedError) {
+        logger.error("Transcription budget exhausted", {
+          resource: error.resource,
+          error: error.message,
+        });
+        return {
+          success: false,
+          error: `Transcription budget exhausted: ${error.resource}`,
+        };
+      }
       logger.error("Error transcribing audio", { error });
       return {
         success: false,
