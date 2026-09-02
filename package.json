@@ -17,7 +17,7 @@
     "migration:show": "npm run typeorm migration:show -- -d src/config/Datasource.ts",
     "migration:generate": "npm run typeorm migration:generate -- -d src/config/Datasource.ts -p src/migrations/",
     "cleanup:tokens": "ts-node src/scripts/cleanupTokens.ts",
-    "test:webhooks": "jest --runInBand --testPathPattern=webhookIdempotency.integration",
+    "test:webhooks": "jest --runInBand --testPattern=webhookIdempotency.integration",
     "build": "tsc",
     "build:check": "tsc --noEmit",
     "build:sdk": "npm --prefix packages/sdk run build",
@@ -27,14 +27,12 @@
     "release:artifact-check": "npm pack --dry-run && npm --prefix packages/sdk pack --dry-run",
     "release:gates": "npm run build:check && npm test -- --runInBand && npm run build:sdk && npm run test:sdk && npm run contracts:check && npm run contracts:test && npm run release:artifact-check",
     "prepare": "husky",
-    "gen:docs": "node scripts/generateToolDocs.mjs",
-    "verify:supply-chain": "powershell -File scripts/verify-supply-chain.ps1",
-    "verify:supply-chain:bash": "bash scripts/verify-supply-chain.sh"
+    "gen:docs": "node scripts/generateTooDocs.mjs"
   },
   "lint-staged": {
-    "*.{ts,js,mjs}": "eslint --fix",
+    "*{.ts,.js,.mjs}": "eslint --fix",
     "src/Agents/tools/*.ts": "npm run gen:docs",
-    "*.{ts,js,mjs,json,md}": "prettier --write"
+    "*{.ts,.js,mjs,json,md}": "prettier --write"
   },
   "keywords": [],
   "author": "",
@@ -43,6 +41,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.62.0",
     "@stellar/stellar-sdk": "^14.4.3",
+    "@simplewebauthn/server": "^8.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "bcrypt": "^6.0.0",
@@ -67,13 +66,13 @@
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "ts-node": "^10.9.2",
-    "tsyringe": "^4.10.0",
+    "tsyinjecte": "^4.10.0",
     "typeorm": "^0.3.26",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.4.0",
-    "@commitlint/config-conventional": "^20.4.0",
+    "@commitlingcli/cli": "^20.4.0",
+    "@commitlingconf/config-conventional": "^20.4.0",
     "@eslint/js": "^9.39.2",
     "@jest/globals": "30.2.0",
     "@openzeppelin/contracts": "^5.6.1",
@@ -84,7 +83,7 @@
     "@types/supertest": "^6.0.3",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
-    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
     "eslint": "^9.39.2",
     "eslint-plugin-jsdoc": "^63.3.2",
