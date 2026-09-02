@@ -1,38 +1,7 @@
-import { Telegraf } from "telegraf";
-import {
-  TransactionNotificationData,
-  Button,
-  ButtonInteraction as GenericButtonInteraction,
-  ButtonHandler,
-} from "../types";
-import { AssetVerificationService } from "../assetVerification";
-import {
-  RateLimiter,
-  DEFAULT_RATE_LIMIT,
-  STRICT_RATE_LIMIT,
-} from "../rateLimiter";
-import { botWorkflowManager } from "../services/workflowService";
-import { MarketOverviewService } from "../marketOverview";
-import { DigestTarget } from "../services/marketDigestScheduler";
-import { commandRegistry } from "../commands/registry";
-import { fromTelegrafCtx } from "../commands/adapters/telegramContext";
-import { AgentClient } from "@chen-pilot/sdk-core";
-
-const BACKEND_URL =
-  process.env.BACKEND_URL ||
-  process.env.API_BASE_URL ||
-  "http://localhost:2333";
-
-const HORIZON_URL =
-  process.env.STELLAR_HORIZON_URL || "https://horizon-testnet.stellar.org";
-const DEBOUNCE_MS = 1000; // 1 second debounce between commands
-
-// Market digest target chat used by createDigestTarget()
-const MARKET_OVERVIEW_CHAT_ID =
-  process.env.TELEGRAM_MARKET_OVERVIEW_CHAT_ID || "";
-
-// Commands that require stricter rate limiting
-const SENSITIVE_COMMANDS = ["/trustline", "/validate"];
+import { Telegraf } from 'telegraf';
+import { TransactionNotificationData } from './types';
+import { createTrustlineOperation } from '@chen-pilot/sdk-core';
+import { getAliases } from '../commands';
 
 export class TelegramAdapter {
   private bot: Telegraf | undefined;
@@ -108,14 +77,18 @@ export class TelegramAdapter {
 
     this.bot = new Telegraf(this.token);
 
-    // #145: Middleware to debounce all incoming messages/commands
-    this.bot.use(async (ctx: Context, next: () => Promise<void>) => {
-      const userId: number | undefined = ctx.from?.id;
-      if (userId && this.isFlooding(userId)) {
-        await ctx.reply(
-          "â³ Please wait a moment before sending another command."
-        );
-        return;
+    this.bot.command(getAliases('start'), (ctx) => ctx.reply('Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant.'));
+    this.bot.command(getAliases('help'), (ctx) => ctx.reply('Commands: /start, /balance, /swap, /trustline\n\nYou can also use short aliases like /b for balance, /t for trustline, etc.'));
+
+    // Balance command alias support
+    this.bot.command(getAliases('balance'), async (ctx) => {
+      await ctx.reply('💰 Your balance: 100 XLM (Placeholder)\n<i>Real balance integration coming soon!</i>', { parse_mode: 'HTML' });
+    });
+
+    this.bot.command(getAliases('trustline'), async (ctx) => {
+      const args = ctx.message.text.split(' ').slice(1);
+      if (args.length < 1) {
+        return ctx.reply('Usage: /trustline <assetCode> [issuerDomain|issuerAddress]\nExample: /trustline USDC circle.com');
       }
 
       // #123: Rate limit check
@@ -165,116 +138,10 @@ export class TelegramAdapter {
       }
     });
 
-    // â”€â”€ Shared command dispatch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // All commands that have shared handlers are wired through a single
-    // factory.  The Telegraf `command()` call is just the entry-point; the
-    // actual logic lives in the platform-neutral CommandRegistry.
-
-    const dispatchCommand = (commandName: string) => async (ctx: any) => {
-      const text: string = ctx.message?.text ?? "";
-      const args = text.split(" ").slice(1).filter(Boolean);
-      const cmdCtx = fromTelegrafCtx(ctx, commandName, args);
-      await commandRegistry.dispatch(cmdCtx);
-    };
-
-    this.bot.start(dispatchCommand("start"));
-    this.bot.help(dispatchCommand("help"));
-
-    this.bot.command("ping", dispatchCommand("ping"));
-    this.bot.command("dashboard", dispatchCommand("dashboard"));
-    this.bot.command("trustline", dispatchCommand("trustline"));
-    this.bot.command("validate", dispatchCommand("validate"));
-    this.bot.command("sponsor", dispatchCommand("sponsor"));
-    this.bot.command("multisig", dispatchCommand("multisig"));
-    this.bot.command("swap", dispatchCommand("swap"));
-    this.bot.command("portfolio", dispatchCommand("portfolio"));
-    this.bot.command("currency", dispatchCommand("currency"));
-    this.bot.command("alert", dispatchCommand("alert"));
-    this.bot.command("alerts", dispatchCommand("alerts"));
-    this.bot.command("discover", dispatchCommand("discover"));
-    this.bot.command("feedback", dispatchCommand("feedback"));
-
-    // â”€â”€ Telegram-specific: settings (WebApp) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    this.bot.command("settings", async (ctx: any) => {
-      const settingsUrl = `${BACKEND_URL}/settings`;
-      await ctx.replyWithHTML("âš™ï¸ <b>Open Settings</b>", {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "Open Settings", web_app: { url: settingsUrl } }],
-          ],
-        },
-      });
+    // Swap command alias support
+    this.bot.command(getAliases('swap'), async (ctx) => {
+      await ctx.reply('🔄 Swap functionality is coming soon!', { parse_mode: 'HTML' });
     });
-
-    // â”€â”€ Telegram-specific: inline asset search â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    this.bot.on("inline_query", async (ctx: any) => {
-      const query: string = ctx.inlineQuery.query.trim();
-      if (query.length < 2) {
-        return ctx.answerInlineQuery([]);
-      }
-      try {
-        const res = await fetch(
-          `${BACKEND_URL}/api/assets/search?q=${encodeURIComponent(query)}&limit=5`
-        );
-        if (!res.ok) return ctx.answerInlineQuery([]);
-        const assets = (await res.json()) as Array<{
-          code: string;
-          issuer?: string;
-          domain?: string;
-          price?: number;
-          priceChange24h?: number;
-        }>;
-        const results = assets.map((asset, index) => ({
-          type: "article",
-          id: `${asset.code}-${asset.issuer ?? "native"}-${index}`,
-          title: `${asset.code}${asset.domain ? ` (${asset.domain})` : ""}`,
-          description: asset.price
-            ? `Price: $${asset.price.toFixed(4)}${asset.priceChange24h !== undefined ? ` | 24h: ${asset.priceChange24h >= 0 ? "+" : ""}${asset.priceChange24h.toFixed(2)}%` : ""}`
-            : "Stellar asset",
-          input_message_content: {
-            message_text: this.formatAssetInlineResult(asset),
-            parse_mode: "HTML",
-          },
-          thumb_url: asset.domain
-            ? `https://www.google.com/s2/favicons?domain=${asset.domain}`
-            : undefined,
-        }));
-        await ctx.answerInlineQuery(results, { cache_time: 300 });
-      } catch {
-        return ctx.answerInlineQuery([]);
-      }
-    });
-
-    // â”€â”€ Wizard input handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    this.bot.use(async (ctx: any, next: () => Promise<void>) => {
-      const userId = String(ctx.from?.id ?? "unknown");
-      const text: string = ctx.message?.text ?? "";
-      const response = await botWorkflowManager.handleInput(
-        userId,
-        "telegram",
-        text
-      );
-      if (response) {
-        await ctx.reply(response.message);
-        return;
-      }
-      return next();
-    });
-
-    // Set bot commands for mobile menu
-    await this.bot.telegram.setMyCommands([
-      { command: "start", description: "Start the bot" },
-      { command: "portfolio", description: "Portfolio summary & net worth" },
-      { command: "swap", description: "Swap assets (DM only)" },
-      { command: "trustline", description: "Add trustline" },
-      { command: "multisig", description: "Setup multisig wallet (DM only)" },
-      { command: "alert", description: "Set a price alert" },
-      { command: "alerts", description: "List your price alerts" },
-      { command: "currency", description: "Set reporting currency" },
-      { command: "feedback", description: "Send feedback or report bugs" },
-      { command: "settings", description: "Open settings" },
-      { command: "help", description: "Show help" },
-    ]);
 
     this.bot.launch();
     console.log("âœ… Telegram bot initialized.");

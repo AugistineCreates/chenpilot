@@ -1,167 +1,9 @@
-import {
-  Client,
-  GatewayIntentBits,
-  Message,
-  TextChannel,
-  ChannelType,
-  ActivityType,
-  GuildMember,
-  ButtonBuilder,
-  ButtonStyle,
-  ActionRowBuilder,
-  Interaction,
-} from "discord.js";
-import { TransactionNotificationData, PriceAlert, TrendingAsset, Button, ButtonInteraction as GenericButtonInteraction, ButtonHandler } from "../types";
-  ChatInputCommandInteraction,
-  Interaction,
-  REST,
-  Routes,
-} from "discord.js";
-import {
-  TransactionNotificationData,
-  PriceAlert,
-  TrendingAsset,
-} from "../types";
-import { slashCommandDefinitions } from "../slashCommands";
-import { TransactionNotificationData, PriceAlert, TrendingAsset } from "../types";
-import {
-  createTrustlineOperation,
-  getNetworkStatus,
-  AgentClient,
-} from "@chen-pilot/sdk-core";
-import { searchFeatures, formatHelpMessage } from "../services/helpProvider";
-import { AssetVerificationService } from "../assetVerification";
-import {
-  RateLimiter,
-  DEFAULT_RATE_LIMIT,
-  STRICT_RATE_LIMIT,
-} from "../rateLimiter";
-import {
-  withPerformanceProfiling,
-  extractCommandName,
-} from "../performanceProfiler";
-import { botWorkflowManager } from "../services/workflowService";
-import { ScamDetectionService } from "../scamDetection";
-import { MarketOverviewService } from "../marketOverview";
-import { DigestTarget } from "../services/marketDigestScheduler";
-import { commandRegistry } from "../commands/registry";
-import { fromSlashInteraction } from "../commands/adapters/discordContext";
-import { setUserCurrency, getUserCurrency } from "../commands/handlers/currency";
-import { getAlerts } from "../commands/handlers/alert";
-import { searchFeatures, formatHelpMessage, formatAiHelpMessage } from "../services/helpProvider";
-import { AssetVerificationService } from '../assetVerification';
-import { RateLimiter, DEFAULT_RATE_LIMIT, STRICT_RATE_LIMIT } from '../rateLimiter';
-import { withPerformanceProfiling, extractCommandName } from '../performanceProfiler';
-import { MultisigWizard } from '../multisigWizard';
-import { ScamDetectionService } from '../scamDetection';
-import { MarketOverviewService } from '../marketOverview';
-import { PriceChartService } from '../priceChart';
+import { Client, GatewayIntentBits, Message, TextChannel } from 'discord.js';
+import { TransactionNotificationData } from './types';
+import { createTrustlineOperation } from '@chen-pilot/sdk-core';
+import { normalizeCommand } from '../commands';
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3000";
-const DASHBOARD_URL = process.env.DASHBOARD_URL || `${BACKEND_URL}/dashboard`;
-const HORIZON_URL =
-  process.env.STELLAR_HORIZON_URL || "https://horizon-testnet.stellar.org";
-const DEBOUNCE_MS = 2000;
-
-/**
- * Extracts slash-command option values into a positional string array so that
- * shared CommandHandlers (which receive ctx.args[]) stay platform-neutral.
- *
- * Convention (matches the slashCommandDefinitions argument order):
- *   trustline → [asset, issuer]
- *   validate  → [asset, issuer]
- *   alert     → [asset, condition, price, currency?]
- *   help      → [query?]
- *   currency  → [currency]
- *   swap      → [from, to, amount]
- */
-function buildSlashArgs(interaction: ChatInputCommandInteraction): string[] {
-  const opts = interaction.options;
-  switch (interaction.commandName) {
-    case "trustline":
-      return [
-        opts.getString("asset") ?? "",
-        opts.getString("issuer") ?? "",
-      ];
-    case "validate":
-      return [
-        opts.getString("asset") ?? "",
-        opts.getString("issuer") ?? "",
-      ];
-    case "alert": {
-      const currency = opts.getString("currency");
-      const args = [
-        opts.getString("asset") ?? "",
-        opts.getString("condition") ?? "",
-        String(opts.getNumber("price") ?? ""),
-      ];
-      if (currency) args.push(currency);
-      return args;
-    }
-    case "help":
-      return [opts.getString("query") ?? ""].filter(Boolean);
-    case "currency":
-      return [opts.getString("currency") ?? ""];
-    case "swap":
-      return [
-        opts.getString("from") ?? "",
-        opts.getString("to") ?? "",
-        String(opts.getNumber("amount") ?? ""),
-      ];
-    default:
-      return [];
-  }
-}
-
-
-// Role names required for advanced commands (#120)
-const ADVANCED_ROLE_NAMES = (
-  process.env.DISCORD_ADVANCED_ROLES || "DeFi Pro,Whale,Admin"
-)
-  .split(",")
-  .map((r) => r.trim());
-
-// Supported currencies for reports (#118)
-const SUPPORTED_CURRENCIES = ["USD", "XLM", "BTC"] as const;
-const SUPPORTED_CURRENCIES = ['USD', 'XLM', 'BTC'] as const;
-
-// Commands that involve personal account data and must only be used in DMs
-const DM_ONLY_COMMANDS = ['!balance', '!sponsor', '!swap'];
-
-// Commands that start a wizard
-const SENSITIVE_COMMANDS = ["!sponsor", "!trustline", "!validate"];
-
-// #124: Scam detection configuration
-const SCAM_DETECTION_ENABLED =
-  process.env.DISCORD_SCAM_DETECTION_ENABLED !== "false";
-const SCAM_DETECTION_ACTION = (process.env.DISCORD_SCAM_DETECTION_ACTION ||
-  "flag") as "flag" | "block";
-const SCAM_DETECTION_CHANNELS = (
-  process.env.DISCORD_SCAM_DETECTION_CHANNELS || ""
-)
-  .split(",")
-  .filter((c) => c.trim());
-
-// #128: Daily market overview digest configuration — kept for the Discord
-// channel ID used by createDigestTarget(). Schedule timing is now owned
-// by MarketDigestScheduler in services/marketDigestScheduler.ts.
-const MARKET_OVERVIEW_CHANNEL_ID =
-  process.env.DISCORD_MARKET_OVERVIEW_CHANNEL_ID || "";
-
-// Transaction thread logging (#113)
-const TRANSACTION_THREAD_LOGGING_ENABLED = process.env.DISCORD_TRANSACTION_LOG_THREADS_ENABLED !== 'false';
-const TRANSACTION_LOG_CHANNEL_ID = process.env.DISCORD_TRANSACTION_LOG_CHANNEL_ID || '';
-const TRANSACTION_THREAD_ARCHIVE_MINUTES = Number(process.env.DISCORD_TRANSACTION_THREAD_ARCHIVE_MINUTES || '10080'); // default 7 days
-
-function isDM(message: Message): boolean {
-  return message.channel.type === ChannelType.DM;
-}
-
-async function rejectPublicChannel(message: Message): Promise<void> {
-  await message.reply(
-    "🔒 This command contains sensitive account data and can only be used in a Direct Message (DM) with the bot."
-  );
-}
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 
 export class DiscordAdapter {
   private client: Client;
@@ -370,8 +212,39 @@ export class DiscordAdapter {
       this.startStatusUpdates();
     });
 
-      // #117: Automated welcome flow for new server members
-      this.client.on("guildMemberAdd", async (member: GuildMember) => {
+    this.client.on("messageCreate", async (message: Message) => {
+      if (message.author.bot) return;
+
+      // Handle both !command and /command for consistency
+      if (!message.content.startsWith('!') && !message.content.startsWith('/')) return;
+
+      const command = normalizeCommand(message.content);
+
+      if (command === "start") {
+        await message.reply(
+          "Welcome to Chen Pilot! I am your AI-powered Stellar DeFi assistant."
+        );
+      }
+
+      if (command === "help") {
+        await message.reply(
+          "**Commands:** !start, !balance, !swap, !trustline, !sponsor\n\n" +
+          "You can also use short aliases like !b for balance, !t for trustline, etc."
+        );
+      }
+
+      if (command === "balance") {
+        await message.reply("💰 Your balance: 100 XLM (Placeholder)\n*Real balance integration coming soon!*");
+      }
+
+      if (command === "swap") {
+        await message.reply("🔄 Swap functionality is coming soon!");
+      }
+
+      if (command === "sponsor") {
+        const userId = message.author.id;
+        await message.reply("⏳ Requesting account sponsorship...");
+
         try {
           await this.sendWelcomeMessage(member);
         } catch (error) {
@@ -399,6 +272,25 @@ export class DiscordAdapter {
           } else {
             await interaction.reply(message);
           }
+        } catch (error) {
+          console.error("Sponsor command error:", error);
+          await message.reply(
+            "❌ Could not reach the sponsorship service. Please try again later."
+          );
+        }
+      }
+
+      if (command === "trustline") {
+        const args = message.content.split(' ').slice(1);
+        if (args.length < 1) {
+          return message.reply('Usage: !trustline <assetCode> [issuerDomain|issuerAddress]\nExample: !trustline USDC circle.com');
+        }
+
+        const assetCode = args[0];
+        const assetIssuer = args[1];
+
+        if (!assetIssuer) {
+          return message.reply(`Please provide an issuer domain or address for ${assetCode}.`);
         }
       };
 
