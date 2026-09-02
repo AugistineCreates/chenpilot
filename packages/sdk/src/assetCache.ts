@@ -12,13 +12,40 @@ export interface AssetInfo {
   lastUpdated: number;
 }
 
+/**
+ * Frequency-lowering, network-aware Asset cache.
+ *
+ * All entries are scoped to a network so an entry cached from mainnet can
+ * never be served to a testnet client (and vice versa). When constructed
+ * without a network scope, the cache is *unscoped* and reports itself as such
+ * via {@link AssetCache.isNetworkScoped}.
+ */
 export class AssetCache {
   private cache = new Map<string, AssetInfo>();
   private cacheFile: string;
+  private readonly network: string | null;
 
-  constructor(cacheDir = path.join(process.cwd(), ".asset-cache")) {
+  constructor(
+    cacheDir = path.join(process.cwd(), ".asset-cache"),
+    network: string | null = null
+  ) {
     this.cacheFile = path.join(cacheDir, "assets.json");
+    this.network = network;
     this.loadCache();
+  }
+
+  /** The network this cache is scoped to, or `null` when unscoped. */
+  get scope(): string | null {
+    return this.network;
+  }
+
+  /** True when this cache is network-scoped (safe for identity checks). */
+  isNetworkScoped(): boolean {
+    return typeof this.network === "string" && this.network.length > 0;
+  }
+
+  private scopePrefix(key: string): string {
+    return this.isNetworkScoped() ? `${this.network}:${key}` : key;
   }
 
   private getKey(asset: StellarSdk.Asset): string {
@@ -35,7 +62,14 @@ export class AssetCache {
         const data = fs.readFileSync(this.cacheFile, "utf8");
         const cacheData = JSON.parse(data);
         for (const [key, info] of Object.entries(cacheData)) {
-          this.cache.set(key, info as AssetInfo);
+          // Skip entries from other network scopes when we are scoped.
+          if (this.isNetworkScoped()) {
+            const prefix = `${this.network}:`;
+            if (!key.startsWith(prefix)) continue;
+            this.cache.set(key, info as AssetInfo);
+          } else {
+            this.cache.set(key, info as AssetInfo);
+          }
         }
       }
     } catch (error) {
@@ -57,12 +91,12 @@ export class AssetCache {
   }
 
   get(asset: StellarSdk.Asset): AssetInfo | undefined {
-    const key = this.getKey(asset);
+    const key = this.scopePrefix(this.getKey(asset));
     return this.cache.get(key);
   }
 
   set(asset: StellarSdk.Asset, info: AssetInfo): void {
-    const key = this.getKey(asset);
+    const key = this.scopePrefix(this.getKey(asset));
     this.cache.set(key, { ...info, lastUpdated: Date.now() });
     this.saveCache();
   }
@@ -90,5 +124,26 @@ export class AssetCache {
   clear(): void {
     this.cache.clear();
     this.saveCache();
+  }
+
+  /** Network scopes currently represented in this cache (deduplicated). */
+  inspectNetworks(): string[] {
+    const networks = new Set<string>();
+    if (!this.isNetworkScoped() && this.cache.size === 0) {
+      return [];
+    }
+    for (const key of this.cache.keys()) {
+      if (this.isNetworkScoped()) {
+        networks.add(this.network as string);
+      } else {
+        const separator = key.indexOf(":");
+        if (separator > 0) {
+          networks.add(key.slice(0, separator));
+        } else {
+          networks.add("unscoped");
+        }
+      }
+    }
+    return [...networks];
   }
 }

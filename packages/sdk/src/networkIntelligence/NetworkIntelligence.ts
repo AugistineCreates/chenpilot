@@ -8,6 +8,8 @@
 
 import { HorizonClient } from "../horizonClient";
 import { AssetCache, AssetInfo } from "../assetCache";
+import { NetworkIdentityVerifier } from "../networkIdentity";
+import { ContractCompatibilityRegistry } from "../contractRegistry";
 import {
   checkNetworkHealth,
   checkLedgerLatency,
@@ -87,7 +89,39 @@ export class NetworkIntelligence {
       timeout: this.config.timeout,
     });
 
-    this.assetCache = new AssetCache(this.config.cacheDir);
+    this.assetCache = new AssetCache(this.config.cacheDir, network);
+  }
+
+  /**
+   * Verify that every configured service (RPC, Horizon, contract registry)
+   * agrees on the network this instance was configured for.
+   *
+   * Fail-closed: throws {@link NetworkIdentityError} on mismatch or when the
+   * identity cannot be confirmed.
+   */
+  async verifyNetworkIdentity(options?: { forceRefresh?: boolean }): Promise<void> {
+    const verifier = new NetworkIdentityVerifier({
+      expectedNetwork: this.config.network as "testnet" | "mainnet",
+      rpcUrls: [this.config.rpcUrl],
+      horizonUrls: [this.config.horizonUrl],
+      fetcher: this.config.fetchFn,
+      contractRegistryNetworks: () => {
+        try {
+          return ContractCompatibilityRegistry.registeredNetworks();
+        } catch {
+          return [];
+        }
+      },
+      assetRegistryNetworks: () =>
+        this.assetCache.isNetworkScoped()
+          ? this.assetCache.inspectNetworks()
+          : [],
+    });
+    if (options?.forceRefresh) {
+      await verifier.verifyBeforeSigning(options);
+    } else {
+      await verifier.assertVerified(options);
+    }
   }
 
   // ─── Network Health ────────────────────────────────────────────────────────

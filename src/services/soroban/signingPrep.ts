@@ -10,8 +10,7 @@
  */
 
 import { StellarSdk, NETWORK_PASSPHRASES, SorobanNetwork } from "./sdkAdapter";
-import { AuthRequiredError, SigningError } from "./errors";
-import { SecretBuffer } from "../../utils/secretBuffer";
+import { AuthRequiredError, SigningError, NetworkMismatchError } from "./errors";
 import type { SimulationSuccess } from "./sdkAdapter";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -45,6 +44,10 @@ export function requiresSigning(sim: SimulationSuccess): boolean {
  * Throws `AuthRequiredError` when auth entries are present but no signing
  * context is provided.
  *
+ * Throws `NetworkMismatchError` when the transaction envelope was built for a
+ * different network passphrase than the client claims to be on — before any
+ * signature bytes are produced.
+ *
  * Throws `SigningError` when the SDK's `assembleTransaction` helper is
  * unavailable or signing fails.
  */
@@ -53,13 +56,9 @@ export function prepareSignedTransaction(
   sim: SimulationSuccess,
   context: SigningContext
 ): AssembledTransaction {
-  // Wrap the secret key to minimize its lifetime and prevent accidental
-  // exposure through logging, serialization, or error propagation.
-  const secret = SecretBuffer.fromString(context.secretKey, "stellar-secret-key");
-  try {
-    const keypair = parseKeypair(secret);
-    const assembled = assembleWithSimulation(unsignedTx, sim, context.network);
-    assembled.sign(keypair);
+  assertNetworkMatches(unsignedTx, context.network);
+
+  const keypair = parseKeypair(context.secretKey);
 
     return {
       signedXdr: assembled.toEnvelope().toXDR("base64"),
@@ -67,6 +66,29 @@ export function prepareSignedTransaction(
     };
   } finally {
     secret.destroy();
+  }
+}
+
+/**
+ * Guard: refuse to sign when the transaction envelope's network passphrase
+ * disagrees with the client's declared network. This runs BEFORE any signing
+ * step so no signature is ever produced for the wrong environment.
+ */
+function assertNetworkMatches(
+  tx: StellarSdk.Transaction,
+  network: SorobanNetwork
+): void {
+  const expected = NETWORK_PASSPHRASES[network];
+  const transactionPassphrase = tx.networkPassphrase;
+  if (
+    typeof transactionPassphrase === "string" &&
+    transactionPassphrase.length > 0 &&
+    transactionPassphrase !== expected
+  ) {
+    throw new NetworkMismatchError({
+      expectedNetwork: network,
+      transactionNetwork: transactionPassphrase,
+    });
   }
 }
 

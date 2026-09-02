@@ -24,6 +24,12 @@ export interface OfflineSigningRequest {
   transactionXdr: string;
   /** Network passphrase the signature will be bound to. */
   networkPassphrase: string;
+  /**
+   * Optional declared network identity (`"testnet"` | `"mainnet"`) for
+   * validation. When set, a passphrase that resolves to a different network
+   * is rejected at preparation time.
+   */
+  expectedNetwork?: "testnet" | "mainnet";
   /** Source account of the transaction (`G...`). */
   sourceAccount: string;
   /** Accounts whose signatures are acceptable. */
@@ -46,6 +52,7 @@ export interface OfflineSigningRequest {
 export interface OfflineSigningPayload {
   transactionXdr: string;
   networkPassphrase: string;
+  expectedNetwork?: "testnet" | "mainnet";
   sourceAccount: string;
   expectedSigners: string[];
   threshold: number;

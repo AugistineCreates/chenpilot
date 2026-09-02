@@ -12,6 +12,7 @@ import { createHash, randomBytes } from "crypto";
 
 import type { ValidationIssue, ValidationReport } from "../advancedOps/types";
 import { error, isAccountId, toReport, warning } from "../advancedOps/validation";
+import { resolveNetworkFromPassphrase } from "../networkIdentity";
 import {
   OFFLINE_ARTIFACT_VERSION,
   type ArtifactReview,
@@ -75,6 +76,27 @@ export function validateSigningRequest(
         "A network passphrase is required so signatures cannot be replayed across networks"
       )
     );
+  } else if (request.expectedNetwork !== undefined) {
+    // LOCAL, offline check: the declared network must agree with the
+    // passphrase that the signature will actually be bound to.
+    const resolved = resolveNetworkFromPassphrase(request.networkPassphrase);
+    if (resolved === undefined) {
+      issues.push(
+        error(
+          "networkPassphrase",
+          "UNRECOGNIZED_NETWORK",
+          "The network passphrase maps to no recognized Stellar network"
+        )
+      );
+    } else if (resolved !== request.expectedNetwork) {
+      issues.push(
+        error(
+          "expectedNetwork",
+          "NETWORK_MISMATCH",
+          `Expected network "${request.expectedNetwork}" but the passphrase resolves to "${resolved}"`
+        )
+      );
+    }
   }
 
   if (!isAccountId(request.sourceAccount)) {
@@ -163,6 +185,9 @@ export function prepareOfflineSigning(
   const payload: OfflineSigningPayload = {
     transactionXdr: request.transactionXdr,
     networkPassphrase: request.networkPassphrase,
+    ...(request.expectedNetwork !== undefined
+      ? { expectedNetwork: request.expectedNetwork }
+      : {}),
     sourceAccount: request.sourceAccount,
     expectedSigners: [...request.expectedSigners],
     threshold: request.threshold ?? request.expectedSigners.length,

@@ -12,6 +12,7 @@ export type SorobanErrorCode =
   | "AUTH_REQUIRED"
   | "DECODE_FAILED"
   | "SIGNING_FAILED"
+  | "NETWORK_MISMATCH"
   | "INVOCATION_FAILED"
   | "TTL_EXTENSION_FAILED"
   | "UNKNOWN";
@@ -46,6 +47,8 @@ export function sorobanCodeToCategory(code: SorobanErrorCode): ErrorCategory {
       return "VALIDATION";
     case "SIGNING_FAILED":
       return "EXECUTION";
+    case "NETWORK_MISMATCH":
+      return "POLICY";
     case "INVOCATION_FAILED":
       return "EXECUTION";
     case "TTL_EXTENSION_FAILED":
@@ -63,6 +66,7 @@ const categoryByCode: Record<SorobanErrorCode, ErrorCategory> = {
   AUTH_REQUIRED: "POLICY",
   DECODE_FAILED: "VALIDATION",
   SIGNING_FAILED: "EXECUTION",
+  NETWORK_MISMATCH: "POLICY",
   INVOCATION_FAILED: "EXECUTION",
   TTL_EXTENSION_FAILED: "EXECUTION",
   UNKNOWN: "UNKNOWN",
@@ -138,6 +142,33 @@ export class SigningError extends SorobanError {
   constructor(message: string, cause?: unknown) {
     super(message, "SIGNING_FAILED", cause);
     this.name = "SigningError";
+  }
+}
+
+/**
+ * Raised when a transaction was assembled with a network passphrase that does
+ * not match the network the client is configured/verified for. This guard
+ * sits between "assemble with a passphrase" and "sign the envelope", because
+ * signing for the wrong network is irreversible.
+ */
+export class NetworkMismatchError extends SorobanError {
+  readonly expectedNetwork?: string;
+  readonly transactionNetwork?: string;
+
+  constructor(opts?: {
+    expectedNetwork?: string;
+    transactionNetwork?: string;
+  }) {
+    const expected = opts?.expectedNetwork ?? "unknown";
+    const transaction = opts?.transactionNetwork ?? "unknown";
+    super(
+      `Refusing to sign: the transaction network ("${transaction}") does not match ` +
+        `the client network ("${expected}"). No signature was produced.`,
+      "NETWORK_MISMATCH"
+    );
+    this.name = "NetworkMismatchError";
+    this.expectedNetwork = opts?.expectedNetwork;
+    this.transactionNetwork = opts?.transactionNetwork;
   }
 }
 

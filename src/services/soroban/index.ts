@@ -34,6 +34,7 @@ export {
   AuthRequiredError,
   DecodeError,
   SigningError,
+  NetworkMismatchError,
   InvocationError,
 } from "./errors";
 export type { SorobanErrorCode } from "./errors";
