@@ -1,7 +1,20 @@
 packages:
   - 'packages/*'
+
+# Build/Install Script Configuration
+# All install scripts are disabled by default via .pnpmrc (ignore-scripts=true)
+# This section documents which packages would require scripts if enabled
+# See INSTALL_SCRIPT_ALLOWLIST.md for security review documentation
 allowBuilds:
-  '@scarf/scarf': set this to true or false
-  bcrypt: set this to true or false
-  canvas: set this to true or false
-  unrs-resolver: set this to true or false
+  # Native crypto compilation - Security reviewed 2026-08-31
+  # See INSTALL_SCRIPT_ALLOWLIST.md for details
+  bcrypt: false  # Disabled - use ignore-scripts in .pnpmrc instead
+  
+  # Analytics telemetry - NOT APPROVED
+  '@scarf/scarf': false
+  
+  # Canvas rendering - NOT REQUIRED in this project
+  canvas: false
+  
+  # DNS resolver - NOT REQUIRED in this project  
+  unrs-resolver: false

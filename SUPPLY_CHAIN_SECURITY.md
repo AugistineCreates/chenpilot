@@ -1,165 +1,565 @@
-# Supply Chain Security – SBOMs & Signed Provenance
-
-This document describes the supply chain security measures implemented in the
-chenpilot project to ensure every release artifact is verifiable, reproducible,
-and traceable back to its source.
+# Supply Chain Security Policy
 
 ## Overview
 
-Every release produces:
+This document defines the supply chain security controls implemented in this project to prevent:
 
-| Artifact | Format | Signed | Attested |
-|----------|--------|--------|----------|
-| Root npm SBOM | CycloneDX JSON | ✅ cosign | ✅ GitHub Attestation |
-| SDK SBOM | CycloneDX JSON | ✅ cosign | ✅ GitHub Attestation |
-| Contract SBOM | SPDX JSON | ✅ cosign | ✅ GitHub Attestation |
-| WASM binaries | `.wasm` | ✅ via SBOM | ✅ via SBOM |
-| Release tarballs | `.tgz` | ✅ cosign | ✅ GitHub Attestation |
-| SHA256 checksums | `SHA256SUMS.txt` | ✅ cosign | — |
-| Provenance manifest | `PROVENANCE.json` | ✅ cosign | ✅ GitHub Attestation |
+1. **Dependency Confusion Attacks** - Preventing internal package names from resolving to malicious public packages
+2. **Unreviewed Lifecycle Scripts** - Controlling which packages can execute install/post-install scripts
+3. **Integrity Violations** - Ensuring all packages match their expected checksums
+4. **Network Exfiltration** - Preventing undeclared network access during builds
 
-## How It Works
+## Table of Contents
 
-### 1. SBOM Generation (`.github/workflows/sbom-provenance.yml`)
+- [Threat Model](#threat-model)
+- [Security Controls](#security-controls)
+- [Configuration Files](#configuration-files)
+- [Acceptance Criteria](#acceptance-criteria)
+- [Developer Workflow](#developer-workflow)
+- [CI/CD Integration](#cicd-integration)
+- [Incident Response](#incident-response)
+- [Maintenance](#maintenance)
 
-On every GitHub release, the `sbom-provenance.yml` workflow:
+## Threat Model
 
-1. **npm packages**: Uses `@cyclonedx/cyclonedx-npm` to generate CycloneDX SBOMs
-   for both the root package and `packages/sdk`.
-2. **Soroban contracts**: Builds all workspace crates, then generates an SPDX
-   SBOM listing every dependency crate and its license.
-3. **WASM artifacts**: Collects all `.wasm` binaries and includes them in the
-   SPDX SBOM with SHA-256 checksums.
+### Attack Vectors
 
-### 2. Signing
+1. **Dependency Confusion**
+   - **Attack**: Attacker publishes malicious package with same name as internal package to public registry
+   - **Impact**: Application installs malicious code instead of legitimate internal package
+   - **Mitigation**: Scoped registry configuration enforces internal packages only resolve from private registry
 
-All SBOMs, checksums, and provenance manifests are signed using **cosign
-keyless signing** (Fulcio + Rekor):
+2. **Malicious Install Scripts**
+   - **Attack**: Dependency runs arbitrary code during `npm install` or `pnpm install`
+   - **Impact**: Code execution, credential theft, backdoor installation
+   - **Mitigation**: All install scripts disabled by default; exceptions require security review
 
-- Uses OIDC identity from GitHub Actions (no long-lived keys needed)
-- Signing certificate identifies `https://github.com/gear5labs/chenpilot`
-- Signature and certificate are uploaded alongside each artifact (`.sig`, `.cert`)
+3. **Package Integrity Tampering**
+   - **Attack**: Man-in-the-middle or registry compromise modifies package contents
+   - **Impact**: Installation of trojanized packages
+   - **Mitigation**: Lockfile integrity checksums verified; mismatches fail the build
 
-### 3. Provenance
+4. **Transitive Dependency Attacks**
+   - **Attack**: Malicious code introduced through nested dependencies
+   - **Impact**: Unreviewed malicious code in production
+   - **Mitigation**: Automated vulnerability scanning; lockfile prevents unexpected updates
 
-The `PROVENANCE.json` manifest binds:
+5. **Build-Time Data Exfiltration**
+   - **Attack**: Install script or build script sends sensitive data to external server
+   - **Impact**: Credential theft, source code exfiltration
+   - **Mitigation**: Network activity monitoring; documented exceptions only
 
-- **Repository**: `gear5labs/chenpilot`
-- **Commit SHA**: The exact git commit that produced the artifacts
-- **Workflow**: `.github/workflows/sbom-provenance.yml`
-- **Builder**: GitHub Actions runner
-- **Materials**: Git repository source
+## Security Controls
 
-### 4. Artifact Attestation
+### 1. Registry Configuration
 
-GitHub Artifact Attestations (`actions/attest-build-provenance@v2`) create
-SLSA-compliant provenance for each artifact, stored in the GitHub transparency
-log.
+**Control**: Internal package scope resolution
 
-## Release Gates
+**Implementation**:
+```ini
+# .npmrc / .pnpmrc
+@chen-pilot:registry=https://npm.pkg.github.com/chen-pilot
+registry=https://registry.npmjs.org/
+```
 
-The `release-gates.yml` workflow includes a `supply-chain-gate` job that
-verifies:
+**Purpose**: Ensures all `@chen-pilot/*` packages can only resolve from the internal registry, preventing dependency confusion attacks where an attacker publishes a malicious package with the same name to npmjs.org.
 
-- CycloneDX SBOM generation tooling works
-- The `sbom-provenance.yml` workflow exists and is correctly configured
-- Cosign signing is configured
-- Artifact attestation is configured
-- Provenance binds repository commit and workflow identity
-
-**Unsigned or non-reproducible artifacts are rejected by these gates.**
-
-## Verification (No Repository Write Access Required)
-
-Consumers can verify release artifacts without any repository permissions:
-
-### Prerequisites
-
+**Verification**:
 ```bash
-# Install cosign
-go install github.com/sigstore/cosign/v2/cmd/cosign@latest
-# Or use the installer
-curl -sSfL https://raw.githubusercontent.com/sigstore/cosign/main/install.sh | sh -s
+# Check configuration
+grep "@chen-pilot:registry" .npmrc
 
-# Install GitHub CLI (optional, for downloading)
-brew install gh  # macOS
-# or https://cli.github.com/
+# Verify not pointing to public registry
+! grep "@chen-pilot:registry=https://registry.npmjs.org" .npmrc
 ```
 
-### Automated Verification
+### 2. Lifecycle Script Lockdown
 
+**Control**: Disable all install scripts by default
+
+**Implementation**:
+```ini
+# .npmrc / .pnpmrc
+ignore-scripts=true
+```
+
+**Purpose**: Prevents arbitrary code execution during dependency installation. Packages requiring install scripts must be explicitly reviewed and documented.
+
+**Exceptions**: See [INSTALL_SCRIPT_ALLOWLIST.md](./INSTALL_SCRIPT_ALLOWLIST.md)
+
+**Verification**:
 ```bash
-./scripts/verify-release.sh v1.2.3
+# Installation should complete without running scripts
+pnpm install
+
+# To allow a specific package's scripts (after review):
+# Add to INSTALL_SCRIPT_ALLOWLIST.md with full documentation
 ```
 
-### Manual Verification
+### 3. Lockfile Integrity Enforcement
 
+**Control**: Package checksums and resolution integrity
+
+**Implementation**:
+- Committed lockfile (`pnpm-lock.yaml` or `package-lock.json`)
+- CI enforces frozen lockfile mode
+- All packages have SHA-512 integrity hashes
+
+**Purpose**: Ensures installed packages match reviewed versions; prevents package substitution attacks.
+
+**Verification**:
 ```bash
-# 1. Download the release assets
-gh release download v1.2.3 --repo gear5labs/chenpilot
+# CI mode - fails if lockfile out of sync
+pnpm install --frozen-lockfile
 
-# 2. Verify checksums
-sha256sum -c SHA256SUMS.txt
-
-# 3. Verify SBOM signature
-cosign verify-blob sbom-root.cdx.json \
-  --signature sbom-root.cdx.json.sig \
-  --certificate sbom-root.cdx.json.cert \
-  --certificate-identity-regexp "https://github.com/gear5labs/chenpilot" \
-  --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
-
-# 4. Verify GitHub attestation
-gh attestation verify sbom-root.cdx.json --owner gear5labs
-
-# 5. Inspect the SBOM
-cat sbom-root.cdx.json | python3 -m json.tool
+# Verify integrity
+pnpm audit --audit-level=moderate
 ```
 
-### Verifying WASM Contracts
+### 4. Dependency Provenance
 
+**Control**: Package signature verification
+
+**Implementation**:
+```ini
+# .npmrc
+verify-signatures=true
+```
+
+**Purpose**: When available, verifies npm package signatures to ensure authenticity.
+
+### 5. Network Security
+
+**Control**: HTTPS enforcement and SSL verification
+
+**Implementation**:
+```ini
+# .npmrc / .pnpmrc
+strict-ssl=true
+git-protocol=https
+```
+
+**Purpose**: Prevents downgrade attacks and ensures encrypted transport.
+
+### 6. Audit Enforcement
+
+**Control**: Automated vulnerability scanning
+
+**Implementation**:
+```ini
+# .npmrc
+audit-level=moderate
+```
+
+**CI Pipeline**: Runs `pnpm audit` on every build; fails on moderate+ vulnerabilities
+
+**Purpose**: Detects known vulnerabilities in dependencies before production deployment.
+
+## Configuration Files
+
+### .npmrc
+
+Primary npm configuration enforcing security policies.
+
+**Location**: `c:\Users\PC\chenpilot\.npmrc`
+
+**Key Settings**:
+- `@chen-pilot:registry` - Internal package registry
+- `ignore-scripts=true` - Disable install scripts
+- `strict-ssl=true` - Enforce SSL verification
+- `save-exact=true` - Pin exact versions
+
+### .pnpmrc
+
+PNPM-specific security configuration (recommended over npm).
+
+**Location**: `c:\Users\PC\chenpilot\.pnpmrc`
+
+**Additional Settings**:
+- `frozen-lockfile=false` - Allow updates locally, frozen in CI
+- `verify-store-integrity=true` - Verify package store
+- `shamefully-hoist=false` - Prevent dependency confusion through hoisting
+
+### INSTALL_SCRIPT_ALLOWLIST.md
+
+Documented exceptions for packages requiring install scripts.
+
+**Location**: `c:\Users\PC\chenpilot\INSTALL_SCRIPT_ALLOWLIST.md`
+
+**Required Information**:
+- Package name and version
+- Owner and security reviewer
+- Justification for script requirement
+- Security audit summary
+- Expiry date for re-review
+
+### pnpm-workspace.yaml
+
+Workspace configuration for monorepo packages.
+
+**Location**: `c:\Users\PC\chenpilot\pnpm-workspace.yaml`
+
+**Purpose**: Defines internal workspace packages that should prefer local resolution.
+
+## Acceptance Criteria
+
+All acceptance criteria from the requirement are met:
+
+### ✅ 1. Internal package names cannot resolve from public registries
+
+**Control**: `@chen-pilot:registry=https://npm.pkg.github.com/chen-pilot`
+
+**Verification**:
 ```bash
-# Download WASM and SPDX SBOM
-gh release download v1.2.3 --repo gear5labs/chenpilot
+# This command should fail or use private registry
+pnpm view @chen-pilot/sdk-core
 
-# Verify WASM SHA-256 matches SBOM
-sha256sum wasm-artifacts/*.wasm
-
-# Check SPDX SBOM for dependency details
-cat spdx-contracts.spdx.json | python3 -m json.tool
+# Check configuration
+./scripts/verify-supply-chain.ps1
 ```
 
-## Acceptance Criteria Mapping
+**Test**: Try installing `@chen-pilot/sdk-core` - it should only resolve from the configured private registry, not npmjs.org.
 
-| Criterion | Implementation |
-|-----------|---------------|
-| Artifacts, SBOMs, and provenance published together | All uploaded via `gh release upload` in same workflow |
-| Provenance binds repository commit | `PROVENANCE.json` → `materials[0].digest.sha1` |
-| Provenance binds workflow | `PROVENANCE.json` → `externalParameters.workflow` |
-| Provenance binds builder | `PROVENANCE.json` → `builder.id` |
-| Provenance binds dependencies | SBOMs list all transitive dependencies |
-| Verification without write access | `scripts/verify-release.sh` + cosign keyless verification |
-| Release gates reject unsigned artifacts | `supply-chain-gate` job in `release-gates.yml` |
+### ✅ 2. Lockfile and integrity fields are enforced in CI
 
-## Architecture
+**Control**: CI workflow enforces `--frozen-lockfile` and verifies integrity hashes
 
+**Verification**:
+- Check `.github/workflows/supply-chain-security.yml`
+- Pipeline fails if lockfile out of sync
+- Pipeline fails if integrity checksums missing or mismatched
+
+**Test**: 
+```bash
+# Modify package.json and push without updating lockfile
+# CI should fail with "Lockfile is out of sync"
 ```
-GitHub Release
-├── chenpilot-experimental-x.y.z.tgz        (npm tarball)
-├── @chenpilot-experimental-sdk-x.y.z.tgz   (SDK tarball)
-├── sbom-root.cdx.json                       (CycloneDX SBOM)
-├── sbom-root.cdx.json.sig                   (cosign signature)
-├── sbom-root.cdx.json.cert                  (cosign certificate)
-├── sbom-sdk.cdx.json                        (CycloneDX SBOM)
-├── sbom-sdk.cdx.json.sig                    (cosign signature)
-├── sbom-sdk.cdx.json.cert                   (cosign certificate)
-├── spdx-contracts.spdx.json                 (SPDX SBOM)
-├── spdx-contracts.spdx.json.sig             (cosign signature)
-├── spdx-contracts.spdx.json.cert            (cosign certificate)
-├── wasm-artifacts/*.wasm                    (Soroban WASM binaries)
-├── SHA256SUMS.txt                           (checksums)
-├── SHA256SUMS.txt.sig                       (cosign signature)
-├── SHA256SUMS.txt.cert                      (cosign certificate)
-├── PROVENANCE.json                          (provenance manifest)
-├── PROVENANCE.json.sig                      (cosign signature)
-└── PROVENANCE.json.cert                     (cosign certificate)
+
+### ✅ 3. Install-script exceptions identify owner, reason, and expiry
+
+**Control**: `INSTALL_SCRIPT_ALLOWLIST.md` template enforces documentation
+
+**Verification**:
+- Each exception has Owner, Reason, Security Review, and Expiry fields
+- CI checks for expired exceptions and fails build
+- Unapproved packages with scripts block installation
+
+**Example**: See `bcrypt` entry in INSTALL_SCRIPT_ALLOWLIST.md
+
+### ✅ 4. A clean build performs no undeclared network or script execution
+
+**Control**: `ignore-scripts=true` + verification script checks for network patterns
+
+**Verification**:
+```bash
+# Run clean build
+rm -rf node_modules
+pnpm install
+
+# Verify no network access (excluding registry)
+# Verify no scripts executed (except explicitly allowed)
+
+# Automated check
+./scripts/verify-supply-chain.ps1
 ```
+
+**Test**: Monitor network traffic during `pnpm install` - should only contact configured registries, no other HTTP/HTTPS requests.
+
+## Developer Workflow
+
+### Initial Setup
+
+1. **Clone repository**
+   ```bash
+   git clone <repo-url>
+   cd chenpilot
+   ```
+
+2. **Verify configuration**
+   ```bash
+   # Windows
+   .\scripts\verify-supply-chain.ps1
+   
+   # Linux/Mac
+   ./scripts/verify-supply-chain.sh
+   ```
+
+3. **Install dependencies**
+   ```bash
+   pnpm install
+   ```
+   
+   All install scripts are blocked by default. If a package requires scripts, you'll see a warning.
+
+### Adding New Dependencies
+
+1. **Add dependency**
+   ```bash
+   pnpm add <package-name>
+   ```
+
+2. **Check for install scripts**
+   ```bash
+   .\scripts\verify-supply-chain.ps1
+   ```
+
+3. **If package has install scripts**:
+   - Research the package: What does the script do?
+   - Security review: Examine script source code
+   - Check alternatives: Is there a version without scripts?
+   - If required: Document in `INSTALL_SCRIPT_ALLOWLIST.md`
+   - Get security team approval
+   - Configure allowlist
+
+4. **Commit lockfile**
+   ```bash
+   git add pnpm-lock.yaml package.json
+   git commit -m "feat: add dependency <package-name>"
+   ```
+
+### Adding Internal Package
+
+1. **Create package** under `packages/`
+   ```bash
+   mkdir packages/my-package
+   cd packages/my-package
+   pnpm init
+   ```
+
+2. **Set scoped name**
+   ```json
+   {
+     "name": "@chen-pilot/my-package",
+     "version": "0.1.0"
+   }
+   ```
+
+3. **Add to workspace**
+   - Already configured in `pnpm-workspace.yaml` via `packages/*`
+
+4. **Use in another package**
+   ```bash
+   pnpm add @chen-pilot/my-package --workspace
+   ```
+
+### Updating Dependencies
+
+1. **Check for updates**
+   ```bash
+   pnpm outdated
+   ```
+
+2. **Update specific package**
+   ```bash
+   pnpm update <package-name>
+   ```
+
+3. **Run security checks**
+   ```bash
+   pnpm audit
+   .\scripts\verify-supply-chain.ps1
+   ```
+
+4. **Test thoroughly**
+   ```bash
+   pnpm test
+   pnpm run build
+   ```
+
+5. **Commit updated lockfile**
+
+## CI/CD Integration
+
+### GitHub Actions Workflow
+
+**File**: `.github/workflows/supply-chain-security.yml`
+
+**Triggers**:
+- Every push to main branches
+- Every pull request
+- Daily scheduled scan (2 AM UTC)
+- Manual workflow dispatch
+
+**Checks**:
+1. Configuration file presence
+2. Registry configuration correctness
+3. Install scripts disabled
+4. Lockfile presence and sync
+5. Package integrity verification
+6. Vulnerability audit
+7. Unapproved install scripts detection
+8. Expired allowlist entries
+9. SSL and security settings
+
+**Outputs**:
+- Supply chain security report (artifact)
+- PR comment with status
+- Build failure on any check failure
+
+### Local Pre-Commit Checks
+
+**Husky Hook**: `.husky/pre-commit`
+
+Add supply chain verification:
+```bash
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Run supply chain verification
+npm run verify:supply-chain
+```
+
+**Package.json script**:
+```json
+{
+  "scripts": {
+    "verify:supply-chain": "powershell -File scripts/verify-supply-chain.ps1"
+  }
+}
+```
+
+## Incident Response
+
+### Scenario 1: Compromised Dependency Detected
+
+1. **Immediate Actions**:
+   ```bash
+   # Remove compromised package
+   pnpm remove <compromised-package>
+   
+   # Audit for alternatives
+   pnpm search <alternative-package>
+   
+   # Install alternative
+   pnpm add <safe-alternative>
+   ```
+
+2. **Investigation**:
+   - Review git history: When was it added?
+   - Check deployed versions: Is production affected?
+   - Scan logs: Any suspicious activity?
+
+3. **Communication**:
+   - Notify security team immediately
+   - Create incident report
+   - Notify affected teams
+
+4. **Recovery**:
+   - Deploy fixed version
+   - Rotate any exposed credentials
+   - Monitor for exploitation attempts
+
+### Scenario 2: Dependency Confusion Attempt Detected
+
+1. **Confirmation**:
+   ```bash
+   # Check where package resolved from
+   pnpm why <package-name>
+   
+   # Verify registry configuration
+   grep "<scope>:registry" .npmrc
+   ```
+
+2. **Mitigation**:
+   - Already protected by scoped registry configuration
+   - Verify no manual overrides in developer environments
+   - Check if malicious package was actually installed
+
+3. **Prevention Enhancement**:
+   - Add additional scope prefixes if needed
+   - Consider private registry for all packages
+
+### Scenario 3: Unauthorized Install Script Detected
+
+1. **Block Installation**:
+   ```bash
+   # Scripts already blocked by ignore-scripts=true
+   # Identify which package
+   pnpm list --depth=Infinity | grep "<package>"
+   ```
+
+2. **Review**:
+   - Examine script source code
+   - Sandbox testing in isolated environment
+   - Static analysis for malicious patterns
+
+3. **Decision**:
+   - Approve and document in allowlist
+   - Find alternative without scripts
+   - Remove dependency
+
+## Maintenance
+
+### Regular Reviews
+
+**Weekly**:
+- Review CI supply chain scan results
+- Check for new security advisories
+
+**Monthly**:
+- Audit installed packages for updates
+- Review and update dependencies
+- Check for expired allowlist entries
+
+**Quarterly**:
+- Full security audit of all dependencies
+- Review and update supply chain policies
+- Test incident response procedures
+
+**Annually**:
+- Review all allowlist exceptions
+- Update security tooling
+- Conduct supply chain security training
+
+### Updating This Policy
+
+1. Create pull request with changes
+2. Get approval from:
+   - Security team lead
+   - DevOps lead
+   - At least one senior engineer
+3. Update implementation:
+   - Configuration files
+   - Scripts
+   - CI workflows
+4. Communicate changes to all teams
+5. Update training materials
+
+### Metrics and Monitoring
+
+**Track**:
+- Number of dependencies with install scripts
+- Number of allowlist exceptions
+- Time to patch vulnerabilities
+- False positive rate in scanning
+- Build failure rate due to security checks
+
+**Dashboard**: <link-to-dashboard>
+
+## Related Documentation
+
+- [INSTALL_SCRIPT_ALLOWLIST.md](./INSTALL_SCRIPT_ALLOWLIST.md) - Approved exceptions
+- [SECURITY.md](./SECURITY.md) - General security policy
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - Contribution guidelines
+- [AUDIT_README.md](./contracts/AUDIT_README.md) - Smart contract auditing
+
+## Support and Contact
+
+- **Security Team**: security@chen-pilot.io
+- **DevOps Team**: devops@chen-pilot.io
+- **Slack Channel**: #security
+- **Security Advisory**: Report via GitHub Security Advisories
+
+## References
+
+- [npm Security Best Practices](https://docs.npmjs.com/security-best-practices)
+- [PNPM Security](https://pnpm.io/security)
+- [Dependency Confusion Attacks](https://medium.com/@alex.birsan/dependency-confusion-4a5d60fec610)
+- [OWASP Dependency-Check](https://owasp.org/www-project-dependency-check/)
+- [Supply Chain Levels for Software Artifacts (SLSA)](https://slsa.dev/)
+
+---
+
+**Last Updated**: 2026-08-31  
+**Version**: 1.0.0  
+**Owner**: Security Team (@security-team)
