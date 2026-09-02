@@ -15,6 +15,9 @@ import { decodeReturnValue } from "./decoder";
 import { assertSigningNotRequired } from "./signingPrep";
 import { InvocationError } from "./errors";
 import type { SorobanNetwork } from "./sdkAdapter";
+import { assertCodeIdentityAllowsMutationByContractId } from "../../ContractIdentity/codeIdentityGate";
+import type { ManifestNetwork } from "../../ContractIdentity/deploymentManifest.types";
+import logger from "../../config/logger";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -54,6 +57,28 @@ export interface InvokeContractResult {
 export async function invokeContract(
   params: InvokeContractParams
 ): Promise<InvokeContractResult> {
+  // State-mutating calls (those requesting a signed submission) are gated by
+  // contract code identity (Issue #676). A mismatched or missing deployment
+  // manifest for a registered Chen Pilot contract blocks the mutation. This
+  // also upholds testnet/mainnet separation: the gate only fires for the
+  // backend's active network.
+  if (params.source?.secretKey) {
+    try {
+      assertCodeIdentityAllowsMutationByContractId(
+        params.contractId,
+        (params.network as ManifestNetwork) ?? "testnet"
+      );
+    } catch (err) {
+      logger.warn("Code-identity gate blocked a mutating contract call", {
+        contractId: params.contractId,
+        method: params.method,
+        network: params.network,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
+  }
+
   const simParams = toSimulateParams(params);
 
   let simResult;

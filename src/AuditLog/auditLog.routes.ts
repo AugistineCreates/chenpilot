@@ -17,7 +17,10 @@
 
 import { Router, Request, Response } from "express";
 import { authenticateToken } from "../Auth/auth.middleware";
-import { requireOwnerOrElevated } from "../Gateway/middleware/rbac.middleware";
+import {
+  requireAdmin,
+  requireOwnerOrElevated,
+} from "../Gateway/middleware/rbac.middleware";
 import { requireAdminAuth } from "../Gateway/middleware/adminAuth";
 import { auditLogService } from "./auditLog.service";
 import { AuditAction, AuditSeverity } from "./auditLog.entity";
@@ -210,9 +213,10 @@ router.get(
         .json({ success: true, category, events, total: events.length });
     } catch (error) {
       console.error("Error fetching events by category:", error);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to fetch events by category" });
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch events by category",
+      });
     }
   }
 );
@@ -295,43 +299,39 @@ router.get(
 
 // ─── LEGACY: All original endpoints unchanged ─────────────────────────────────
 
-router.get(
-  "/logs",
-  requireAdminAuth(),
-  async (req: Request, res: Response) => {
-    try {
-      const {
-        userId,
-        action,
-        severity,
-        startDate,
-        endDate,
-        success,
-        limit,
-        offset,
-      } = req.query;
+router.get("/logs", requireAdminAuth(), async (req: Request, res: Response) => {
+  try {
+    const {
+      userId,
+      action,
+      severity,
+      startDate,
+      endDate,
+      success,
+      limit,
+      offset,
+    } = req.query;
 
-      const result = await auditLogService.query({
-        userId: userId as string,
-        action: action as AuditAction,
-        severity: severity as AuditSeverity,
-        startDate: startDate ? new Date(startDate as string) : undefined,
-        endDate: endDate ? new Date(endDate as string) : undefined,
-        success:
-          success === "true" ? true : success === "false" ? false : undefined,
-        limit: limit ? parseInt(limit as string, 10) : 50,
-        offset: offset ? parseInt(offset as string, 10) : 0,
-      });
+    const result = await auditLogService.query({
+      userId: userId as string,
+      action: action as AuditAction,
+      severity: severity as AuditSeverity,
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      success:
+        success === "true" ? true : success === "false" ? false : undefined,
+      limit: limit ? parseInt(limit as string, 10) : 50,
+      offset: offset ? parseInt(offset as string, 10) : 0,
+    });
 
-      return res.status(200).json({ success: true, ...result });
-    } catch (error) {
-      console.error("Error fetching audit logs:", error);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to fetch audit logs" });
-    }
+    return res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    console.error("Error fetching audit logs:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch audit logs" });
   }
-);
+});
 
 router.get(
   "/user/:userId",

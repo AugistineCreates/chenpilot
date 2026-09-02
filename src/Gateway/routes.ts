@@ -17,6 +17,7 @@ import userPreferencesRoutes from "../Auth/userPreferences.routes";
 import botIdentityRoutes from "../Auth/botIdentity.routes";
 import dataExportRoutes from "../services/dataExport.routes";
 import contractMetadataRoutes from "../services/contracts/contractMetadata.routes";
+import contractIdentityRoutes from "../ContractIdentity/contractIdentity.routes";
 import horizonProxyRoutes from "./horizonProxy.routes";
 import auditLogRoutes from "../AuditLog/auditLog.routes";
 import rlsAuditRoutes from "../Security/rlsAudit.routes";
@@ -60,6 +61,9 @@ router.use("/export", dataExportRoutes);
 
 // Mount contract metadata discovery routes
 router.use("/contracts", contractMetadataRoutes);
+
+// Signed deployment manifests + code identity (Issue #676)
+router.use("/contract-identity", contractIdentityRoutes);
 
 // Mount KYC submission routes (with strict rate limiting)
 router.use("/kyc", kycRoutes);

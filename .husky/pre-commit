@@ -7,4 +7,6 @@ if [ -n "$STAGED_ENV_FILES" ]; then
   exit 1
 fi
 
-node node_modules/lint-staged/bin/lint-staged.js
+# Use an explicit config file so lint-staged does not walk node_modules and
+# pick up stale legacy "lint-staged" configs shipped inside vendored packages.
+node node_modules/lint-staged/bin/lint-staged.js --config .lintstagedrc
