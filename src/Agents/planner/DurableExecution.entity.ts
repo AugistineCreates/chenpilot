@@ -8,6 +8,7 @@ import {
   Index,
 } from "typeorm";
 import { DurableStep } from "./DurableStep.entity";
+import { FailureState } from "../types";
 
 export enum ExecutionStatus {
   PENDING = "pending",
@@ -16,13 +17,7 @@ export enum ExecutionStatus {
   FAILED = "failed",
   PAUSED = "paused",
   AWAITING_APPROVAL = "awaiting_approval",
-  /**
-   * Terminal state: execution was explicitly cancelled by a user or operator
-   * before all irreversible steps were committed. Once durably written, this
-   * status is immutable — the record must never transition back to any other
-   * state.
-   */
-  CANCELLED = "cancelled",
+  COMPENSATING = "compensating",
 }
 
 /**
@@ -88,30 +83,15 @@ export class DurableExecution {
   @Column({ type: "text", nullable: true })
   errorMessage?: string;
 
-  // ---------------------------------------------------------------------------
-  // Cancellation audit fields
-  // ---------------------------------------------------------------------------
+  // ── Compensation / failure classification ──────────────────────────────────
 
-  /**
-   * When the execution entered the CANCELLED state. Null unless status is
-   * CANCELLED.
-   */
-  @Column({ type: "timestamp", nullable: true })
-  cancelledAt?: Date | null;
+  /** How the failure was classified after compensation attempts */
+  @Column({ type: "varchar", nullable: true })
+  failureState?: FailureState;
 
-  /**
-   * The userId (or operator identifier) that requested cancellation. Null
-   * unless status is CANCELLED.
-   */
-  @Column({ type: "uuid", nullable: true })
-  cancelledBy?: string | null;
-
-  /**
-   * Optional human-readable reason supplied by the caller. Null unless the
-   * caller provided one.
-   */
-  @Column({ type: "text", nullable: true })
-  cancellationReason?: string | null;
+  /** Summary of compensation results */
+  @Column({ type: "jsonb", nullable: true })
+  compensationSummary?: Record<string, unknown>;
 
   @CreateDateColumn()
   createdAt!: Date;

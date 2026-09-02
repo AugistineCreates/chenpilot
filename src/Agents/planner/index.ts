@@ -13,6 +13,7 @@ export {
   DurableRecoveryService,
   durableRecoveryService,
 } from "./DurableRecoveryService";
+export { CompensationService, compensationService, buildCompensationPlan } from "./CompensationService";
 export { ExecutionStatus } from "./DurableExecution.entity";
 export { StepStatus } from "./DurableStep.entity";
 export { DependencyGraph } from "./DependencyGraph";

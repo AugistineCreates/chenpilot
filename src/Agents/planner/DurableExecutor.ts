@@ -13,6 +13,8 @@ import {
   getSocketManager,
   RealtimeEventType,
 } from "../../Gateway/socketManager";
+import { compensationService, buildCompensationPlan } from "./CompensationService";
+import { FailureState } from "../types";
 
 export interface DurableExecutionResult {
   executionId: string;
@@ -109,8 +111,17 @@ export class DurableExecutor {
       durableStep.action = step.action;
       durableStep.payload = step.payload;
       durableStep.status = StepStatus.PENDING;
-      durableStep.maxRetries = 3;
-      durableStep.requiresApproval = !!step.requiresApproval;
+      durableStep.maxRetries = 3; // Default
+      durableStep.requiresApproval = !!step.requiresApproval; // Map from plan step
+
+      // Build compensation plan for this step
+      const compensationPlan = buildCompensationPlan(step);
+      durableStep.compensationType = compensationPlan.type;
+      durableStep.rollbackAction = compensationPlan.rollbackAction ?? undefined;
+      durableStep.rollbackPayload = compensationPlan.rollbackPayload ?? undefined;
+      durableStep.compensationDescription = compensationPlan.description;
+      durableStep.maxCompensationRetries = compensationPlan.maxRetries ?? 3;
+
       return durableStep;
     });
 
@@ -381,9 +392,42 @@ export class DurableExecutor {
             step.result
           );
         } else {
-          execution.status = ExecutionStatus.FAILED;
+          // Step failed after retries — trigger compensation for completed steps
           execution.errorMessage = `Step ${step.stepNumber} (${step.action}) failed after ${step.retryCount} retries: ${step.error}`;
           await this.executionRepo.save(execution);
+
+          logger.info("Step failed, initiating compensation", {
+            executionId: execution.id,
+            failedStep: step.stepNumber,
+            totalCompleted: execution.steps.filter(
+              (s) => s.status === StepStatus.COMPLETED
+            ).length,
+          });
+
+          try {
+            const failureState = await compensationService.compensateFailedExecution(
+              execution.id,
+              step.stepNumber
+            );
+
+            execution.failureState = failureState;
+            execution.status = ExecutionStatus.FAILED;
+            await this.executionRepo.save(execution);
+
+            logger.info("Compensation completed", {
+              executionId: execution.id,
+              failureState,
+            });
+          } catch (compensationError) {
+            logger.error("Compensation failed", {
+              executionId: execution.id,
+              error: compensationError,
+            });
+
+            execution.failureState = FailureState.STRANDED;
+            execution.status = ExecutionStatus.FAILED;
+            await this.executionRepo.save(execution);
+          }
 
           this.emitUpdate(RealtimeEventType.AGENT_EXECUTION_FAILED, execution);
           return;

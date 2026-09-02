@@ -4,8 +4,8 @@ import { ExecutionPlan, PlanStep } from "./AgentPlanner";
 import { HashedPlan, planHashService } from "./planHash";
 import { policyEnforcer } from "../policy/PolicyEnforcer";
 import { durableExecutor } from "./DurableExecutor";
-import { capabilityManager } from "../capability/CapabilityManager";
-import { CapabilityGrant } from "../capability/types";
+import { compensationService } from "./CompensationService";
+import { FailureState } from "../types";
 import logger from "../../config/logger";
 import { QuoteExpiredError } from "../../domain/quotes/errors";
 
@@ -448,11 +448,38 @@ export class PlanExecutor {
   async rollback(
     plan: ExecutionPlan,
     executionResult: ExecutionResult
-  ): Promise<void> {
+  ): Promise<FailureState> {
     logger.info("Starting rollback", {
       planId: plan.planId,
       completedSteps: executionResult.completedSteps,
     });
+
+    if (executionResult.completedSteps === 0) {
+      logger.info("No completed steps to compensate", { planId: plan.planId });
+      return FailureState.RECOVERED;
+    }
+
+    // Build compensation plans for all completed steps
+    const compensationPlans = compensationService.buildCompensationPlans(
+      plan.steps.slice(0, executionResult.completedSteps)
+    );
+
+    logger.info("Compensation plans generated", {
+      planId: plan.planId,
+      plansCount: compensationPlans.length,
+      reversed: compensationPlans.map((p) => p.type),
+    });
+
+    // If we have an executionId from the result, delegate to CompensationService
+    if (executionResult.executionId) {
+      return compensationService.resumeCompensation(executionResult.executionId);
+    }
+
+    // Fallback: log that compensation was requested but no execution to compensate
+    logger.warn("Rollback requested but no executionId available", {
+      planId: plan.planId,
+    });
+    return FailureState.MANUAL_REVIEW;
   }
 }
 
