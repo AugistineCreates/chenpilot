@@ -1,8 +1,7 @@
 import { toolRegistry } from "../registry/ToolRegistry";
 import { userPreferencesService } from "../../Auth/userPreferences.service";
 import { riskEngine, RiskEngine } from "../risk/RiskEngine";
-import { capabilityManager } from "../capability/CapabilityManager";
-import { CapabilityGrant } from "../capability/types";
+import { shadowService } from "../../shadow";
 import logger from "../../config/logger";
 
 export interface PolicyContext {
@@ -181,13 +180,37 @@ export class PolicyEnforcer {
       }
     }
 
-    logger.debug("Policy allowed", {
-      userId,
-      action,
-      score: assessment.score,
-      tier: assessment.tier,
+    logger.debug("Policy allowed", { userId, action, score: assessment.score, tier: assessment.tier });
+    const result: PolicyResult = { allowed: true, riskAssessment: assessment };
+    await this.mirrorPolicy(ctx, result);
+    return result;
+  }
+
+  /**
+   * Mirror this policy decision through the shadow execution path (Issue #686).
+   * Does nothing when shadow execution is disabled; never affects the returned
+   * decision and never runs mutating operations.
+   */
+  private async mirrorPolicy(
+    ctx: PolicyContext,
+    result: PolicyResult
+  ): Promise<void> {
+    await shadowService.mirror({
+      runId: `policy-${ctx.userId}-${Date.now()}`,
+      input: {
+        action: ctx.action,
+        ...ctx.payload,
+        riskScore: result.riskAssessment?.score,
+      },
+      active: {
+        subject: "policy",
+        action: ctx.action,
+        allowed: result.allowed,
+        requiresApproval: result.requiresApproval,
+        reason: result.reason,
+        decisionSignature: `active:${ctx.action}:${result.allowed}:${result.requiresApproval ?? ""}`,
+      },
     });
-    return { allowed: true, riskAssessment: assessment };
   }
 
   private checkToolCapability(action: string): PolicyResult {

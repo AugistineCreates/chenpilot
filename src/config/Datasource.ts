@@ -23,8 +23,7 @@ import {
   AdminWorkflowInstance,
   AdminWorkflowApproval,
 } from "../Agents/admin/workflow.entity";
-import { TransactionLifecycle } from "../transactions/TransactionLifecycle.entity";
-import { LedgerObservation } from "../transactions/LedgerObservation.entity";
+import { ShadowComparisonRecord } from "../shadow/ShadowComparisonRecord.entity";
 
 const isDev = config.env === "development";
 
@@ -56,8 +55,7 @@ const dbOptions: DataSourceOptions = {
     AdminWorkflowPolicy,
     AdminWorkflowInstance,
     AdminWorkflowApproval,
-    TransactionLifecycle,
-    LedgerObservation,
+    ShadowComparisonRecord,
   ],
   migrations: [isDev ? "src/migrations/**/*.ts" : "dist/migrations/**/*.js"],
   subscribers: [],
