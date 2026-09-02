@@ -4,7 +4,7 @@ This document defines the invariants (safety properties) that must hold for each
 
 ## Table of Contents
 - [Common Invariants](#common-invariants)
-- [Cross-Contract Authorization Invariants](#cross-contract-authorization-invariants)
+- [Multi-Region Failover Invariants](#multi-region-failover-invariants)
 - [BTC Relay Invariants](#btc-relay-invariants)
 - [RBAC Invariants](#rbac-invariants)
 - [Multi-Hop Swap Invariants](#multi-hop-swap-invariants)
@@ -54,39 +54,85 @@ This document defines the invariants (safety properties) that must hold for each
 
 ---
 
-## Cross-Contract Authorization Invariants
+## Multi-Region Failover Invariants
 
-### CCA1: Trust Boundary Documentation
+These invariants preserve single-writer safety for durable operations and financial side effects across regional control planes. The goal is to make split-brain execution (two regions executing the same durable operation or allocating conflicting sequence numbers) impossible, not merely unlikely.
 
-**Invariant**: Every privileged cross-contract call must document its trust assumptions and trusted caller.
+### Definitions
+- **Epoch**: A strictly monotonic integer identifying the current ownership generation. Each promotion increments the epoch. Persisted in a linearizable, quorum-backed store (the fence store).
+- **Owner**: The single region whose epoch equals the current fence epoch. Only the owner may execute durable operations.
+- **Fence token**: The epoch value stamped on every durable side effect and sequence allocation.
+- **Durable operation**: Any operation with an external, non-idempotent financial side effect or that allocates a global sequence number.
 
-**Formal**: `∀ call ∈ privileged_cross_contract_calls: trust_documented(call) == true`
+### MRF1: Epoch Fence Required for Execution
+**Invariant**: No region may execute a durable operation without holding a valid epoch fence equal to the current fence-store epoch.
 
-**Enforcement**: Contract interfaces and design notes identify the trusted caller, entry point, and authorization scope.
+**Formal**: `execute(op) ⇒ region.epoch == fence_store.current_epoch()`
 
-### CCA2: Exact Authorization Binding
+**Enforcement**: The fence epoch is read (or leased with a bounded TTL) and re-validated against the linearizable fence store at the point of execution; any mismatch aborts the operation before side effects. Satisfies acceptance criterion: no region can execute without a valid epoch fence.
 
-**Invariant**: Authorization binds the exact contract, function, arguments, and nonce where applicable.
+### MRF2: Epoch Monotonicity
+**Invariant**: The fence epoch strictly increases and never repeats or decreases.
 
-**Formal**: `authorized(ctx) ⇒ ctx == (contract_id, function, args_hash, nonce)`
+**Formal**: `epoch(t+1) > epoch(t)`
 
-**Enforcement**: `require_auth` validates the full invocation payload; partial, forwarded, or replayed auth contexts are rejected.
+**Enforcement**: Compare-and-swap increment on the fence store during promotion; a promotion that cannot advance the epoch is rejected.
 
-### CCA3: Nested Invocation Preservation
+### MRF3: Single Owner
+**Invariant**: At most one region holds the current epoch at any time.
 
-**Invariant**: Authorization invariants hold for any nested invocation depth within protocol limits; an intermediary cannot confuse the deputy.
+**Formal**: `|{r | r.epoch == fence_store.current_epoch()}| <= 1`
 
-**Formal**: `∀ depth ≤ max_invocation_depth: auth_context(depth) == auth_context(0)`
+**Enforcement**: Ownership is a quorum-linearizable lease keyed by epoch; acquiring epoch N atomically invalidates all leases for epochs < N.
 
-**Enforcement**: Nested cross-contract calls preserve the originating authorized invocation path and never re-authorize with caller authority for unintended arguments.
+### MRF4: Fenced Sequence Allocation
+**Invariant**: Every allocated sequence number is stamped with the allocating epoch, and allocations from a stale epoch are rejected.
 
-### CCA4: Adversarial Intermediary Coverage
+**Formal**: `alloc(seq) ⇒ seq.epoch == fence_store.current_epoch() ∧ (epoch, seq) unique`
 
-**Invariant**: The test suite includes adversarial intermediary contracts that attempt authorization replay and confused-deputy attacks.
+**Enforcement**: Sequence allocator conditions each allocation on the current fence epoch (CAS); writes tagged with a superseded epoch are rejected by the durable store. Prevents conflicting sequence numbers across regions.
 
-**Formal**: `∀ adversarial_intermediary ∈ tests: security_invariants_hold`
+### MRF5: Stale-Writer Rejection
+**Invariant**: A demoted or partitioned former owner cannot commit side effects after a higher epoch exists.
 
-**Enforcement**: Integration tests deploy malicious intermediaries that re-enter, forward, and reuse auth contexts; invariant violations panic or revert.
+**Formal**: `write.epoch < fence_store.current_epoch() ⇒ write rejected`
+
+**Enforcement**: Durable stores and external effect gateways enforce a monotonic epoch guard on every write, rejecting any write carrying an epoch lower than the highest observed. This is the mechanism that network-partition tests exercise to prove split-brain rejection.
+
+### MRF6: Promotion Requires Verified Data and Chain-State Freshness
+**Invariant**: A region may be promoted to owner only after its replicated data and chain state are verified fresh and consistent up to the last committed operation of the prior epoch.
+
+**Formal**: `promote(region) ⇒ region.replication_lag == 0 ∧ region.chain_head_verified ∧ region.last_applied_seq >= prior_epoch.max_committed_seq`
+
+**Enforcement**: Promotion procedure blocks epoch increment until replication catch-up, integrity verification, and chain-state freshness checks pass; otherwise promotion is denied. Satisfies acceptance criterion: promotion requires verified data and chain-state freshness.
+
+### MRF7: Data Replication Durability Before Ack
+**Invariant**: A durable operation is acknowledged only after its effect and fence stamp are replicated to a quorum sufficient to survive the target failure domain.
+
+**Formal**: `ack(op) ⇒ replicated(op, quorum)`
+
+**Enforcement**: Synchronous quorum replication of the effect log and fence metadata prior to returning success, ensuring a promoted region can reconstruct authoritative state.
+
+### MRF8: Split-Brain Rejection Under Partition
+**Invariant**: During a network partition, a region that cannot confirm ownership against a quorum must not execute durable operations.
+
+**Formal**: `partitioned(region) ∧ ¬quorum_confirms(region.epoch) ⇒ ¬execute(durable_op)`
+
+**Enforcement**: Ownership leases require quorum confirmation with bounded TTL; on lease expiry or loss of quorum contact the region fences itself off (stops durable execution) before the prior lease can be reissued elsewhere. Verified by network-partition tests that assert the minority side rejects all durable operations.
+
+### MRF9: Documented Recovery Objectives and Override Risk
+**Invariant**: Recovery objectives and the risk profile of any manual override are explicitly documented and gated.
+
+**Formal**: `manual_override ⇒ documented ∧ authorized ∧ audited`
+
+**Enforcement**:
+- **RPO (Recovery Point Objective)**: 0 for financial side effects — no acknowledged durable operation may be lost, guaranteed by MRF7 quorum durability. Best-effort for non-durable telemetry.
+- **RTO (Recovery Time Objective)**: Bounded by lease TTL plus promotion verification time (MRF6); target documented per deployment.
+- **Manual override**: Forcing promotion without passing MRF6 verification, or manually advancing the epoch, can cause data loss or execution of operations against stale chain state. Overrides are therefore:
+  1. Restricted to break-glass credentials with multi-party authorization.
+  2. Required to explicitly acknowledge the RPO/consistency risk being accepted.
+  3. Fully audited via event emission (see I4) with the operator identity and justification.
+  Overriding MRF1–MRF5 (the fencing chain) is prohibited even under break-glass, because it directly reintroduces split-brain risk.
 
 ---
 

@@ -130,6 +130,11 @@ pub enum PauseError {
     /// contracts to use in their own cross-contract pause checks (see
     /// "Cross-contract pause checks" above).
     DependencyPaused = 3,
+    /// Raised by `require_epoch()` when a caller presents an epoch that
+    /// does not match the current on-chain fence — i.e. a fenced-out
+    /// (stale) writer from a superseded region attempting to execute a
+    /// durable operation after failover. Preserves single-writer safety.
+    EpochStale = 4,
 }
 
 /// Event topic published on every pause state change.
@@ -143,6 +148,10 @@ const EVT_PAUSE_CHANGED: Symbol = symbol_short!("pause_chg");
 #[derive(Clone)]
 enum PauseDataKey {
     PauseState,
+    /// Monotonic epoch fence. Advanced on promotion/failover so a
+    /// superseded writer's presented epoch no longer matches the current
+    /// value — see `current_epoch`/`bump_epoch`/`require_epoch`.
+    Epoch,
 }
 
 /// Persisted pause record. `paused_by` and `paused_at` are populated when
@@ -202,6 +211,46 @@ pub fn require_not_paused(env: &Env) {
     if is_paused(env) {
         env.panic_with_error(PauseError::ContractPaused);
     }
+}
+
+/// Current epoch fence. Defaults to 0 for a contract that has never been
+/// promoted/failed over. Monotonically increasing: each promotion bumps
+/// it, fencing out any writer still holding a prior epoch.
+pub fn current_epoch(env: &Env) -> u64 {
+    env.storage()
+        .instance()
+        .get(&PauseDataKey::Epoch)
+        .unwrap_or(0)
+}
+
+/// Fencing guard for durable/state-changing operations. A control plane
+/// threads through the epoch it was promoted under; if a failover has
+/// since advanced the fence, the presented epoch is stale and this panics
+/// with `PauseError::EpochStale`, preventing a superseded (e.g.
+/// partitioned, since-demoted) region from executing the same durable
+/// side effect or allocating a conflicting sequence number. Only a caller
+/// presenting the current epoch may proceed — this is the single-writer
+/// invariant. Call it alongside `require_not_paused` on any entry point
+/// that produces financial side effects.
+pub fn require_epoch(env: &Env, presented_epoch: u64) {
+    if presented_epoch != current_epoch(env) {
+        env.panic_with_error(PauseError::EpochStale);
+    }
+}
+
+/// Promote a new writer by advancing the epoch fence, returning the new
+/// epoch. Because the fence only ever increases, any in-flight operation
+/// still carrying the old epoch is rejected by `require_epoch`, so two
+/// control planes can never both hold a valid fence simultaneously — this
+/// is the on-chain half of split-brain rejection. This module performs no
+/// authorization (see the module-level "Design decision: no built-in
+/// auth" note); the caller must gate promotion behind its own admin/role
+/// check and, per the required promotion-freshness rule, must itself have
+/// verified data/chain-state freshness before calling.
+pub fn bump_epoch(env: &Env) -> u64 {
+    let next = current_epoch(env) + 1;
+    env.storage().instance().set(&PauseDataKey::Epoch, &next);
+    next
 }
 
 /// Pause the contract. `actor` is recorded on the event and in
