@@ -5,7 +5,7 @@ on:
     branches: ["**"]
   pull_request:
     branches: ["**"]
-    paths:
+    paths: 
       - "src/Gateway/**"
       - "src/scripts/testWebhookIdempotency.ts"
       - "src/config/Datasource.ts"
@@ -24,7 +24,7 @@ jobs:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
           POSTGRES_DB: chenpilot_test
-        options: >-
+        options: >
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
@@ -34,7 +34,7 @@ jobs:
 
       redis:
         image: redis:7
-        options: >-
+        options: >
           --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
@@ -59,13 +59,13 @@ jobs:
         run: npm run build:check
 
       - name: Backend unit tests
-        run: npm test -- --runInBand
+        run: npm test ---runInBand
 
       - name: Adversarial red-team evaluation gate (#634)
         run: npm run redteam:check
 
       - name: Webhook idempotency integration tests
-        run: npm test -- --testPathPattern="webhookIdempotency.integration" --runInBand
+        run: npm test ---testPatternPattern="webhookIdempotency.integration" --runInBand
         env:
           DATABASE_HOST: localhost
           DATABASE_PORT: 5432
@@ -99,12 +99,16 @@ jobs:
         working-directory: packages/sdk
 
       - name: SDK tests
-        run: npm test -- --runInBand
+        run: npm test ---runInBand
         working-directory: packages/sdk
 
-      - name: SDK artifact dry run
-        run: npm pack --dry-run
+      - name: API snapshot compatibility check
+        run: node api-snapshot.js compare
         working-directory: packages/sdk
+
+      - name: SDJ artifact dry run
+        run: npm pack --dry-run
+        working-directory: packages/sdd
 
   contract-health:
     name: Soroban contract compatibility

@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -21,7 +23,9 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@swt4
+        with:
+          fetch-depth: 0 # fetch all tags for version comparison
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -30,6 +34,14 @@ jobs:
 
       - name: Install SDK dependencies
         run: npm install
+        working-directory: packages/sdk
+
+      - name: Generate API snapshot
+        run: nxp api-extractor run --local
+        working-directory: packages/sdk
+
+      - name: Enforce API compatibility
+        run: npm run check:api
         working-directory: packages/sdk
 
       - name: Generate SDK API docs
