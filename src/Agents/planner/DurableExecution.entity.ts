@@ -18,6 +18,13 @@ export enum ExecutionStatus {
   PAUSED = "paused",
   AWAITING_APPROVAL = "awaiting_approval",
   COMPENSATING = "compensating",
+  /**
+   * Terminal state: execution was explicitly cancelled by a user or operator
+   * before all irreversible steps were committed. Once durably written, this
+   * status is immutable — the record must never transition back to any other
+   * state.
+   */
+  CANCELLED = "cancelled",
 }
 
 /**
@@ -92,6 +99,31 @@ export class DurableExecution {
   /** Summary of compensation results */
   @Column({ type: "jsonb", nullable: true })
   compensationSummary?: Record<string, unknown>;
+
+  // ---------------------------------------------------------------------------
+  // Cancellation audit fields
+  // ---------------------------------------------------------------------------
+
+  /**
+   * When the execution entered the CANCELLED state. Null unless status is
+   * CANCELLED.
+   */
+  @Column({ type: "timestamp", nullable: true })
+  cancelledAt?: Date | null;
+
+  /**
+   * The userId (or operator identifier) that requested cancellation. Null
+   * unless status is CANCELLED.
+   */
+  @Column({ type: "uuid", nullable: true })
+  cancelledBy?: string | null;
+
+  /**
+   * Optional human-readable reason supplied by the caller. Null unless the
+   * caller provided one.
+   */
+  @Column({ type: "text", nullable: true })
+  cancellationReason?: string | null;
 
   @CreateDateColumn()
   createdAt!: Date;

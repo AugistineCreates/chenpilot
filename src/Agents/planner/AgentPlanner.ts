@@ -56,6 +56,12 @@ export interface PlanStep extends WorkflowStep {
   rollbackActionName?: string;
   /** Payload for the rollback action */
   rollbackPayload?: Record<string, unknown>;
+  /** Attenuated capability grant bound to this step */
+  capabilityGrant?: import("../capability/types").CapabilityGrant | string;
+  /** Optional delegated sub-plan */
+  subPlan?: ExecutionPlan;
+  /** Designated specialist agent for delegation */
+  delegatedAgent?: string;
 }
 
 export interface ExecutionPlan {

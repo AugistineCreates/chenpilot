@@ -6,6 +6,8 @@ import { policyEnforcer } from "../policy/PolicyEnforcer";
 import { durableExecutor } from "./DurableExecutor";
 import { compensationService } from "./CompensationService";
 import { FailureState } from "../types";
+import { capabilityManager } from "../capability/CapabilityManager";
+import { CapabilityGrant } from "../capability/types";
 import logger from "../../config/logger";
 import { QuoteExpiredError } from "../../domain/quotes/errors";
 
