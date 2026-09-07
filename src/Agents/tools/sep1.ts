@@ -1,7 +1,13 @@
 import { BaseTool } from "./base/BaseTool";
 import { ToolMetadata, ToolResult } from "../registry/ToolMetadata";
 import logger from "../../config/logger";
-import { createBudget, budgetedFetch, BudgetExhaustedError } from "../../utils/budget";
+import { secureFetch } from "../../Security/egress";
+import {
+  createBudget,
+  BudgetExhaustedError,
+  withBudget,
+  type RequestBudget,
+} from "../../utils/budget";
 
 /**
  * SEP-1 Stellar.toml metadata structure
@@ -128,12 +134,12 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
   private readonly assetPattern =
     /^[A-Z0-9]{1,12}:[GABCDEF0-9]{10,56}$/i;
 
-  private readonly tomlBudget = createBudget({
+  private readonly tomlBudget: RequestBudget = createBudget({
+    path: "sep1.fetchStellarToml",
     deadlineMs: 10000,
     attempts: 2,
     bytes: 256 * 1024,
     downstreamCalls: 3,
-    path: "sep1.toml",
   });
 
   /**
@@ -397,21 +403,37 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
         ? `https://${domain}/stellar.toml`
         : `https://${domain}/.well-known/stellar.toml`;
 
-      const response = await budgetedFetch(this.tomlBudget, url, {
-        headers: {
-          Accept: "text/plain",
-        },
-        { egress: this.metadata.egress }
+      const response = await withBudget(
+        this.tomlBudget,
+        () =>
+          secureFetch(
+            url,
+            {
+              headers: {
+                Accept: "text/plain",
+              },
+            },
+            { egress: this.metadata.egress }
+          ),
+        { resource: "downstreamCalls" }
       );
 
       if (!response.ok) {
         // Try alternative path
         const altUrl = `https://${domain}/stellar.toml`;
-        const altResponse = await budgetedFetch(this.tomlBudget, altUrl, {
-          headers: {
-            Accept: "text/plain",
-          },
-          { egress: this.metadata.egress }
+        const altResponse = await withBudget(
+          this.tomlBudget,
+          () =>
+            secureFetch(
+              altUrl,
+              {
+                headers: {
+                  Accept: "text/plain",
+                },
+              },
+              { egress: this.metadata.egress }
+            ),
+          { resource: "downstreamCalls" }
         );
 
         if (!altResponse.ok) {
@@ -429,9 +451,10 @@ export class Sep1Tool extends BaseTool<AssetMetadataPayload> {
       return this.parseToml(text);
     } catch (error) {
       if (error instanceof BudgetExhaustedError) {
-        logger.error(`Budget exhausted fetching stellar.toml from ${domain}:`, {
-          resource: error.resource,
-        });
+        logger.error(
+          `SEP-1 budget exhausted fetching stellar.toml from ${domain}:`,
+          { resource: error.resource }
+        );
         return null;
       }
       logger.error(`Error fetching stellar.toml from ${domain}:`, error);
