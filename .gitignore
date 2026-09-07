@@ -1,8 +1,9 @@
-node_modules
-packages/*/node_modules
-dist
-.env
+node_modules/
+dist/
+build/
+logs/
 .env.local
+.env
 redteam-report.json
 src/Auth/accounts.json
 
@@ -14,21 +15,3 @@ dist/
 coverage/
 logs/
 *.log
-compile_error.log
-
-# Agent/tooling artifacts
-.agent/
-.agents/
-.asset-cache/
-packages/*/.asset-cache/
-
-# Scratch/working files
-issue.md
-COMMIT.md
-fix.md
-
-# Compiled targets
-contracts/target
-target
-.DS_Store
-
