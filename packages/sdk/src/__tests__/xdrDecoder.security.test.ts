@@ -6,7 +6,6 @@ import {
   safeScValToNative,
   XdrPreValidator,
   DEFAULT_XDR_LIMITS,
-  STRICT_XDR_LIMITS,
   XdrSecurityError,
   XdrByteLimitExceededError,
   XdrBase64LimitExceededError,
@@ -33,9 +32,9 @@ describe("XDR Security & Hardened Decoding Subsystem (#663)", () => {
     });
 
     it("rejects non-string non-buffer input types", () => {
-      expect(() => XdrPreValidator.validateAndNormalize(12345 as never)).toThrow(
-        XdrMalformedError
-      );
+      expect(() =>
+        XdrPreValidator.validateAndNormalize(12345 as never)
+      ).toThrow(XdrMalformedError);
       expect(() => XdrPreValidator.validateAndNormalize({} as never)).toThrow(
         XdrMalformedError
       );
@@ -43,32 +42,32 @@ describe("XDR Security & Hardened Decoding Subsystem (#663)", () => {
 
     it("rejects oversized base64 strings exceeding maxBase64Length", () => {
       const oversized = "A".repeat(DEFAULT_XDR_LIMITS.maxBase64Length + 10);
-      expect(() =>
-        SafeXdrDecoder.decodeTransaction(oversized)
-      ).toThrow(XdrBase64LimitExceededError);
+      expect(() => SafeXdrDecoder.decodeTransaction(oversized)).toThrow(
+        XdrBase64LimitExceededError
+      );
     });
 
     it("rejects oversized raw buffers exceeding maxByteLength", () => {
       const hugeBuffer = Buffer.alloc(DEFAULT_XDR_LIMITS.maxByteLength + 100);
-      expect(() =>
-        SafeXdrDecoder.decodeTransaction(hugeBuffer)
-      ).toThrow(XdrByteLimitExceededError);
+      expect(() => SafeXdrDecoder.decodeTransaction(hugeBuffer)).toThrow(
+        XdrByteLimitExceededError
+      );
     });
 
     it("rejects invalid non-base64 characters before buffer allocation", () => {
       const invalidChars = "AAAA!@#$%^&*()_+===";
-      expect(() =>
-        SafeXdrDecoder.decodeTransaction(invalidChars)
-      ).toThrow(XdrMalformedError);
+      expect(() => SafeXdrDecoder.decodeTransaction(invalidChars)).toThrow(
+        XdrMalformedError
+      );
     });
 
     it("rejects empty payload", () => {
-      expect(() =>
-        SafeXdrDecoder.decodeTransaction("")
-      ).toThrow(XdrMalformedError);
-      expect(() =>
-        SafeXdrDecoder.decodeTransaction(Buffer.alloc(0))
-      ).toThrow(XdrMalformedError);
+      expect(() => SafeXdrDecoder.decodeTransaction("")).toThrow(
+        XdrMalformedError
+      );
+      expect(() => SafeXdrDecoder.decodeTransaction(Buffer.alloc(0))).toThrow(
+        XdrMalformedError
+      );
     });
   });
 
@@ -200,8 +199,10 @@ describe("XDR Security & Hardened Decoding Subsystem (#663)", () => {
 
   describe("6. Bounded Diagnostic Sanitization & Zero Payload Echoing", () => {
     it("never echoes secret or attacker payload in error diagnostic", () => {
-      const secretPayload = "SECRET_TOKEN_1234567890_UNAUTHORIZED_BLOCKCHAIN_DATA_EXFILTRATION";
-      const garbageXdr = "AAAA" + Buffer.from(secretPayload).toString("base64") + "====";
+      const secretPayload =
+        "SECRET_TOKEN_1234567890_UNAUTHORIZED_BLOCKCHAIN_DATA_EXFILTRATION";
+      const garbageXdr =
+        "AAAA" + Buffer.from(secretPayload).toString("base64") + "====";
 
       try {
         SafeXdrDecoder.decodeTransaction(garbageXdr);
@@ -211,7 +212,9 @@ describe("XDR Security & Hardened Decoding Subsystem (#663)", () => {
         const errorMsg = (err as Error).message;
 
         // Verify message length is bounded
-        expect(errorMsg.length).toBeLessThanOrEqual(DEFAULT_XDR_LIMITS.maxDiagnosticLength);
+        expect(errorMsg.length).toBeLessThanOrEqual(
+          DEFAULT_XDR_LIMITS.maxDiagnosticLength
+        );
 
         // Verify secret token string is NEVER present in the error message
         expect(errorMsg.includes(secretPayload)).toBe(false);
@@ -219,7 +222,8 @@ describe("XDR Security & Hardened Decoding Subsystem (#663)", () => {
     });
 
     it("sanitizes XdrDecoder.explainOperation errors without leaking payload", () => {
-      const maliciousPayload = "SOME_MALICIOUS_AND_VERY_LONG_PAYLOAD_STRING_THAT_SHOULD_NEVER_BE_LOGGED";
+      const maliciousPayload =
+        "SOME_MALICIOUS_AND_VERY_LONG_PAYLOAD_STRING_THAT_SHOULD_NEVER_BE_LOGGED";
       const result = XdrDecoder.explainOperation(maliciousPayload);
 
       expect(result.startsWith("Failed to decode operation:")).toBe(true);
@@ -244,7 +248,10 @@ describe("XDR Security & Hardened Decoding Subsystem (#663)", () => {
     });
 
     it("correctly decodes and explains valid change trust operation", () => {
-      const customAsset = new StellarSdk.Asset("USDC", sampleKeypair.publicKey());
+      const customAsset = new StellarSdk.Asset(
+        "USDC",
+        sampleKeypair.publicKey()
+      );
       const op = StellarSdk.Operation.changeTrust({
         asset: customAsset,
         limit: "10000",

@@ -1,4 +1,5 @@
 export * from "./canonical";
+export { canonicalize } from "./canonical";
 export * from "./networkIntelligence";
 export * from "./networkIdentity";
 export * from "./errors";
@@ -76,5 +77,39 @@ export * from "./memoUtils";
 export * from "./xdrDecoder";
 export * from "./xdr";
 export * from "./assetCache";
-export * from "./networkStatus";
-export * from "./idempotency";
+export {
+  ContractClient,
+  ContractCall,
+  ContractClientConfig,
+  CompatibilityPolicy,
+  ContractFunctionKind,
+  ApprovalCheckpoint,
+  QueryRequest,
+  ExecuteRequest,
+  ResultDecoder,
+  ContractResult,
+} from "./contractClient";
+export * from "./advancedOps";
+export * from "./signerSession";
+export * from "./offlineSigning";
+export * from "./performance";
+export {
+  AssetIntelligence,
+  AssetCache as AssetIntelligenceCache,
+  CacheInvalidator,
+  TrustScorer,
+  TrustSignals,
+  TrustRegistry,
+  MemoryCache,
+  PersistentCache,
+  CacheKey,
+  CachePolicy,
+  EvictionPolicy,
+  AssetValidator,
+  NetworkCompatibility,
+  VersionCompatibility,
+  AssetCacheAdapter,
+  MetadataManagerAdapter,
+  createMigrationAdapters,
+  MIGRATION_GUIDE,
+} from "./assetIntelligence";

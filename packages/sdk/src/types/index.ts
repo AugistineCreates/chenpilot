@@ -342,62 +342,11 @@ export interface IdempotencyStep {
   idempotencyKey: string;
   result?: unknown;
   error?: string;
-  lastUpdated: number;
-  retryCount: number;
-}
-
-export interface IdempotencyTrackerConfig {
-  namespace: string;
-  workflowId: string;
-  clientRequestId?: string;
-  ttl?: number;
-}
-
-export interface IdempotencyWorkflow {
-  idempotencyKey: string;
-  namespace: string;
-  workflowId: string;
-  status: "active" | "completed" | "failed";
-  steps: Map<string, IdempotencyStep>;
-  metadata?: Record<string, unknown>;
-  createdAt: number;
-  lastUpdated: number;
-  ttl: number;
-}
-
-export interface StepExecutionOptions {
-  skipIfCompleted?: boolean;
-  maxRetries?: number;
-  retryDelayMs?: number;
-  timeoutMs?: number;
-}
-
-export interface StepRecoveryPlan {
-  stepsToRetry: string[];
-  stepsToSkip: string[];
-  canContinue: boolean;
-  recommendation: string;
-}
-
-export type StepExecutor = (
-  stepId: string,
-  step: IdempotencyStep,
-  attempt: number
-) => Promise<unknown>;
-
-export interface StepRecoveryStrategyFn {
-  maxRetries?: number;
-  retryDelayMs?: number;
-  canRetry?: boolean;
-  shouldRetry?: (error: Error, attempt: number) => boolean;
-  onFailure?: (step: IdempotencyStep, error: Error) => Promise<void>;
-}
-
-export interface VaultOperationRequest {
-  vaultId: string;
-  operationType: string;
-  asset: string;
-  amount: string;
-  destination?: string;
-  metadata?: Record<string, unknown>;
+  finalLimits: ResourceLimits;
+  attempts: Array<{
+    attempt: number;
+    limits: ResourceLimits;
+    error?: string;
+  }>;
+  estimatedFee: number;
 }

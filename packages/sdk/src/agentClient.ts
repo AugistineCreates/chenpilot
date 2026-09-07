@@ -56,7 +56,16 @@ export class AgentRequestError extends SdkError {
     attempts: number,
     statusCode?: number
   ) {
-    super(message);
+    const category =
+      statusCode !== undefined
+        ? categorizeHttpStatus(statusCode)
+        : ErrorCategory.TRANSPORT;
+    const code =
+      statusCode !== undefined ? `HTTP_${statusCode}` : "AGENT_REQUEST_FAILED";
+    const recoverable =
+      statusCode !== undefined ? RETRIABLE_STATUS_CODES.has(statusCode) : false;
+
+    super({ category, code, message, recoverable });
     this.name = "AgentRequestError";
     this.idempotencyKey = idempotencyKey;
     this.attempts = attempts;
@@ -133,7 +142,7 @@ export function createBtcToStellarSwapIdempotencyKey(
     clientRequestId,
   });
 }
-  function toSwapQuery(request: CrossChainSwapRequest): string {
+function toSwapQuery(request: CrossChainSwapRequest): string {
   return [
     `Swap ${request.amount} ${request.fromToken}`,
     `from ${request.fromChain}`,

@@ -1,4 +1,6 @@
 // chenpilot/tests/setup.ts
+// Set test fallback environment variables before any config module is loaded
+
 process.env.JWT_SECRET =
   process.env.JWT_SECRET || "default_test_jwt_secret_32_chars_long_12345";
 process.env.ENCRYPTION_KEY =

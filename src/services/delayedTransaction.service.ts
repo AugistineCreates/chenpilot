@@ -8,10 +8,7 @@ import { SafeXdrDecoder } from "../utils/xdr";
 /**
  * Delay strategy for transaction submission
  */
-export type DelayStrategy = 
-  | "scheduled"
-  | "fee_based"
-  | "congestion_based";
+export type DelayStrategy = "scheduled" | "fee_based" | "congestion_based";
 
 export interface DelayedTransactionConfig {
   strategy: DelayStrategy;
@@ -102,11 +99,14 @@ export class DelayedTransactionService {
 
   constructor() {
     this.server = new StellarSdk.Horizon.Server(config.stellar.horizonUrl);
-    
+
     // Register handler for delayed transactions
-    durableOperationService.registerHandler("delayed_transaction", async (payload) => {
-      return this.executeTransaction(payload.transactionXdr);
-    });
+    durableOperationService.registerHandler(
+      "delayed_transaction",
+      async (payload) => {
+        return this.executeTransaction(payload.transactionXdr);
+      }
+    );
   }
 
   /**
@@ -136,7 +136,9 @@ export class DelayedTransactionService {
       clearInterval(this.checkInterval);
       this.checkInterval = null;
     }
-    logger.info("Delayed transaction service initialized with durable framework");
+    logger.info(
+      "Delayed transaction service initialized with durable framework"
+    );
   }
 
   async createDelayedTransaction(
@@ -161,7 +163,7 @@ export class DelayedTransactionService {
         ? new Date(delayedConfig.scheduledAt)
         : new Date();
 
-    const job = await jobQueueService.enqueueWithContext({
+    await jobQueueService.enqueueWithContext({
       queue: "transactions",
       jobType: "delayed_transaction.submit",
       userId,
@@ -188,13 +190,18 @@ export class DelayedTransactionService {
     return durableOperationService.execute({
       category: "delayed_transaction",
       payload: { userId, transactionXdr },
-      scheduledAt: config.strategy === "scheduled" ? new Date(config.scheduledAt!) : undefined,
+      scheduledAt:
+        config.strategy === "scheduled"
+          ? new Date(config.scheduledAt!)
+          : undefined,
       conditions: config.strategy !== "scheduled" ? config : undefined,
       maxRetries: config.maxRetries,
     });
   }
 
-  private async executeTransaction(xdr: string): Promise<{ hash: string; ledger: number; envelopeXdr: string }> {
+  private async executeTransaction(
+    xdr: string
+  ): Promise<{ hash: string; ledger: number; envelopeXdr: string }> {
     const tx = SafeXdrDecoder.decodeTransaction(xdr, {
       networkPassphrase: config.stellar.networkPassphrase,
     }) as StellarSdk.Transaction;
@@ -359,10 +366,9 @@ export class DelayedTransactionService {
 
     try {
       const networkPassphrase = config.stellar.networkPassphrase;
-      const tx = SafeXdrDecoder.decodeTransaction(
-        delayedTx.transactionXdr,
-        { networkPassphrase }
-      ) as StellarSdk.Transaction;
+      const tx = SafeXdrDecoder.decodeTransaction(delayedTx.transactionXdr, {
+        networkPassphrase,
+      }) as StellarSdk.Transaction;
 
       const response = await this.server.submitTransaction(tx);
 
@@ -410,7 +416,7 @@ export class DelayedTransactionService {
   /**
    * Cancel a delayed transaction
    */
-  cancelTransaction(id: string, _userId: string): boolean {
+  cancelTransaction(id: string): boolean {
     const delayedTx = this.pendingDelayedTxs.get(id);
 
     if (!delayedTx) {
@@ -420,9 +426,14 @@ export class DelayedTransactionService {
     delayedTx.status = "cancelled";
 
     if (delayedTx.lifecycleId) {
-      transactionLifecycleService.cancel(delayedTx.lifecycleId, "Cancelled by user").catch((err) => {
-        logger.warn("Failed to cancel lifecycle for delayed transaction", { id, err });
-      });
+      transactionLifecycleService
+        .cancel(delayedTx.lifecycleId, "Cancelled by user")
+        .catch((err) => {
+          logger.warn("Failed to cancel lifecycle for delayed transaction", {
+            id,
+            err,
+          });
+        });
     }
 
     logger.info(`Cancelled delayed transaction ${id}`);
@@ -450,11 +461,7 @@ export class DelayedTransactionService {
   /**
    * Update a scheduled transaction time
    */
-  rescheduleTransaction(
-    id: string,
-    _userId: string,
-    newScheduledAt: number
-  ): boolean {
+  rescheduleTransaction(id: string, newScheduledAt: number): boolean {
     const delayedTx = this.pendingDelayedTxs.get(id);
 
     if (!delayedTx) {

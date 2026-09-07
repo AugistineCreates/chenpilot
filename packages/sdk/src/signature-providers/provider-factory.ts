@@ -1,6 +1,9 @@
 import { ChainId } from "../types";
 import { SignatureProvider } from "./interfaces";
-import { AlbedoSignatureProvider, AlbedoProviderConfig } from "./albedo-provider";
+import {
+  AlbedoSignatureProvider,
+  AlbedoProviderConfig,
+} from "./albedo-provider";
 import {
   SignatureProviderRegistry,
   signatureProviderRegistry,
@@ -236,7 +239,7 @@ export class SignatureProviderFactory {
 
     const configs: ProviderConfig[] = availableProviders
       .filter((discovery) => this.supportsChain(discovery.type, chainId))
-      .map((discovery) => ({ type: discovery.type } as ProviderConfig));
+      .map((discovery) => ({ type: discovery.type }) as ProviderConfig);
 
     if (configs.length === 0) {
       throw new UnsupportedChainError(chainId);
@@ -324,7 +327,9 @@ export class SignatureProviderFactory {
     return new AlbedoSignatureProvider(config);
   }
 
-  private createProviderInstance(providerConfig: ProviderConfig): SignatureProvider {
+  private createProviderInstance(
+    providerConfig: ProviderConfig
+  ): SignatureProvider {
     switch (providerConfig.type) {
       case ProviderType.MOCK:
         return this.createMockProvider(providerConfig.config);

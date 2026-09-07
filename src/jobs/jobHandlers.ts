@@ -6,7 +6,9 @@ import AppDataSource from "../config/Datasource";
 import logger from "../config/logger";
 import { DeploymentEventBridge, TransactionEventBridge } from "../Gateway/eventBridges";
 import { JobHandler, JobHandlerResult, NonRetryableJobError } from "./jobWorker";
+import { getFinalizationManager } from "../services/finality/FinalizationManager";
 import { SafeXdrDecoder } from "../utils/xdr";
+
 
 interface DelayedTransactionPayload {
   userId: string;

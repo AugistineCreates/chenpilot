@@ -3,16 +3,15 @@
 jest.unmock("@stellar/stellar-sdk");
 jest.unmock("stellar-sdk");
 
-const StellarSdk = jest.requireActual("@stellar/stellar-sdk") as typeof import("@stellar/stellar-sdk");
+const StellarSdk = jest.requireActual(
+  "@stellar/stellar-sdk"
+) as typeof import("@stellar/stellar-sdk");
 
 import {
   SafeXdrDecoder,
   XdrPreValidator,
   safeScValToNative,
   DEFAULT_XDR_LIMITS,
-  STRICT_XDR_LIMITS,
-  PERMISSIVE_XDR_LIMITS,
-  XdrSecurityError,
   XdrByteLimitExceededError,
   XdrBase64LimitExceededError,
   XdrDepthLimitExceededError,
@@ -29,34 +28,38 @@ describe("Backend SafeXdrDecoder Security & Resource Hardening (#663)", () => {
 
   describe("1. Pre-validation and Byte/Base64 Limits", () => {
     it("rejects null or undefined input with XdrMalformedError", () => {
-      expect(() => SafeXdrDecoder.decodeEnvelope(null as unknown as string)).toThrow(
-        XdrMalformedError
-      );
+      expect(() =>
+        SafeXdrDecoder.decodeEnvelope(null as unknown as string)
+      ).toThrow(XdrMalformedError);
       expect(() =>
         SafeXdrDecoder.decodeEnvelope(undefined as unknown as string)
       ).toThrow(XdrMalformedError);
     });
 
     it("rejects non-string non-buffer input types", () => {
-      expect(() => SafeXdrDecoder.decodeEnvelope(12345 as unknown as string)).toThrow(
-        XdrMalformedError
-      );
-      expect(() => SafeXdrDecoder.decodeEnvelope({} as unknown as string)).toThrow(
-        XdrMalformedError
-      );
+      expect(() =>
+        SafeXdrDecoder.decodeEnvelope(12345 as unknown as string)
+      ).toThrow(XdrMalformedError);
+      expect(() =>
+        SafeXdrDecoder.decodeEnvelope({} as unknown as string)
+      ).toThrow(XdrMalformedError);
     });
 
     it("rejects oversized base64 strings exceeding maxBase64Length", () => {
       const hugeBase64 = "AAAA".repeat(100_000); // 400KB > 350KB default limit
       expect(() =>
-        SafeXdrDecoder.decodeEnvelope(hugeBase64, { limits: { maxBase64Length: 1000 } })
+        SafeXdrDecoder.decodeEnvelope(hugeBase64, {
+          limits: { maxBase64Length: 1000 },
+        })
       ).toThrow(XdrBase64LimitExceededError);
     });
 
     it("rejects oversized raw buffers exceeding maxByteLength", () => {
       const hugeBuffer = Buffer.alloc(300 * 1024); // 300KB > 256KB default limit
       expect(() =>
-        SafeXdrDecoder.decodeEnvelope(hugeBuffer, { limits: { maxByteLength: 256 * 1024 } })
+        SafeXdrDecoder.decodeEnvelope(hugeBuffer, {
+          limits: { maxByteLength: 256 * 1024 },
+        })
       ).toThrow(XdrByteLimitExceededError);
     });
 
@@ -68,7 +71,9 @@ describe("Backend SafeXdrDecoder Security & Resource Hardening (#663)", () => {
     });
 
     it("rejects empty payload", () => {
-      expect(() => SafeXdrDecoder.decodeEnvelope("")).toThrow(XdrMalformedError);
+      expect(() => SafeXdrDecoder.decodeEnvelope("")).toThrow(
+        XdrMalformedError
+      );
       expect(() => SafeXdrDecoder.decodeEnvelope(Buffer.alloc(0))).toThrow(
         XdrMalformedError
       );
@@ -81,7 +86,10 @@ describe("Backend SafeXdrDecoder Security & Resource Hardening (#663)", () => {
       for (let i = 0; i < 5; i++) {
         currentVal = StellarSdk.xdr.ScVal.scvVec([currentVal]);
       }
-      const native = safeScValToNative(currentVal, { ...DEFAULT_XDR_LIMITS, maxDepth: 10 });
+      const native = safeScValToNative(currentVal, {
+        ...DEFAULT_XDR_LIMITS,
+        maxDepth: 10,
+      });
       expect(native).toEqual([[[[[42]]]]]);
     });
 
@@ -136,7 +144,10 @@ describe("Backend SafeXdrDecoder Security & Resource Hardening (#663)", () => {
       }
       const vecVal = StellarSdk.xdr.ScVal.scvVec(items);
       expect(() =>
-        safeScValToNative(vecVal, { ...DEFAULT_XDR_LIMITS, maxCollectionEntries: 100 })
+        safeScValToNative(vecVal, {
+          ...DEFAULT_XDR_LIMITS,
+          maxCollectionEntries: 100,
+        })
       ).toThrow(XdrCollectionLimitExceededError);
     });
 
@@ -176,7 +187,10 @@ describe("Backend SafeXdrDecoder Security & Resource Hardening (#663)", () => {
       }
       const vecVal = StellarSdk.xdr.ScVal.scvVec(items);
       expect(() =>
-        safeScValToNative(vecVal, { ...DEFAULT_XDR_LIMITS, maxComputationSteps: 20 })
+        safeScValToNative(vecVal, {
+          ...DEFAULT_XDR_LIMITS,
+          maxComputationSteps: 20,
+        })
       ).toThrow(XdrComputationLimitExceededError);
     });
   });
@@ -196,7 +210,9 @@ describe("Backend SafeXdrDecoder Security & Resource Hardening (#663)", () => {
 
   describe("7. Safe TryDecode Methods", () => {
     it("supports tryDecodeTransaction without throwing on malformed input", () => {
-      const result = SafeXdrDecoder.tryDecodeTransaction("malformed_xdr_payload");
+      const result = SafeXdrDecoder.tryDecodeTransaction(
+        "malformed_xdr_payload"
+      );
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
       expect(result.transaction).toBeUndefined();
