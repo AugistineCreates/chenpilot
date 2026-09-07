@@ -63,6 +63,8 @@ const PROTOCOL_TRUST: Record<string, number> = {
   qa: 0,
   meta: 0,
   risk_analysis_tool: 0,
+  checkBalance: 0,
+  getData: 0,
   // Moderate — multi-hop routing adds complexity
   "multi-hop-trade": 0.4,
   // High-trust execution tools (audited, in production)
@@ -94,6 +96,8 @@ const ACTION_TYPE_RISK: Record<string, number> = {
   qa: 0,
   meta: 0,
   risk_analysis_tool: 0,
+  checkBalance: 0,
+  getData: 0,
   // Write — moderate
   "multi-hop-trade": 0.45,
   wallet: 0.5,
@@ -105,7 +109,6 @@ const ACTION_TYPE_RISK: Record<string, number> = {
   // Write — high
   swap: 0.6,
   swap_tool: 0.6,
-  swap: 0.3,
   soroban_invoke: 0.65,
   strategyRegistry: 0.75,
 };

@@ -7,8 +7,8 @@ import { HashedPlan, planHashService } from "./planHash";
 import {
   toolAuthorizationService,
   ToolAuthority,
-  HIGH_RISK_ACTIONS,
 } from "../policy/ToolAuthorizationService";
+import { riskEngine, RiskEngine } from "../risk/RiskEngine";
 import { TrustLevel, ContextProvenance } from "../context/TrustZone";
 import { AgentContextBuilder } from "../context/AgentContextBuilder";
 import {
@@ -242,23 +242,20 @@ Output JSON format:
     context: PlannerContext
   ): ExecutionPlan {
     const planId = `plan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const steps: PlanStep[] = workflowPlan.workflow.map((step, index) => {
-      const isHighRisk = this.isHighRiskAction(step);
-      const { compensationType, rollbackActionName, rollbackPayload } =
-        this.buildCompensationInfo(step);
-      return {
-        stepNumber: index + 1,
-        action: step.action,
-        payload: step.payload,
-        description: this.generateStepDescription(step),
-        estimatedDuration: 3000,
-        dependencies: [],
-        requiresApproval: isHighRisk,
-        compensationType,
-        rollbackActionName,
-        rollbackPayload,
-      };
-    });
+    const steps: PlanStep[] = (workflowPlan.workflow || []).map(
+      (step, index) => {
+        const isHighRisk = this.isHighRiskAction(step);
+        return {
+          stepNumber: index + 1,
+          action: step.action,
+          payload: step.payload,
+          description: this.generateStepDescription(step),
+          estimatedDuration: 3000,
+          dependencies: [],
+          requiresApproval: isHighRisk,
+        };
+      }
+    );
 
     const riskLevel = this.assessRiskLevel(steps);
 
@@ -294,63 +291,6 @@ Output JSON format:
 
   private generateStepDescription(step: WorkflowStep): string {
     return `Execute ${step?.action || "unknown"}`;
-  }
-
-  /**
-   * Build compensation metadata for a workflow step.
-   * Every mutating step must declare rollback or irreversibility semantics.
-   */
-  private buildCompensationInfo(step: WorkflowStep): {
-    compensationType: CompensationType;
-    rollbackActionName?: string;
-    rollbackPayload?: Record<string, unknown>;
-  } {
-    const action = step.action.toLowerCase();
-    const payload = step.payload;
-
-    const irreversibleActions = ["send", "transfer", "approve", "submit_transaction"];
-    const manualReviewActions = [
-      "lend", "borrow", "repay", "withdraw",
-      "add_liquidity", "remove_liquidity",
-    ];
-
-    if (irreversibleActions.some((a) => action.includes(a))) {
-      return {
-        compensationType: CompensationType.IRREVERSIBLE,
-        rollbackActionName: undefined,
-        rollbackPayload: undefined,
-      };
-    }
-
-    if (manualReviewActions.some((a) => action.includes(a))) {
-      return {
-        compensationType: CompensationType.REQUIRES_MANUAL_REVIEW,
-        rollbackActionName: undefined,
-        rollbackPayload: undefined,
-      };
-    }
-
-    // Reversible — build a rollback action
-    const isSwapLike =
-      action.includes("swap") ||
-      action.includes("path_payment") ||
-      action.includes("dex");
-    if (isSwapLike) {
-      const from = payload.from || payload.sendAsset;
-      const to = payload.to || payload.destAsset;
-      const amount = payload.amount || payload.sendAmount;
-      return {
-        compensationType: CompensationType.REVERSIBLE,
-        rollbackActionName: step.action,
-        rollbackPayload: { from: to, to: from, amount },
-      };
-    }
-
-    return {
-      compensationType: CompensationType.REVERSIBLE,
-      rollbackActionName: step.action,
-      rollbackPayload: { ...payload, _compensation: true },
-    };
   }
 
   private assessRiskLevel(steps: PlanStep[]): "low" | "medium" | "high" {

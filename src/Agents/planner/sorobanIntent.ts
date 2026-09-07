@@ -18,8 +18,6 @@ const LIQUIDITY_POOL_KEYWORDS = [
   "pool apr",
 ];
 
-
-
 const METHOD_KEYWORDS = ["stake", "unstake", "lend", "borrow"];
 
 export function parseSorobanIntent(input: string): WorkflowPlan | null {

@@ -2,6 +2,8 @@
 import { toolRegistry } from "../registry/ToolRegistry";
 import { userPreferencesService } from "../../Auth/userPreferences.service";
 import { riskEngine, RiskEngine } from "../risk/RiskEngine";
+import { capabilityManager } from "../capability/CapabilityManager";
+import { CapabilityGrant } from "../capability/types";
 import { TrustLevel, ContextProvenance } from "../context/TrustZone";
 import { toolAuthorizationService } from "./ToolAuthorizationService";
 import {
@@ -14,6 +16,13 @@ export interface PolicyContext {
   userId: string;
   action: string;
   payload: Record<string, unknown>;
+  /** Optional capability grant to enforce */
+  grant?: CapabilityGrant | string;
+  planId?: string;
+  subPlanId?: string;
+  stepNumber?: number;
+  targetAgent?: string;
+  network?: string;
   trustLevel?: TrustLevel;
   provenance?: ContextProvenance;
   /** Optional pre-fetched market data — passed through to RiskEngine */

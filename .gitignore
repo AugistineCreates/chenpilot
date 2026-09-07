@@ -1,17 +1,13 @@
 node_modules/
-dist/
-build/
-logs/
+.env
 .env.local
 .env
 redteam-report.json
 src/Auth/accounts.json
 
 # Dependencies and build output
-node_modules/
-.env.local
-.env
 dist/
 coverage/
 logs/
 *.log
+.DS_Store
