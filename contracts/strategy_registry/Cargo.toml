@@ -12,3 +12,4 @@ contract_failure = { path = "../contract_failure" }
 
 [dev-dependencies]
 soroban-sdk = { version = "22.0.0", features = ["testutils"] }
+diff_fuzz_engine = { path = "../diff_fuzz_engine" }

@@ -682,3 +682,5 @@ impl CoreVaultContract {
 
 mod test;
 mod test_pause;
+#[cfg(test)]
+mod test_diff_fuzz;

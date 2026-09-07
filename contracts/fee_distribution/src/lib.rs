@@ -528,3 +528,5 @@ impl FeeDistributionContract {
 
 mod test;
 mod test_property;
+#[cfg(test)]
+mod test_diff_fuzz;

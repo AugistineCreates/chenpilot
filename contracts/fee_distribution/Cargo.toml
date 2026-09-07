@@ -14,3 +14,4 @@ contract_failure = { path = "../contract_failure" }
 soroban-sdk = { version = "22.0.0", features = ["testutils"] }
 num-bigint = "0.4"
 num-traits = "0.2"
+diff_fuzz_engine = { path = "../diff_fuzz_engine" }

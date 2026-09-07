@@ -13,3 +13,4 @@ pause_state = { path = "../pause_state" }
 
 [dev-dependencies]
 soroban-sdk = { version = "22.0.0", features = ["testutils"] }
+diff_fuzz_engine = { path = "../diff_fuzz_engine" }

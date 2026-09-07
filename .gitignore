@@ -4,4 +4,7 @@ node_modules/
 dist/
 coverage/
 logs/
-.DS_Store
+*.log
+target/
+contracts/target/
+

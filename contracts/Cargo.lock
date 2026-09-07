@@ -276,6 +276,7 @@ name = "core_vault"
 version = "0.1.0"
 dependencies = [
  "contract_failure",
+ "diff_fuzz_engine",
  "pause_state",
  "soroban-sdk",
 ]
@@ -477,6 +478,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "diff_fuzz_engine"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -576,15 +584,18 @@ checksum = "2bfcf67fea2815c2fc3b90873fae90957be12ff417335dfadc7f52927feb03b2"
 
 [[package]]
 name = "ethnum"
-version = "1.5.2"
+version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca81e6b4777c89fd810c25a4be2b1bd93ea034fbe58e6a75216a34c6b82c539b"
+checksum = "40404c3f5f511ec4da6fe866ddf6a717c309fdbb69fbbad7b0f3edab8f2e835f"
 
 [[package]]
 name = "fee_distribution"
 version = "0.1.0"
 dependencies = [
  "contract_failure",
+ "diff_fuzz_engine",
+ "num-bigint",
+ "num-traits",
  "soroban-sdk",
 ]
 
@@ -871,6 +882,7 @@ name = "multi_hop_swap"
 version = "0.1.0"
 dependencies = [
  "contract_failure",
+ "diff_fuzz_engine",
  "soroban-sdk",
 ]
 
@@ -924,6 +936,14 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "oracle_aggregator"
+version = "0.1.0"
+dependencies = [
+ "contract_failure",
+ "soroban-sdk",
+]
 
 [[package]]
 name = "p256"
@@ -1094,7 +1114,6 @@ dependencies = [
 name = "relayer_slashing"
 version = "0.1.0"
 dependencies = [
- "contract_failure",
  "soroban-sdk",
 ]
 
@@ -1534,6 +1553,7 @@ name = "strategy_registry"
 version = "0.1.0"
 dependencies = [
  "contract_failure",
+ "diff_fuzz_engine",
  "soroban-sdk",
 ]
 

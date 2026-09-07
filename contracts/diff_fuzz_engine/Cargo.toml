@@ -1,0 +1,11 @@
+[package]
+name = "diff_fuzz_engine"
+version = "0.1.0"
+edition = "2021"
+description = "Deterministic state-machine differential fuzzing engine with shrinking and trace preservation"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+soroban-sdk = "22.0.0"

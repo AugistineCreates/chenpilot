@@ -1,0 +1,39 @@
+name: Nightly Extended Differential Fuzzing Campaign
+
+on:
+  schedule:
+    # Run every night at 02:00 UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Number of fuzz campaigns per contract"
+        required: false
+        default: "300"
+      steps:
+        description: "Number of operation transitions per campaign"
+        required: false
+        default: "100"
+
+jobs:
+  nightly-diff-fuzz:
+    name: Extended Differential Fuzzing (Vault, Fee, Strategy, Swap)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Run Extended Differential Fuzzing
+        env:
+          FUZZ_MODE: extended
+          FUZZ_RUNS: ${{ github.event.inputs.runs || '300' }}
+          FUZZ_STEPS: ${{ github.event.inputs.steps || '100' }}
+        run: |
+          cargo test --manifest-path contracts/Cargo.toml --workspace --test-threads=1 -- test_diff_fuzz --nocapture
