@@ -5,6 +5,7 @@ This document defines the invariants (safety properties) that must hold for each
 ## Table of Contents
 - [Common Invariants](#common-invariants)
 - [Multi-Region Failover Invariants](#multi-region-failover-invariants)
+- [Cross-Contract Authorization Invariants](#cross-contract-authorization-invariants)
 - [BTC Relay Invariants](#btc-relay-invariants)
 - [RBAC Invariants](#rbac-invariants)
 - [Multi-Hop Swap Invariants](#multi-hop-swap-invariants)
@@ -133,6 +134,42 @@ These invariants preserve single-writer safety for durable operations and financ
   2. Required to explicitly acknowledge the RPO/consistency risk being accepted.
   3. Fully audited via event emission (see I4) with the operator identity and justification.
   Overriding MRF1–MRF5 (the fencing chain) is prohibited even under break-glass, because it directly reintroduces split-brain risk.
+
+---
+
+## Cross-Contract Authorization Invariants
+
+### CCA1: Trust Boundary Documentation
+
+**Invariant**: Every privileged cross-contract call must document its trust assumptions and trusted caller.
+
+**Formal**: `∀ call ∈ privileged_cross_contract_calls: trust_documented(call) == true`
+
+**Enforcement**: Contract interfaces and design notes identify the trusted caller, entry point, and authorization scope.
+
+### CCA2: Exact Authorization Binding
+
+**Invariant**: Authorization binds the exact contract, function, arguments, and nonce where applicable.
+
+**Formal**: `authorized(ctx) ⇒ ctx == (contract_id, function, args_hash, nonce)`
+
+**Enforcement**: `require_auth` validates the full invocation payload; partial, forwarded, or replayed auth contexts are rejected.
+
+### CCA3: Nested Invocation Preservation
+
+**Invariant**: Authorization invariants hold for any nested invocation depth within protocol limits; an intermediary cannot confuse the deputy.
+
+**Formal**: `∀ depth ≤ max_invocation_depth: auth_context(depth) == auth_context(0)`
+
+**Enforcement**: Nested cross-contract calls preserve the originating authorized invocation path and never re-authorize with caller authority for unintended arguments.
+
+### CCA4: Adversarial Intermediary Coverage
+
+**Invariant**: The test suite includes adversarial intermediary contracts that attempt authorization replay and confused-deputy attacks.
+
+**Formal**: `∀ adversarial_intermediary ∈ tests: security_invariants_hold`
+
+**Enforcement**: Integration tests deploy malicious intermediaries that re-enter, forward, and reuse auth contexts; invariant violations panic or revert.
 
 ---
 
