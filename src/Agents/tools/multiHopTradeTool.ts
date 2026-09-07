@@ -293,8 +293,19 @@ export class MultiHopTradeTool extends BaseTool<MultiHopTradePayload> {
 
       tx.sign(keypair);
 
-      // Validate lease fencing token immediately before submission
-      await sequenceLeaseService.validateLease(lease.id, leaseResult.fencingToken);
+      // Re-check revocation immediately before submission
+      try {
+        const sourceRevocation = await assetRevocationService.isRevoked(sourceAsset.code, "asset");
+        if (sourceRevocation.revoked) {
+          return this.createErrorResult("multi_hop_execute", `Asset ${sourceAsset.code} has been revoked: ${sourceRevocation.reason}`);
+        }
+        const destRevocation = await assetRevocationService.isRevoked(destAsset.code, "asset");
+        if (destRevocation.revoked) {
+          return this.createErrorResult("multi_hop_execute", `Asset ${destAsset.code} has been revoked: ${destRevocation.reason}`);
+        }
+      } catch (err) {
+        logger.warn("Revocation re-check failed before multi-hop submission", { userId, error: err });
+      }
 
       const submitted = await this.horizonServer.submitTransaction(tx);
 
