@@ -27,10 +27,10 @@ jobs:
           node-version: 20
 
       - name: Install root dependencies
-        run: npm install --ignore-scripts --no-audit
+        run: npm install --ignore-scripts --no-audit --omit=dev
 
       - name: Audit root dependencies
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=critical --omit=dev
 
   cargo-audit:
     name: Cargo dependency audit

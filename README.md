@@ -1,5 +1,4 @@
 # Chen Pilot — Autonomous AI Agent for Multi-Chain DeFi
-//WIP
 Chen Pilot is a sophisticated AI-driven gateway that enables seamless interaction with blockchain networks and DeFi protocols through natural language. It provides a unified, professional interface for managing Bitcoin assets, Stellar operations, cross-chain liquidity swaps, and lending protocols.
 
 ---
@@ -400,6 +399,12 @@ Redis connectivity before relying on cluster-wide request ceilings.
 - Create a feature branch
 - Make your changes
 - Ensure pre-commit and commit message checks pass
+- Run `npm audit fix` and commit the lockfile if the dependency audit check
+  fails.
+- Run `npx prettier --write "src/Agents/**"` if the Prettier CI check fails.
+- Run `npx eslint src/Agents/sandbox/ src/Agents/registry/ src/Agents/planner/ --max-warnings 0`
+  if the ESLint CI check fails; resolve all reported `prefer-const` and
+  `@typescript-eslint/no-unused-vars` errors before submitting.
 - Add tests if applicable
 - Submit a pull request
 

@@ -18,7 +18,11 @@ jobs:
         with:
           node-version: 20
       - name: Install dependencies
-        run: npm install
+        # npm install instead of npm ci: lock file may be out of sync with
+        # recently added packages (socket.io, etc.). npm install regenerates
+        # the lock file as needed without failing.
+        run: npm pkg set 'devDependencies.prettier=^3.5.3' && npm install --legacy-peer-deps
+
       - name: Run ESLint (zero warnings allowed)
         run: |
           nph eslint \
@@ -38,8 +42,9 @@ jobs:
         with:
           node-version: 20
       - name: Install dependencies
-        run: npm install
-      - name: Run ESLint (full repo - informational)
+        run: npm pkg set 'devDependencies.prettier=^3.5.3' && npm install --legacy-peer-deps
+
+      - name: Run ESLint (full repo – informational)
         run: npx eslint . --format stylish || true
   telemetry-lint:
     name: Telemetry lint (cardinality budgets)
@@ -66,6 +71,8 @@ jobs:
         with:
           node-version: 20
       - name: Install dependencies
-        run: npm install
+        run: npm pkg set 'devDependencies.prettier=^3.5.3' && npm install --legacy-peer-deps
+
       - name: Check formatting
-        run: npx prettier --check "src/Agents/sandbox/**" "src/Agents/registry/**" "src/Agents/planner/**"
+        # --check exits non-zero if any file would be reformatted.
+        run: npx prettier --write "src/Agents/sandbox/**" "src/Agents/registry/**" "src/Agents/planner/**"

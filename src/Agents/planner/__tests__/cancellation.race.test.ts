@@ -343,7 +343,7 @@ describe("DurableExecutor — cancellation semantics", () => {
   // cancelExecution — idempotency
   // -------------------------------------------------------------------------
 
-  describe("cancelExecution — idempotency", () => {
+  describe("cancelExecution — idempotency", () =>{
     it("returns the existing record without writing when already CANCELLED", async () => {
       const exec = makeExecution({
         status: ExecutionStatus.CANCELLED,
@@ -469,7 +469,7 @@ describe("DurableExecutor — cancellation semantics", () => {
   describe("RACE: cancellation during approval", () => {
     it("cancelExecution wins over a concurrent approval attempt", async () => {
       // Shared mutable state models the database row.
-      let storedExec = makeExecution({
+      const storedExec = makeExecution({
         status: ExecutionStatus.AWAITING_APPROVAL,
         requiresApproval: true,
         approvedAt: null,
@@ -897,42 +897,9 @@ describe("JobWorker — cancellation safe-point check", () => {
 // ---------------------------------------------------------------------------
 
 describe("AdminWorkflowService — cancellation idempotency and terminal guard", () => {
-  let mockRepo: {
-    findOne: jest.Mock;
-    find: jest.Mock;
-    save: jest.Mock;
-    create: jest.Mock;
-    count: jest.Mock;
-    createQueryBuilder: jest.Mock;
-  };
 
   beforeEach(() => {
     jest.clearAllMocks();
-
-    const mockQb = {
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue([]),
-      getCount: jest.fn().mockResolvedValue(0),
-      update: jest.fn().mockReturnThis(),
-      set: jest.fn().mockReturnThis(),
-      execute: jest.fn().mockResolvedValue({ affected: 0 }),
-    };
-
-    mockRepo = {
-      findOne: jest.fn(),
-      find: jest.fn().mockResolvedValue([]),
-      save: jest.fn(async (e: unknown) => e),
-      create: jest.fn((e: unknown) => ({
-        ...(e as Record<string, unknown>),
-        id: "mock-id-" + Math.random().toString(36).slice(2),
-      })),
-      count: jest.fn().mockResolvedValue(0),
-      createQueryBuilder: jest.fn(() => mockQb),
-    };
 
     jest.resetModules();
   });

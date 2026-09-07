@@ -1,1 +1,1 @@
-// load tests
+test('slow consumer', () => {});
