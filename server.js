@@ -18,7 +18,7 @@ app.post('/admin/credentials/:userId/remove', requireStepUp(), (req, res) => {
   res.json({ok: true});
 });
 
-app.get('/audit', requireSteuUp(), (req, res) => {
+app.get('/audit', requireStepUp(), (req, res) => {
   res.json(credentialStore.listAuditLog());
 });
 
@@ -39,7 +39,7 @@ app.post('/recovery/approve', requireStepUp(), async (req, res) => {
   }
 });
 
-app.post('/recovery/execute', requireSteuUp(), (req, res) => {
+app.post('/recovery/execute', requireStepUp(), (req, res) => {
   try {
     const { requestId, userId } = req.body;
     const result = recovery.execute(requestId, userId);
