@@ -22,9 +22,6 @@ jobs:
   storage-budget:
     name: Storage rent and TTL budget
     runs-on: ubuntu-latest
-    env:
-      TS_NODE_COMPILER: ${{ runner.temp }}/tools/node_modules/typescript
-      TS_NODE_TRANSPILE_ONLY: "true"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,6 +40,11 @@ jobs:
           cd "$RUNNER_TEMP/tools"
           npm init -y > /dev/null
           npm install --no-audit --no-fund typescript@5 ts-node@10
+
+      - name: Configure ts-node
+        run: |
+          echo "TS_NODE_COMPILER=$RUNNER_TEMP/tools/node_modules/typescript" >> "$GITHUB_ENV"
+          echo "TS_NODE_TRANSPILE_ONLY=true" >> "$GITHUB_ENV"
 
       - name: Extract storage schemas
         run: |
