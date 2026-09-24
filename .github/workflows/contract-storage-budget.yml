@@ -1,0 +1,77 @@
+name: Contract Storage Budget
+
+on:
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "scripts/check-storage-budget.ts"
+      - "scripts/extract-storage-schema.ts"
+      - ".github/workflows/contract-storage-budget.yml"
+  push:
+    branches: ["master"]
+    paths:
+      - "contracts/**"
+      - "scripts/check-storage-budget.ts"
+      - "scripts/extract-storage-schema.ts"
+      - ".github/workflows/contract-storage-budget.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  storage-budget:
+    name: Storage rent and TTL budget
+    runs-on: ubuntu-latest
+    env:
+      TS_NODE_COMPILER: ${{ runner.temp }}/tools/node_modules/typescript
+      TS_NODE_TRANSPILE_ONLY: "true"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Only a TypeScript runner is needed, so install it outside the repo.
+      # This job must not depend on the full dependency tree or on the Rust
+      # contracts compiling.
+      - name: Install TypeScript runner
+        run: |
+          mkdir -p "$RUNNER_TEMP/tools"
+          cd "$RUNNER_TEMP/tools"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund typescript@5 ts-node@10
+
+      - name: Extract storage schemas
+        run: |
+          "$RUNNER_TEMP/tools/node_modules/.bin/ts-node" scripts/extract-storage-schema.ts \
+            --contracts-dir contracts --out-dir "$RUNNER_TEMP/schemas"
+
+      - name: Check storage budget
+        run: |
+          "$RUNNER_TEMP/tools/node_modules/.bin/ts-node" scripts/check-storage-budget.ts \
+            --schemas "$RUNNER_TEMP/schemas" \
+            --budget contracts/storage_budget.json \
+            --out "$RUNNER_TEMP/storage-budget-report.json"
+
+      - name: Summarize storage growth
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/storage-budget-report.json"
+          [ -f "$f" ] || exit 0
+          node -e '
+            const r = require(process.argv[1]);
+            const out = ["### Storage budget", "", `${r.violations.length} violation(s), ${r.waived.length} waived`, "", "| Contract | Instance | Persistent | Temporary |", "|---|---|---|---|"];
+            for (const [c, n] of Object.entries(r.summary)) out.push(`| ${c} | ${n.Instance} | ${n.Persistent} | ${n.Temporary} |`);
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, out.join("\n") + "\n");
+          ' "$f"
+
+      - name: Upload budget report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-budget-report
+          path: ${{ runner.temp }}/storage-budget-report.json
+          retention-days: 30
