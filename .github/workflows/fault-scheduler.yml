@@ -1,0 +1,234 @@
+name: Fault Scheduler — Seeded Correlated Fault Tests
+
+# ─── Triggers ────────────────────────────────────────────────────────────────
+#
+# Runs on every push and pull-request (fast feedback on changed simulation
+# code) and nightly at 03:00 UTC (extended coverage on random seed ranges).
+#
+# Manual dispatch lets engineers replay a specific failing seed without
+# waiting for a full push cycle.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "src/simulation/faults/**"
+      - "tests/unit/faultScheduler.test.ts"
+      - ".github/workflows/fault-scheduler.yml"
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "src/simulation/faults/**"
+      - "tests/unit/faultScheduler.test.ts"
+      - ".github/workflows/fault-scheduler.yml"
+  schedule:
+    # Nightly extended run at 03:00 UTC
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      replay_seed:
+        description: "Optional: replay a specific seed (decimal integer)"
+        required: false
+        default: ""
+      extra_scenarios:
+        description: "Number of additional random-seed scenarios to run (nightly mode)"
+        required: false
+        default: "0"
+
+# ─── Concurrency ─────────────────────────────────────────────────────────────
+#
+# Cancel in-flight runs for the same branch/PR to save CI minutes.
+# The nightly job always runs to completion (no concurrency group).
+
+concurrency:
+  group: fault-scheduler-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  # ── Primary job: bounded deterministic suite ───────────────────────────────
+  fault-scheduler-bounded:
+    name: "Fault Scheduler — 10 seeded scenarios"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Disable real DB/Redis/network calls — stubs handle everything.
+      NODE_ENV: test
+      # Replay seed if provided via workflow_dispatch; empty means use suite defaults.
+      FAULT_REPLAY_SEED: ${{ github.event.inputs.replay_seed || '' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        # Use npm install (not ci) in case lock-file drift; mirrors the lint workflow.
+        run: npm install --legacy-peer-deps
+
+      - name: Type-check fault scheduler sources
+        # Catch type errors without running tests first.
+        run: npx tsc --noEmit --project tsconfig.json
+
+      - name: Run fault scheduler test suite
+        id: run_tests
+        run: |
+          npx jest \
+            tests/unit/faultScheduler.test.ts \
+            --runInBand \
+            --testTimeout=30000 \
+            --forceExit \
+            --json \
+            --outputFile=fault-scheduler-results.json \
+            2>&1 | tee fault-scheduler-output.txt
+        # Allow the step to fail so we can always upload artifacts below.
+        continue-on-error: true
+
+      - name: Parse test results summary
+        if: always()
+        run: |
+          if [ -f fault-scheduler-results.json ]; then
+            node -e "
+              const r = require('./fault-scheduler-results.json');
+              const pass = r.numPassedTests;
+              const fail = r.numFailedTests;
+              const suites = r.numPassedTestSuites;
+              console.log('Passed:', pass, '| Failed:', fail, '| Suites:', suites);
+              process.exit(fail > 0 ? 1 : 0);
+            "
+          else
+            echo 'No results file found — treating as failure'
+            exit 1
+          fi
+
+      # ── Artifact upload: always upload regardless of pass/fail ─────────────
+      #
+      # The TimelineRecorder writes JSON artifacts into fault-timelines/ for
+      # every FAILING scenario.  Passing scenarios do not produce files
+      # (unless persistPassing was set in the test).
+      #
+      # Engineers can download the artifact, extract the seed, and replay:
+      #
+      #   const scheduler = new SeededFaultScheduler({ seed: <SEED>, ... });
+      #
+      # The retention period is long enough to investigate incidents but short
+      # enough not to accumulate indefinitely.
+
+      - name: Upload failing timeline artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fault-timelines-${{ github.run_id }}-${{ github.run_attempt }}
+          path: fault-timelines/
+          # Upload even if the directory is empty (no failures) so the step
+          # does not error when all scenarios pass.
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Upload test result JSON
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fault-scheduler-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            fault-scheduler-results.json
+            fault-scheduler-output.txt
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # ── Final gate: fail the job if tests failed ───────────────────────────
+      #
+      # We used continue-on-error on the test step so artifacts are always
+      # uploaded.  This step re-raises the failure as the final job outcome.
+
+      - name: Gate — fail if scenarios failed
+        if: steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::error::One or more fault scenarios failed."
+          echo "Download the 'fault-timelines' artifact and replay the failing"
+          echo "seed with SeededFaultScheduler to reproduce the exact run."
+          exit 1
+
+  # ── Nightly job: extended random-seed sweep ────────────────────────────────
+  #
+  # Runs 50 additional scenarios with randomly chosen seeds to provide
+  # broader coverage beyond the 10 fixed seeds.  Uses a separate job so
+  # the bounded suite always gives fast feedback on PRs.
+
+  fault-scheduler-nightly:
+    name: "Fault Scheduler — Nightly random-seed sweep"
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      NODE_ENV: test
+      FAULT_EXTRA_SCENARIOS: ${{ github.event.inputs.extra_scenarios || '50' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Run bounded suite (sanity check before extended sweep)
+        run: |
+          npx jest \
+            tests/unit/faultScheduler.test.ts \
+            --runInBand \
+            --forceExit \
+            --testTimeout=30000
+
+      - name: Run extended nightly suite
+        id: nightly_tests
+        run: |
+          npx jest \
+            tests/unit/faultScheduler.test.ts \
+            --runInBand \
+            --forceExit \
+            --testTimeout=60000 \
+            --json \
+            --outputFile=fault-scheduler-nightly-results.json \
+            2>&1 | tee fault-scheduler-nightly-output.txt
+        env:
+          FAULT_NIGHTLY: "1"
+        continue-on-error: true
+
+      - name: Upload nightly failing timelines
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fault-timelines-nightly-${{ github.run_id }}
+          path: fault-timelines/
+          if-no-files-found: ignore
+          retention-days: 180
+
+      - name: Upload nightly results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fault-scheduler-nightly-results-${{ github.run_id }}
+          path: |
+            fault-scheduler-nightly-results.json
+            fault-scheduler-nightly-output.txt
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Gate — fail nightly if scenarios failed
+        if: steps.nightly_tests.outcome == 'failure'
+        run: |
+          echo "::error::Nightly fault sweep found failing scenarios."
+          echo "Download 'fault-timelines-nightly-${{ github.run_id }}' to inspect."
+          exit 1
