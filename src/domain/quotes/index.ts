@@ -7,3 +7,4 @@ export {
 } from "./quoteCommitment";
 export type { QuoteCommitmentPayload } from "./quoteCommitment";
 export { QuoteDriftError, QuoteExpiredError } from "./errors";
+export * from "./costComponents";

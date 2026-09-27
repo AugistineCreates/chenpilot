@@ -15,6 +15,9 @@ export * from './quotes';
 // Routing exports
 export * from './routing';
 
+// Execution exports
+export * from './execution';
+
 // Convenience exports
 export { Asset, AssetAmount } from './assets';
 export { Balance, BalanceSnapshot } from './balances';
