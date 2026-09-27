@@ -2,6 +2,7 @@
 members = [
     "diff_fuzz_engine",
     "contract_failure",
+    "storage_policy",
     "pause_state",
     "btc_relay",
     "btc_relay_crypto",
