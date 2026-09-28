@@ -143,14 +143,23 @@ export class YieldBloxAdapter extends DeFiAdapter implements LendingCapability, 
           borrowAPY?: number;
           collateral?: string;
           accruedInterest?: string;
-        }) => ({
-          token: pos.token,
-          amount: pos.borrowed,
-          valueUSD: pos.valueUSD || 0,
-          APY: pos.borrowAPY || 0,
-          ...(pos.collateral !== undefined && { collateral: pos.collateral }),
-          ...(pos.accruedInterest !== undefined && { accruedInterest: pos.accruedInterest }),
-        })
+          accruedInterestUSD?: number;
+        }) => {
+          const valueUSD = pos.valueUSD || 0;
+          const accruedCostUSD = pos.accruedInterestUSD;
+          return {
+            token: pos.token,
+            amount: pos.borrowed,
+            valueUSD,
+            APY: pos.borrowAPY || 0,
+            ...(pos.collateral !== undefined && { collateral: pos.collateral }),
+            ...(pos.accruedInterest !== undefined && { accruedInterest: pos.accruedInterest }),
+            ...(accruedCostUSD !== undefined && {
+              accruedCostUSD,
+              netValueUSD: valueUSD - accruedCostUSD,
+            }),
+          };
+        }
       );
 
       return {
