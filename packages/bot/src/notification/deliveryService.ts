@@ -30,6 +30,8 @@ import {
 export class NotificationDeliveryService {
   private queue: Map<string, NotificationMessage>;
   private deliveryStates: Map<string, NotificationDeliveryState>;
+  private replayIndex: Map<string, string>;
+  private notificationUsers: Map<string, string>;
   private deadLetterQueue: Map<string, { notification: NotificationMessage; state: NotificationDeliveryState; deadLetterAt: number }>;
   private platformHandlers: Map<DeliveryPlatform, PlatformDeliveryHandler>;
   private processing: Set<string>;
@@ -46,6 +48,8 @@ export class NotificationDeliveryService {
   constructor(config: DeliveryServiceConfig = {}) {
     this.queue = new Map();
     this.deliveryStates = new Map();
+    this.replayIndex = new Map();
+    this.notificationUsers = new Map();
     this.deadLetterQueue = new Map();
     this.platformHandlers = new Map();
     this.processing = new Set();
@@ -150,6 +154,15 @@ export class NotificationDeliveryService {
    * Enqueue a notification for delivery
    */
   async enqueue(message: NotificationMessage): Promise<{ accepted: boolean; reason?: string }> {
+    const replayKey = this.replayKeyFor(message);
+    if (replayKey) {
+      const existingId = this.replayIndex.get(replayKey);
+      if (existingId) {
+        return { accepted: false, reason: `Duplicate notification replay for ${existingId}` };
+      }
+      this.replayIndex.set(replayKey, message.id);
+    }
+
     // Check backpressure
     if (!this.canAcceptNotification()) {
       if (this.queue.size >= this.backpressureConfig.maxQueueSize) {
@@ -167,6 +180,7 @@ export class NotificationDeliveryService {
 
     // Add to queue
     this.queue.set(message.id, message);
+    this.notificationUsers.set(message.id, message.userId);
     
     // Initialize delivery state
     this.deliveryStates.set(message.id, {
@@ -176,6 +190,7 @@ export class NotificationDeliveryService {
       currentAttempt: 0,
       createdAt: message.createdAt,
       updatedAt: message.createdAt,
+      replayKey,
     });
 
     // Update metrics
@@ -602,6 +617,42 @@ export class NotificationDeliveryService {
     return this.deliveryStates.get(notificationId);
   }
 
+  getDeliveryHistoryForUser(userId: string): NotificationDeliveryState[] {
+    return [...this.deliveryStates.values()]
+      .filter((state) => this.notificationUsers.get(state.notificationId) === userId)
+      .map((state) => ({ ...state, attempts: state.attempts.map((attempt) => ({ ...attempt })) }));
+  }
+
+  acknowledge(notificationId: string, identityId: string, at = Date.now()): { acknowledged: boolean; reason?: string } {
+    const state = this.deliveryStates.get(notificationId);
+    if (!state) {
+      return { acknowledged: false, reason: "Notification not found" };
+    }
+    state.acknowledgedAt = at;
+    state.acknowledgedBy = identityId;
+    state.updatedAt = at;
+    return { acknowledged: true };
+  }
+
+  async recoverMissedCritical(notificationId: string): Promise<{ accepted: boolean; reason?: string }> {
+    const entry = this.deadLetterQueue.get(notificationId);
+    if (!entry) {
+      return { accepted: false, reason: "Notification not found in dead letter queue" };
+    }
+    const recovered: NotificationMessage = {
+      ...entry.notification,
+      id: `${entry.notification.id}:recovery`,
+      metadata: {
+        ...(entry.notification.metadata ?? {}),
+        replayKey: `recovery:${entry.notification.id}`,
+        recoveryOf: entry.notification.id,
+        suppressFinancialSideEffects: true,
+      },
+      createdAt: Date.now(),
+    };
+    return this.enqueue(recovered);
+  }
+
   /**
    * Cancel a notification
    */
@@ -673,6 +724,11 @@ export class NotificationDeliveryService {
     // Clear queues
     this.queue.clear();
     this.processing.clear();
+  }
+
+  private replayKeyFor(message: NotificationMessage): string | undefined {
+    const raw = message.metadata?.replayKey ?? message.metadata?.eventId;
+    return typeof raw === "string" ? `${message.userId}:${raw}` : undefined;
   }
 
   /**

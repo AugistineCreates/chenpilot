@@ -271,6 +271,21 @@ export interface NotificationDeliveryState {
    * Dead letter timestamp
    */
   deadLetterAt?: number;
+
+  /**
+   * User acknowledgement timestamp, independent from platform delivery.
+   */
+  acknowledgedAt?: number;
+
+  /**
+   * Identity that acknowledged the notification.
+   */
+  acknowledgedBy?: string;
+
+  /**
+   * Stable key used to deduplicate replayed critical notifications.
+   */
+  replayKey?: string;
 }
 
 // ============================================================================
