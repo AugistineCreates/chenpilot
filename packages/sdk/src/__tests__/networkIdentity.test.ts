@@ -12,6 +12,7 @@ import {
   resolveNetworkFromUrl,
   normalizeEndpointUrl,
   redactSensitive,
+  detectDeploymentConfigDrift,
   discoverNetworkIdentityFromRpc,
   discoverNetworkIdentityFromHorizon,
 } from "../networkIdentity";
@@ -156,6 +157,53 @@ describe("networkIdentity resolution helpers", () => {
     });
     const safe = JSON.stringify(error.toJSON()) + error.message + secret;
     expect(redactSensitive(safe)).not.toContain(secret);
+  });
+});
+
+describe("cross-package deployment configuration drift", () => {
+  it("detects backend public deployment config drifting from SDK testnet config", () => {
+    const report = detectDeploymentConfigDrift(
+      {
+        packageName: "backend",
+        network: "public",
+        horizonUrl: "https://horizon.stellar.org",
+        networkPassphrase: MAINNET_PASSPHRASE,
+      },
+      {
+        packageName: "sdk",
+        network: "testnet",
+        horizonUrl: "https://horizon-testnet.stellar.org",
+        rpcUrl: "https://soroban-testnet.stellar.org",
+        networkPassphrase: TESTNET_PASSPHRASE,
+      }
+    );
+
+    expect(report.driftDetected).toBe(true);
+    expect(report.expectedNetwork).toBe("mainnet");
+    expect(report.drifts.map((drift) => drift.field)).toEqual(
+      expect.arrayContaining(["network", "networkPassphrase", "horizonUrl"])
+    );
+  });
+
+  it("treats backend public and SDK mainnet names as the same deployment network", () => {
+    const report = detectDeploymentConfigDrift(
+      {
+        packageName: "backend",
+        network: "public",
+        horizonUrl: "https://horizon.stellar.org",
+        networkPassphrase: MAINNET_PASSPHRASE,
+      },
+      {
+        packageName: "sdk",
+        network: "mainnet",
+        horizonUrl: "https://horizon.stellar.org",
+        rpcUrl: "https://soroban-mainnet.stellar.org",
+        networkPassphrase: MAINNET_PASSPHRASE,
+      }
+    );
+
+    expect(report.driftDetected).toBe(false);
+    expect(report.drifts).toHaveLength(0);
   });
 });
 describe("runtime network identity discovery", () => {

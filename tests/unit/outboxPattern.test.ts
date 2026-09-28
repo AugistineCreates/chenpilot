@@ -414,6 +414,66 @@ describe("Outbox Pattern (Issue #653)", () => {
       expect(dispatched).toEqual(["evt-1", "evt-2", "evt-3"]);
     });
 
+    it("realtime transport outage recovers through the atomic outbox", async () => {
+      const event = createMockEvent({
+        id: "realtime-1",
+        eventId: "realtime-event-1",
+        eventType: "transaction.realtime_update",
+        aggregateType: "transaction",
+        aggregateId: "tx-realtime",
+        sequence: 1,
+        retryCount: 0,
+      });
+
+      const outageDataSource = createTestDataSource({ pendingEvents: [event] });
+      const outageDispatcher = new OutboxDispatcher(outageDataSource, {
+        intervalMs: 100000,
+      });
+      outageDispatcher.on("transaction.realtime_update", async () => {
+        throw new Error("socket.io unavailable");
+      });
+
+      await (outageDispatcher as any).poll();
+
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        event.id,
+        expect.objectContaining({
+          status: "pending",
+          retryCount: 1,
+          errorMessage: "socket.io unavailable",
+        })
+      );
+
+      jest.clearAllMocks();
+
+      const retriedEvent = createMockEvent({
+        ...event,
+        retryCount: 1,
+        nextRetryAt: null,
+      });
+      const recoveryDataSource = createTestDataSource({
+        pendingEvents: [retriedEvent],
+      });
+      const recoveryDispatcher = new OutboxDispatcher(recoveryDataSource, {
+        intervalMs: 100000,
+      });
+      const delivered: string[] = [];
+      recoveryDispatcher.on(
+        "transaction.realtime_update",
+        async (dispatched: DispatchedEvent) => {
+          delivered.push(dispatched.eventId);
+        }
+      );
+
+      await (recoveryDispatcher as any).poll();
+
+      expect(delivered).toEqual(["realtime-event-1"]);
+      expect(mockRepo.update).toHaveBeenCalledWith(
+        retriedEvent.id,
+        expect.objectContaining({ status: "dispatched" })
+      );
+    });
+
     it("dispatcher skips already-dispatched events on restart", async () => {
       const pendingEvents = [
         createMockEvent({ id: "1", eventId: "already-dispatched", sequence: 1 }),

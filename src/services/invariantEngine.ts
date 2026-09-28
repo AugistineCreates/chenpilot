@@ -111,6 +111,22 @@ export interface InvariantResult {
   repairSafety: RepairSafety;
 }
 
+export interface SubmissionReconciliationSample {
+  submittedCount: number;
+  reconciledCount: number;
+  sampledAtMs: number;
+}
+
+export interface SubmissionReconciliationDivergenceAlert {
+  alert: boolean;
+  windowMs: number;
+  thresholdCount: number;
+  consecutiveDivergentSamples: number;
+  maxDivergence: number;
+  startedAt: string | null;
+  endedAt: string | null;
+}
+
 export interface InvariantEvaluationContext {
   /** Backend transaction records from DB (`transactions` table). */
   backendTransactions: BackendTransactionRecord[];
@@ -176,6 +192,8 @@ const DEFAULT_LAG_TOLERANCE_MS = 60_000; // 1 minute
  * are considered stale and worth flagging.
  */
 const PENDING_STALE_THRESHOLD_MS = 300_000; // 5 minutes
+
+const DEFAULT_SUBMISSION_RECONCILIATION_DIVERGENCE_WINDOW_MS = 5 * 60_000;
 
 export const INVARIANT_DEFINITIONS: InvariantDefinition[] = [
   {
@@ -666,5 +684,63 @@ export function summarizeInvariantResults(
     indeterminate: results.filter((r) => r.status === "indeterminate").length,
     lagExceeded: results.filter((r) => r.lagExceeded).length,
     byRepairSafety,
+  };
+}
+
+export function evaluateSubmissionReconciliationDivergence(
+  samples: SubmissionReconciliationSample[],
+  options: {
+    windowMs?: number;
+    thresholdCount?: number;
+    nowMs?: number;
+  } = {},
+): SubmissionReconciliationDivergenceAlert {
+  const windowMs =
+    options.windowMs ?? DEFAULT_SUBMISSION_RECONCILIATION_DIVERGENCE_WINDOW_MS;
+  const thresholdCount = options.thresholdCount ?? 1;
+  const nowMs = options.nowMs ?? Date.now();
+  const windowStartMs = nowMs - windowMs;
+
+  const windowSamples = samples
+    .filter((sample) => sample.sampledAtMs >= windowStartMs && sample.sampledAtMs <= nowMs)
+    .sort((a, b) => a.sampledAtMs - b.sampledAtMs);
+
+  let consecutiveDivergentSamples = 0;
+  let maxDivergence = 0;
+  let startedAtMs: number | null = null;
+  let endedAtMs: number | null = null;
+
+  for (const sample of windowSamples) {
+    const divergence = Math.max(
+      0,
+      sample.submittedCount - sample.reconciledCount,
+    );
+    maxDivergence = Math.max(maxDivergence, divergence);
+
+    if (divergence >= thresholdCount) {
+      consecutiveDivergentSamples++;
+      startedAtMs ??= sample.sampledAtMs;
+      endedAtMs = sample.sampledAtMs;
+      continue;
+    }
+
+    consecutiveDivergentSamples = 0;
+    startedAtMs = null;
+    endedAtMs = null;
+  }
+
+  const sustained =
+    startedAtMs !== null &&
+    endedAtMs !== null &&
+    endedAtMs - startedAtMs >= windowMs;
+
+  return {
+    alert: sustained,
+    windowMs,
+    thresholdCount,
+    consecutiveDivergentSamples,
+    maxDivergence,
+    startedAt: startedAtMs === null ? null : new Date(startedAtMs).toISOString(),
+    endedAt: endedAtMs === null ? null : new Date(endedAtMs).toISOString(),
   };
 }
