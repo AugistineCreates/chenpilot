@@ -2,6 +2,8 @@ import {
   createDeterministicSimulationConfig,
   LocalChainManager,
 } from "../../src/simulation/LocalChainManager";
+import fs from "fs";
+import path from "path";
 
 describe("Deterministic local workflow environment", () => {
   it("runs repeatable Soroban and wallet workflow simulations from fixtures", async () => {
@@ -35,5 +37,20 @@ describe("Deterministic local workflow environment", () => {
     expect(firstResult.metadata.simulatedGas).toEqual(
       secondResult.metadata.simulatedGas
     );
+  });
+
+  it("keeps clean-checkout install manifests aligned for workspace smoke jobs", () => {
+    const root = path.resolve(__dirname, "../..");
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(root, "package.json"), "utf8")
+    );
+    const lockfile = JSON.parse(
+      fs.readFileSync(path.join(root, "package-lock.json"), "utf8")
+    );
+
+    expect(lockfile.packages[""].name).toBe(packageJson.name);
+    expect(lockfile.packages[""].version).toBe(packageJson.version);
+    expect(lockfile.packages[""].dependencies).toEqual(packageJson.dependencies);
+    expect(lockfile.packages[""].devDependencies).toEqual(packageJson.devDependencies);
   });
 });
