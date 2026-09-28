@@ -25,7 +25,7 @@ jobs:
 
       - name: Run ESLint (zero warnings allowed)
         run: |
-          nph eslint \
+          npx eslint \
             src/Agents/sandbox/ \
             src/Agents/registry/ \
             src/Agents/planner/ \
@@ -74,5 +74,4 @@ jobs:
         run: npm pkg set 'devDependencies.prettier=^3.5.3' && npm install --legacy-peer-deps
 
       - name: Check formatting
-        # --check exits non-zero if any file would be reformatted.
-        run: npx prettier --write "src/Agents/sandbox/**" "src/Agents/registry/**" "src/Agents/planner/**"
+        run: npx prettier --check "src/Agents/sandbox/**" "src/Agents/registry/**" "src/Agents/planner/**"

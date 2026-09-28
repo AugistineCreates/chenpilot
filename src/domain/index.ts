@@ -26,6 +26,7 @@ export {
   Path,
   TradePath,
   RoutePolicy,
+  PolicyViolation,
   DEFAULT_ROUTE_POLICY,
   RoutePolicyViolationError,
   PathEvaluationResult,

@@ -7,9 +7,17 @@ import {
   PathFinderOptions,
   RoutePolicy,
   RoutePolicyViolationError,
+  PolicyViolation,
   DEFAULT_ROUTE_POLICY,
   parseStellarAsset,
   stellarAssetToString,
+} from "../domain";
+
+export {
+  RoutePolicyViolationError,
+  PolicyViolation,
+  RoutePolicy,
+  DEFAULT_ROUTE_POLICY,
 } from "../domain";
 
 /** Per-hop slippage penalty factor (0.3% per hop). */
@@ -85,25 +93,42 @@ export class MultiHopPathFinder {
   }
 
   /**
-   * Enforce RoutePolicy. Throws RoutePolicyViolationError on violation.
+   * Enforce RoutePolicy. Collects all violations and throws RoutePolicyViolationError
+   * with structured reasons if any threshold is breached.
    */
   private enforcePolicy(path: TradePath, policy: RoutePolicy): void {
+    const violations: PolicyViolation[] = [];
+
     if (path.efficiency < policy.minEfficiency) {
-      throw new RoutePolicyViolationError(
-        `efficiency ${path.efficiency.toFixed(4)} < required ${policy.minEfficiency}`,
-        path
-      );
+      violations.push({
+        field: "efficiency",
+        actual: path.efficiency,
+        threshold: policy.minEfficiency,
+        reason: `efficiency ${path.efficiency.toFixed(4)} < required ${policy.minEfficiency}`,
+      });
     }
     if (path.estimatedSlippage > policy.maxSlippage) {
-      throw new RoutePolicyViolationError(
-        `slippage ${(path.estimatedSlippage * 100).toFixed(2)}% > max ${(policy.maxSlippage * 100).toFixed(2)}%`,
-        path
-      );
+      violations.push({
+        field: "slippage",
+        actual: path.estimatedSlippage,
+        threshold: policy.maxSlippage,
+        reason: `slippage ${(path.estimatedSlippage * 100).toFixed(2)}% > max ${(policy.maxSlippage * 100).toFixed(2)}%`,
+      });
     }
     if (path.hops > policy.maxHops) {
+      violations.push({
+        field: "hops",
+        actual: path.hops,
+        threshold: policy.maxHops,
+        reason: `hops ${path.hops} > max ${policy.maxHops}`,
+      });
+    }
+
+    if (violations.length > 0) {
       throw new RoutePolicyViolationError(
-        `hops ${path.hops} > max ${policy.maxHops}`,
-        path
+        violations.map((v) => v.reason).join("; "),
+        path,
+        violations
       );
     }
   }
@@ -127,8 +152,6 @@ export class MultiHopPathFinder {
           paths.push(
             this.convertStrictSendPath(record, sourceAsset, destinationAsset)
           );
-        if (record.path.length < maxHops) {
-          paths.push(this.convertRecord(record, sourceAsset, destinationAsset));
         }
       }
     } catch (error) {
@@ -146,8 +169,6 @@ export class MultiHopPathFinder {
           paths.push(
             this.convertStrictReceivePath(record, sourceAsset, destinationAsset)
           );
-        if (record.path.length < maxHops) {
-          paths.push(this.convertRecord(record, sourceAsset, destinationAsset));
         }
       }
     } catch (error) {
@@ -157,7 +178,7 @@ export class MultiHopPathFinder {
     return paths;
   }
 
-  private convertRecord(
+  private convertStrictSendPath(
     record: {
       path: Array<{
         asset_type: string;
@@ -170,15 +191,8 @@ export class MultiHopPathFinder {
     sourceAsset: StellarSdk.Asset,
     destinationAsset: StellarSdk.Asset
   ): TradePath {
-    const path = [
-      sourceAsset,
-      ...record.path.map(this.parseAsset),
-      destinationAsset,
-    ];
-    const route = path.map((asset) => this.assetToString(asset));
     const midAssets = record.path.map((a) => this.parseAsset(a));
     const fullPath = [sourceAsset, ...midAssets, destinationAsset];
-    const hops = record.path.length + 1;
 
     return {
       path: fullPath,
@@ -186,8 +200,36 @@ export class MultiHopPathFinder {
       destinationAmount: record.destination_amount,
       priceImpact: 0,
       estimatedSlippage: 0,
-      hops,
-      route: fullPath.map((a) => stellarAssetToString(a)),
+      hops: record.path.length + 1,
+      route: fullPath.map((a) => this.assetToString(a)),
+      efficiency: 0,
+    };
+  }
+
+  private convertStrictReceivePath(
+    record: {
+      path: Array<{
+        asset_type: string;
+        asset_code?: string;
+        asset_issuer?: string;
+      }>;
+      source_amount: string;
+      destination_amount: string;
+    },
+    sourceAsset: StellarSdk.Asset,
+    destinationAsset: StellarSdk.Asset
+  ): TradePath {
+    const midAssets = record.path.map((a) => this.parseAsset(a));
+    const fullPath = [sourceAsset, ...midAssets, destinationAsset];
+
+    return {
+      path: fullPath,
+      sourceAmount: record.source_amount,
+      destinationAmount: record.destination_amount,
+      priceImpact: 0,
+      estimatedSlippage: 0,
+      hops: record.path.length + 1,
+      route: fullPath.map((a) => this.assetToString(a)),
       efficiency: 0,
     };
   }
@@ -199,81 +241,11 @@ export class MultiHopPathFinder {
    *
    * Dimensionless and comparable across all paths for the same trade.
    */
-  private convertStrictReceivePath(
-    record: { path: { map: (fn: (a: string) => StellarSdk.Asset) => StellarSdk.Asset[] }; source_amount: string; destination_amount: string },
-    sourceAsset: StellarSdk.Asset,
-    destinationAsset: StellarSdk.Asset
-  ): TradePath {
-    const path = [
-      sourceAsset,
-      ...record.path.map(this.parseAsset),
-      destinationAsset,
-    ];
-    const route = path.map((asset) => this.assetToString(asset));
-
-    return {
-      path,
-      sourceAmount: record.source_amount,
-      destinationAmount: record.destination_amount,
-      priceImpact: 0,
-      estimatedSlippage: 0,
-      hops: record.path.length + 1,
-      route,
-      efficiency: 0,
-    };
-  }
-
-  /**
-   * Evaluate paths for efficiency and risk
-   */
-  private async evaluatePaths(paths: TradePath[]): Promise<TradePath[]> {
-    return Promise.all(
-      paths.map(async (path) => {
-        const priceImpact = this.calculatePriceImpact(path);
-        const estimatedSlippage = this.estimateSlippage(path);
-        const efficiency = this.calculateEfficiency(
-          path,
-          priceImpact,
-          estimatedSlippage
-        );
-
-        return {
-          ...path,
-          priceImpact,
-          estimatedSlippage,
-          efficiency,
-        };
-      })
   private evaluatePaths(paths: TradePath[]): TradePath[] {
     const maxDest = Math.max(
       ...paths.map((p) => parseFloat(p.destinationAmount))
     );
 
-  /**
-   * Calculate price impact for a path
-   */
-  private calculatePriceImpact(path: TradePath): number {
-    const sourceAmount = parseFloat(path.sourceAmount);
-    const destinationAmount = parseFloat(path.destinationAmount);
-
-    if (sourceAmount === 0 || destinationAmount === 0) {
-      return 100;
-    }
-
-    const effectiveRate = destinationAmount / sourceAmount;
-    const hopPenalty = path.hops * 0.003;
-
-    return hopPenalty * 100;
-  }
-
-  /**
-   * Estimate slippage based on path characteristics
-   */
-  private estimateSlippage(path: TradePath): number {
-    const baseSlippage = 0.001;
-    const hopMultiplier = Math.pow(1.5, path.hops - 1);
-
-    return baseSlippage * hopMultiplier;
     return paths.map((path) => {
       const destAmount = parseFloat(path.destinationAmount);
       const slippage = HOP_SLIPPAGE_RATE * path.hops;
@@ -297,20 +269,6 @@ export class MultiHopPathFinder {
    * 2. Equal efficiency → fewer hops wins.
    * 3. Equal hops → lexicographically smaller route string wins.
    */
-  private calculateEfficiency(
-    path: TradePath,
-    priceImpact: number,
-    slippage: number
-  ): number {
-    const destinationAmount = parseFloat(path.destinationAmount);
-    const hopPenalty = path.hops * 0.1;
-    const impactPenalty = priceImpact / 100;
-    const slippagePenalty = slippage * 10;
-
-    const efficiency =
-      destinationAmount * (1 - hopPenalty - impactPenalty - slippagePenalty);
-
-    return Math.max(0, efficiency);
   private selectBestPath(paths: TradePath[]): TradePath {
     return [...paths].sort((a, b) => {
       if (b.efficiency !== a.efficiency) return b.efficiency - a.efficiency;
@@ -329,6 +287,18 @@ export class MultiHopPathFinder {
         )
       ),
     ]);
+  }
+
+  private parseAsset(assetData: {
+    asset_type: string;
+    asset_code?: string;
+    asset_issuer?: string;
+  }): StellarSdk.Asset {
+    return parseStellarAsset(assetData);
+  }
+
+  private assetToString(asset: StellarSdk.Asset): string {
+    return stellarAssetToString(asset);
   }
 
   comparePaths(path1: TradePath, path2: TradePath): TradePath {

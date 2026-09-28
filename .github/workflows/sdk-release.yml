@@ -21,7 +21,7 @@ jobs:
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please')
     runs-on: ubuntu-latest
     env:
-      BASE_SHA: $0牻 github.event.pull_request.base.sha
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -169,7 +169,7 @@ jobs:
           const oldVersion = oldPkg.version;
           const newVersion = newPkg.version;
 
-          if (!/^\d+\.\d+\.d+/.test(oldVersion) || !/^\d+\.\d+\.d+/.test(newVersion)) {
+          if (!/^\d+\.\d+\.\d+$/.test(oldVersion) || !/^\d+\.\d+\.\d+$/.test(newVersion)) {
             console.error('Invalid semver version found.');
             process.exit(1);
           }
@@ -182,7 +182,7 @@ jobs:
 
           if (breaking && newMajor === oldMajor) {
             console.error('BREAKING API changes require a MAJOR version bump.');
-            console.error('Incompatible changes:',
+            console.error('Incompatible changes:');
             for (const d of breakingDetails) console.error('  - ' + d);
             process.exit(1);
           }
@@ -203,7 +203,7 @@ jobs:
         if: failure()
         uses: actions/github-script@v4
         with:
-          github-token: $`{${ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             github.rest.issues.createComment({
               issue_number: context.issue.number,
