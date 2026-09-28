@@ -25,7 +25,9 @@ export type DriftType =
   | "transaction_missing"
   | "transaction_status_mismatch"
   | "balance_mismatch"
-  | "contract_state_mismatch";
+  | "contract_state_mismatch"
+  | "external_activity_unmatched"
+  | "external_activity_quarantined";
 
 export interface DriftItem {
   type: DriftType;
