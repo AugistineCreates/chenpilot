@@ -9,4 +9,5 @@ allowBuilds:
   '@scarf/scarf': false
   bcrypt: false
   canvas: false
+  cbor-extract: set this to true or false
   unrs-resolver: false
