@@ -3,6 +3,10 @@ import { authenticateToken } from "../../Auth/auth.middleware";
 import { requireAdmin } from "../../Gateway/middleware/rbac.middleware";
 import { promptVersionService } from "../registry/PromptVersionService";
 import { promptRolloutService } from "../registry/PromptRolloutService";
+import {
+  PromptChangeControlError,
+  changeControlHttpStatus,
+} from "../registry/PromptChangeControl";
 import { toolRegistry } from "../registry/ToolRegistry";
 import { auditLogService } from "../../AuditLog/auditLog.service";
 import { AdminAction, AuditSeverity } from "../../AuditLog/auditLog.entity";
@@ -36,10 +40,35 @@ router.post(
   requireAdmin,
   requireAdminWorkflow(SensitiveActionType.ACTIVATE_PROMPT),
   async (req: Request, res: Response) => {
-    await promptRolloutService.activateWithPolicy(
-      req.params.id,
-      req.body.rollbackVersionId
-    );
+    try {
+      await promptRolloutService.activateWithPolicy(
+        req.params.id,
+        req.body.rollbackVersionId,
+        req.body.revision
+      );
+    } catch (error) {
+      if (error instanceof PromptChangeControlError) {
+        await auditLogService.log({
+          action: AdminAction.SETTINGS_CHANGED,
+          severity: AuditSeverity.WARNING,
+          success: false,
+          metadata: {
+            domain: "prompt",
+            promptId: req.params.id,
+            changeControlCode: error.code,
+            details: error.details,
+          },
+        });
+        return res.status(changeControlHttpStatus(error)).json({
+          success: false,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        });
+      }
+      throw error;
+    }
+
     await auditLogService.log({
       action: AdminAction.SETTINGS_CHANGED,
       severity: AuditSeverity.INFO,
@@ -48,6 +77,8 @@ router.post(
         domain: "prompt",
         promptId: req.params.id,
         rollbackVersionId: req.body.rollbackVersionId,
+        revisionDigest: req.body.revision?.digest,
+        changeTicket: req.body.revision?.changeTicket,
       },
     });
     res.json({ success: true });
