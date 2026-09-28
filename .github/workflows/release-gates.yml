@@ -7,12 +7,39 @@ on:
     branches: ["**"]
     paths: 
       - "src/Gateway/**"
+      - "src/Payments/**"
       - "src/scripts/testWebhookIdempotency.ts"
       - "src/config/Datasource.ts"
+      - "tests/integration/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".npmrc"
       - ".github/workflows/release-gates.yml"
       - ".github/workflows/sbom-provenance.yml"
 
 jobs:
+  clean-checkout-smoke:
+    name: Clean checkout install and workspace smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout clean repository
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install from lockfile
+        run: npm ci
+
+      - name: Run local workflow workspace smoke
+        run: npm test -- --runInBand tests/integration/local_workflow_environment.integration.test.ts
+
   backend-health:
     name: Backend compiler and tests
     runs-on: ubuntu-latest

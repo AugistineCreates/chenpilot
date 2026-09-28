@@ -18,6 +18,7 @@
     "migration:generate": "npm run typeorm migration:generate -- -d src/config/Datasource.ts -p src/migrations/",
     "cleanup:tokens": "ts-node src/scripts/cleanupTokens.ts",
     "test:webhooks": "jest --runInBand --testPattern=webhookIdempotency.integration",
+    "smoke:clean-checkout": "npm ci && npm test -- --runInBand tests/integration/local_workflow_environment.integration.test.ts",
     "redteam": "jest tests/redteam --runInBand --json --outputFile=redteam-report.json",
     "redteam:check": "jest tests/redteam --runInBand",
     "build": "tsc",
