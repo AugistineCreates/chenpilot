@@ -38,6 +38,20 @@ export interface PositionResult {
   amount: string;
   valueUSD: number;
   APY: number;
+  /** Collateral backing this position (lending: the supplied asset acts as collateral; borrowing: the locked collateral asset). */
+  collateral?: string;
+  /** Interest accrued on this position so far, in the position's token units. */
+  accruedInterest?: string;
+  /**
+   * USD value of accrued borrowing costs. Only present on borrowing positions.
+   * Populated when the protocol returns an accruedInterestUSD figure.
+   */
+  accruedCostUSD?: number;
+  /**
+   * Net position value in USD: valueUSD minus accruedCostUSD.
+   * Only present on borrowing positions when accruedCostUSD is known.
+   */
+  netValueUSD?: number;
 }
 
 /**

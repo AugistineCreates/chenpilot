@@ -1,5 +1,6 @@
 import { SorobanContractStateTool } from "../../src/Agents/tools/sorobanContractState";
 import * as sorobanService from "../../src/services/sorobanService";
+import { YieldBloxAdapter } from "../../src/Agents/tools/defi/YieldBloxAdapter";
 
 jest.mock("../../src/services/sorobanService");
 jest.mock("../../src/config/logger");
@@ -533,5 +534,78 @@ describe("SorobanContractStateTool", () => {
       expect(result.status).toBe("success");
       expect(result.data?.contractId).toBe("CTEST123");
     });
+  });
+});
+
+describe("YieldBloxAdapter — borrowing position net value", () => {
+  let adapter: YieldBloxAdapter;
+
+  beforeEach(() => {
+    adapter = new YieldBloxAdapter();
+    // @ts-expect-error — reach into protected config to enable borrowing
+    adapter.config = {
+      ...adapter.config,
+      capabilities: { lending: false, borrowing: true, swap: false, liquidity: false },
+    };
+  });
+
+  it("computes netValueUSD as valueUSD minus accruedCostUSD", async () => {
+    // @ts-expect-error — stub protected method
+    adapter.fetchWithSchema = jest.fn().mockResolvedValue({
+      positions: [
+        {
+          token: "USDC",
+          borrowed: "500",
+          valueUSD: 500,
+          borrowAPY: 0.08,
+          accruedInterestUSD: 12.5,
+        },
+      ],
+    });
+
+    const result = await adapter.getBorrowingPositions("GADDR");
+
+    expect(result.success).toBe(true);
+    const pos = result.data![0];
+    expect(pos.accruedCostUSD).toBe(12.5);
+    expect(pos.netValueUSD).toBe(500 - 12.5);
+  });
+
+  it("omits netValueUSD and accruedCostUSD when accruedInterestUSD is absent", async () => {
+    // @ts-expect-error
+    adapter.fetchWithSchema = jest.fn().mockResolvedValue({
+      positions: [
+        { token: "USDC", borrowed: "500", valueUSD: 500, borrowAPY: 0.08 },
+      ],
+    });
+
+    const result = await adapter.getBorrowingPositions("GADDR");
+
+    expect(result.success).toBe(true);
+    const pos = result.data![0];
+    expect(pos.accruedCostUSD).toBeUndefined();
+    expect(pos.netValueUSD).toBeUndefined();
+  });
+
+  it("netValueUSD is negative when accrued costs exceed position value", async () => {
+    // @ts-expect-error
+    adapter.fetchWithSchema = jest.fn().mockResolvedValue({
+      positions: [
+        {
+          token: "USDC",
+          borrowed: "100",
+          valueUSD: 100,
+          borrowAPY: 0.5,
+          accruedInterestUSD: 110,
+        },
+      ],
+    });
+
+    const result = await adapter.getBorrowingPositions("GADDR");
+
+    expect(result.success).toBe(true);
+    const pos = result.data![0];
+    expect(pos.netValueUSD).toBe(100 - 110);
+    expect(pos.netValueUSD).toBeLessThan(0);
   });
 });
