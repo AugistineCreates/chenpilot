@@ -86,13 +86,13 @@ jobs:
         run: npm run build:check
 
       - name: Backend unit tests
-        run: npm test ---runInBand
+        run: npm test --runInBand
 
       - name: Adversarial red-team evaluation gate (#634)
         run: npm run redteam:check
 
       - name: Webhook idempotency integration tests
-        run: npm test ---testPatternPattern="webhookIdempotency.integration" --runInBand
+        run: npm test --testPathPattern="webhookIdempotency.integration" --runInBand
         env:
           DATABASE_HOST: localhost
           DATABASE_PORT: 5432
@@ -126,16 +126,16 @@ jobs:
         working-directory: packages/sdk
 
       - name: SDK tests
-        run: npm test ---runInBand
+        run: npm test --runInBand
         working-directory: packages/sdk
 
       - name: API snapshot compatibility check
         run: node api-snapshot.js compare
         working-directory: packages/sdk
 
-      - name: SDJ artifact dry run
+      - name: SDK artifact dry run
         run: npm pack --dry-run
-        working-directory: packages/sdd
+        working-directory: packages/sdk
 
   contract-health:
     name: Soroban contract compatibility

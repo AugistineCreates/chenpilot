@@ -28,6 +28,8 @@ export {
   RoutePolicy,
   DEFAULT_ROUTE_POLICY,
   RoutePolicyViolationError,
+  PolicyViolation,
+  PolicyViolationKind,
   PathEvaluationResult,
   PathFinderOptions,
   parseStellarAsset,

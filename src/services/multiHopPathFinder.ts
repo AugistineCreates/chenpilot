@@ -10,6 +10,7 @@ import {
   DEFAULT_ROUTE_POLICY,
   parseStellarAsset,
   stellarAssetToString,
+  PolicyViolation,
 } from "../domain";
 
 /** Per-hop slippage penalty factor (0.3% per hop). */
@@ -89,21 +90,39 @@ export class MultiHopPathFinder {
    */
   private enforcePolicy(path: TradePath, policy: RoutePolicy): void {
     if (path.efficiency < policy.minEfficiency) {
+      const violation: PolicyViolation = {
+        kind: 'efficiency',
+        actual: path.efficiency,
+        limit: policy.minEfficiency,
+      };
       throw new RoutePolicyViolationError(
         `efficiency ${path.efficiency.toFixed(4)} < required ${policy.minEfficiency}`,
-        path
+        path,
+        violation
       );
     }
     if (path.estimatedSlippage > policy.maxSlippage) {
+      const violation: PolicyViolation = {
+        kind: 'slippage',
+        actual: path.estimatedSlippage,
+        limit: policy.maxSlippage,
+      };
       throw new RoutePolicyViolationError(
         `slippage ${(path.estimatedSlippage * 100).toFixed(2)}% > max ${(policy.maxSlippage * 100).toFixed(2)}%`,
-        path
+        path,
+        violation
       );
     }
     if (path.hops > policy.maxHops) {
+      const violation: PolicyViolation = {
+        kind: 'hops',
+        actual: path.hops,
+        limit: policy.maxHops,
+      };
       throw new RoutePolicyViolationError(
         `hops ${path.hops} > max ${policy.maxHops}`,
-        path
+        path,
+        violation
       );
     }
   }

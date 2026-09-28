@@ -126,10 +126,19 @@ export interface RoutePolicy {
   maxHops: number;
 }
 
+export type PolicyViolationKind = 'efficiency' | 'slippage' | 'hops';
+
+export interface PolicyViolation {
+  kind: PolicyViolationKind;
+  actual: number;
+  limit: number;
+}
+
 export class RoutePolicyViolationError extends Error {
   constructor(
     public readonly reason: string,
-    public readonly bestAvailable: TradePath
+    public readonly bestAvailable: TradePath,
+    public readonly violatedPolicy: PolicyViolation
   ) {
     super(`Route policy violation: ${reason}`);
     this.name = 'RoutePolicyViolationError';

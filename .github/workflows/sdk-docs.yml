@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@swt4
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0 # fetch all tags for version comparison
 
@@ -37,7 +37,7 @@ jobs:
         working-directory: packages/sdk
 
       - name: Generate API snapshot
-        run: nxp api-extractor run --local
+        run: npx api-extractor run --local
         working-directory: packages/sdk
 
       - name: Enforce API compatibility
