@@ -461,4 +461,446 @@ describe("HorizonClient", () => {
       expect(capturedUrl).toContain("https://horizon.stellar.org");
     });
   });
+
+  describe("abort cleanup while retry backoff is pending (#866)", () => {
+    it("should abort during backoff and prevent subsequent network attempt", async () => {
+      const controller = new AbortController();
+      let attemptCount = 0;
+
+      const client = new HorizonClient({
+        baseUrl: "https://horizon.stellar.org",
+        retry: {
+          maxAttempts: 3,
+          initialDelayMs: 500,
+          maxDelayMs: 5000,
+          backoffMultiplier: 2,
+        },
+        fetchFn: async () => {
+          attemptCount++;
+          return {
+            ok: false,
+            status: 500,
+            json: async () => ({}),
+            text: async () => "Internal Server Error",
+          };
+        },
+      });
+
+      const requestPromise = client.getAccountOffers(
+        "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J",
+        { signal: controller.signal }
+      );
+
+      // Abort after first attempt during backoff
+      setTimeout(() => controller.abort(), 50);
+
+      await expect(requestPromise).rejects.toThrow("AbortError");
+      
+      // Verify only one attempt was made (no retry after abort)
+      expect(attemptCount).toBe(1);
+    });
+
+    it("should clean up timers when aborted during backoff", async () => {
+      const controller = new AbortController();
+      let timerCleared = false;
+      
+      // Spy on clearTimeout to verify cleanup
+      const originalClearTimeout = global.clearTimeout;
+      const clearTimeoutSpy = jest.fn((id: NodeJS.Timeout) => {
+        timerCleared = true;
+        originalClearTimeout(id);
+      });
+      global.clearTimeout = clearTimeoutSpy;
+
+      const client = new HorizonClient({
+        retry: {
+          maxAttempts: 3,
+          initialDelayMs: 500,
+          maxDelayMs: 5000,
+          backoffMultiplier: 2,
+        },
+        fetchFn: async () => ({
+          ok: false,
+          status: 500,
+          json: async () => ({}),
+          text: async () => "Internal Server Error",
+        }),
+      });
+
+      const requestPromise = client.getAccountOffers(
+        "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J",
+        { signal: controller.signal }
+      );
+
+      setTimeout(() => controller.abort(), 50);
+
+      await expect(requestPromise).rejects.toThrow();
+      
+      // Verify clearTimeout was called (timer cleanup)
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+      
+      // Restore original
+      global.clearTimeout = originalClearTimeout;
+    });
+
+    it("should not start new attempt after abort during backoff", async () => {
+      const controller = new AbortController();
+      const attemptTimestamps: number[] = [];
+
+      const client = new HorizonClient({
+        retry: {
+          maxAttempts: 5,
+          initialDelayMs: 200,
+          maxDelayMs: 5000,
+          backoffMultiplier: 2,
+        },
+        fetchFn: async () => {
+          attemptTimestamps.push(Date.now());
+          return {
+            ok: false,
+            status: 500,
+            json: async () => ({}),
+            text: async () => "Internal Server Error",
+          };
+        },
+      });
+
+      const requestPromise = client.getAccountOffers(
+        "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J",
+        { signal: controller.signal }
+      );
+
+      // Abort during backoff after first attempt
+      setTimeout(() => controller.abort(), 100);
+
+      await expect(requestPromise).rejects.toThrow("AbortError");
+      
+      // Should have exactly 1 attempt (aborted during backoff before retry)
+      expect(attemptTimestamps).toHaveLength(1);
+    });
+  });
+
+  describe("apply one end-to-end deadline across retry attempts (#867)", () => {
+    it("should apply total deadline across all attempts", async () => {
+      let attemptCount = 0;
+      const startTime = Date.now();
+
+      const client = new HorizonClient({
+        timeout: 300, // 300ms total deadline
+        retry: {
+          maxAttempts: 5,
+          initialDelayMs: 100,
+          maxDelayMs: 5000,
+          backoffMultiplier: 2,
+        },
+        fetchFn: async () => {
+          attemptCount++;
+          return {
+            ok: false,
+            status: 500,
+            json: async () => ({}),
+            text: async () => "Internal Server Error",
+          };
+        },
+      });
+
+      await expect(
+        client.getAccountOffers(
+          "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J"
+        )
+      ).rejects.toThrow(/deadline/i);
+
+      const elapsed = Date.now() - startTime;
+      
+      // Should stop near deadline, not continue for all 5 attempts
+      expect(elapsed).toBeLessThan(500);
+      expect(attemptCount).toBeLessThan(5);
+    });
+
+    it("should never start an attempt after deadline", async () => {
+      const attemptTimestamps: number[] = [];
+      const startTime = Date.now();
+
+      const client = new HorizonClient({
+        timeout: 250, // 250ms total
+        retry: {
+          maxAttempts: 10,
+          initialDelayMs: 100,
+          maxDelayMs: 5000,
+          backoffMultiplier: 2,
+        },
+        fetchFn: async () => {
+          attemptTimestamps.push(Date.now() - startTime);
+          return {
+            ok: false,
+            status: 500,
+            json: async () => ({}),
+            text: async () => "Internal Server Error",
+          };
+        },
+      });
+
+      await expect(
+        client.getAccountOffers(
+          "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J"
+        )
+      ).rejects.toThrow();
+
+      // Verify no attempt started after the 250ms deadline
+      attemptTimestamps.forEach((timestamp) => {
+        expect(timestamp).toBeLessThanOrEqual(250);
+      });
+    });
+
+    it("should document one total request deadline across attempts and delays", async () => {
+      let attemptCount = 0;
+
+      const client = new HorizonClient({
+        timeout: 400,
+        retry: { maxAttempts: 3, initialDelayMs: 150, maxDelayMs: 5000, backoffMultiplier: 2 },
+        fetchFn: async () => {
+          attemptCount++;
+          return {
+            ok: false,
+            status: 503,
+            json: async () => ({}),
+            text: async () => "Service Unavailable",
+          };
+        },
+      });
+
+      await expect(
+        client.getAccountOffers(
+          "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J"
+        )
+      ).rejects.toThrow(/deadline/);
+
+      // Should be less than max attempts due to deadline
+      expect(attemptCount).toBeLessThan(3);
+    });
+  });
+
+  describe("retry with exponential backoff", () => {
+    it("should retry on 5xx errors", async () => {
+      let attemptCount = 0;
+
+      const client = new HorizonClient({
+        retry: {
+          maxAttempts: 3,
+          initialDelayMs: 10,
+          maxDelayMs: 100,
+          backoffMultiplier: 2,
+        },
+        fetchFn: async () => {
+          attemptCount++;
+          if (attemptCount < 3) {
+            return {
+              ok: false,
+              status: 500,
+              json: async () => ({}),
+              text: async () => "Internal Server Error",
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              _links: { self: { href: "" } },
+              _embedded: { records: [] },
+            }),
+            text: async () => "",
+          };
+        },
+      });
+
+      const result = await client.getAccountOffers(
+        "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J"
+      );
+
+      expect(attemptCount).toBe(3);
+      expect(result.records).toEqual([]);
+    });
+
+    it("should retry on 429 rate limit", async () => {
+      let attemptCount = 0;
+
+      const client = new HorizonClient({
+        retry: {
+          maxAttempts: 2,
+          initialDelayMs: 10,
+          maxDelayMs: 100,
+          backoffMultiplier: 2,
+        },
+        fetchFn: async () => {
+          attemptCount++;
+          if (attemptCount < 2) {
+            return {
+              ok: false,
+              status: 429,
+              json: async () => ({}),
+              text: async () => "Too Many Requests",
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              _links: { self: { href: "" } },
+              _embedded: { records: [] },
+            }),
+            text: async () => "",
+          };
+        },
+      });
+
+      const result = await client.getAccountOffers(
+        "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J"
+      );
+
+      expect(attemptCount).toBe(2);
+      expect(result.records).toEqual([]);
+    });
+
+    it("should not retry on 4xx client errors (except 429)", async () => {
+      let attemptCount = 0;
+
+      const client = new HorizonClient({
+        retry: {
+          maxAttempts: 3,
+          initialDelayMs: 10,
+          maxDelayMs: 100,
+          backoffMultiplier: 2,
+        },
+        fetchFn: async () => {
+          attemptCount++;
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({}),
+            text: async () => "Not Found",
+          };
+        },
+      });
+
+      await expect(
+        client.getAccountOffers(
+          "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J"
+        )
+      ).rejects.toThrow("Failed to fetch account offers");
+
+      // Should only try once (no retries for 404)
+      expect(attemptCount).toBe(1);
+    });
+  });
+
+  describe("normalize resumable cursors for backend history APIs (#868)", () => {
+    it("should extract and normalize cursor from Horizon next link", async () => {
+      const mockResponse = {
+        _links: {
+          self: { href: "https://horizon.stellar.org/accounts/test/offers" },
+          next: {
+            href: "https://horizon.stellar.org/accounts/test/offers?cursor=123456789&limit=50",
+          },
+        },
+        _embedded: { records: [] },
+      };
+
+      const client = new HorizonClient({
+        fetchFn: async () => ({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+          text: async () => "",
+        }),
+      });
+
+      const result = await client.getAccountOffers(
+        "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J"
+      );
+
+      expect(result.nextCursor).toBe("123456789");
+    });
+
+    it("should normalize cursor from prev link for backward pagination", async () => {
+      const mockResponse = {
+        _links: {
+          self: { href: "https://horizon.stellar.org/accounts/test/offers" },
+          prev: {
+            href: "https://horizon.stellar.org/accounts/test/offers?cursor=987654321&limit=50",
+          },
+        },
+        _embedded: { records: [] },
+      };
+
+      const client = new HorizonClient({
+        fetchFn: async () => ({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+          text: async () => "",
+        }),
+      });
+
+      const result = await client.getAccountOffers(
+        "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J"
+      );
+
+      expect(result.prevCursor).toBe("987654321");
+    });
+
+    it("should handle opaque cursor values consistently", async () => {
+      const opaqueCursor = "PT123456789_987654321";
+      const mockResponse = {
+        _links: {
+          self: { href: "https://horizon.stellar.org/accounts/test/offers" },
+          next: {
+            href: `https://horizon.stellar.org/accounts/test/offers?cursor=${opaqueCursor}&limit=50`,
+          },
+        },
+        _embedded: { records: [] },
+      };
+
+      const client = new HorizonClient({
+        fetchFn: async () => ({
+          ok: true,
+          status: 200,
+          json: async () => mockResponse,
+          text: async () => "",
+        }),
+      });
+
+      const result = await client.getAccountOffers(
+        "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J"
+      );
+
+      expect(result.nextCursor).toBe(opaqueCursor);
+    });
+
+    it("should pass cursor through subsequent requests unchanged", async () => {
+      let capturedUrl = "";
+      const cursor = "backend-opaque-cursor-123";
+
+      const client = new HorizonClient({
+        fetchFn: async (url: string) => {
+          capturedUrl = url;
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              _links: { self: { href: url } },
+              _embedded: { records: [] },
+            }),
+            text: async () => "",
+          };
+        },
+      });
+
+      await client.getAccountOffers(
+        "GBBD47UZQ5PL46VYUWWK7VJT3BNNNL2DJNQB6JQ4YQQB7O2KH6F6PQ5J",
+        { cursor }
+      );
+
+      expect(capturedUrl).toContain(`cursor=${cursor}`);
+    });
+  });
 });
