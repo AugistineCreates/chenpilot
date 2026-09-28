@@ -113,3 +113,69 @@ describe("createCapabilityDiscovery factory", () => {
     expect(d).toBeInstanceOf(CapabilityDiscovery);
   });
 });
+
+describe("negotiate required backend capabilities when a client session starts (#869)", () => {
+  it("should negotiate capabilities at session start", async () => {
+    mockFetch(true, true);
+    const d = new CapabilityDiscovery({ network: "testnet" });
+    
+    // Simulate session start negotiation
+    const sessionNegotiation = await d.negotiate({
+      minProtocol: 20,
+      requiredFeatures: ["sorobanEnabled"],
+    });
+    
+    expect(sessionNegotiation.compatible).toBe(true);
+    expect(sessionNegotiation.capabilities).toBeDefined();
+  });
+
+  it("should fail session start when backend lacks required capabilities", async () => {
+    mockFetch(true, false); // RPC down, no Soroban
+    const d = new CapabilityDiscovery({ network: "testnet" });
+    
+    const sessionNegotiation = await d.negotiate({
+      requiredFeatures: ["sorobanEnabled"],
+    });
+    
+    expect(sessionNegotiation.compatible).toBe(false);
+    expect(sessionNegotiation.reason).toContain("sorobanEnabled");
+  });
+
+  it("should negotiate multiple required features at session start", async () => {
+    mockFetch(true, true);
+    const d = new CapabilityDiscovery({ network: "testnet" });
+    
+    const result = await d.negotiate({
+      minProtocol: 20,
+      requiredFeatures: ["sorobanEnabled", "feeBumpingEnabled", "metadataEnabled"],
+    });
+    
+    expect(result.compatible).toBe(true);
+  });
+
+  it("should return incompatible when protocol version is too old at session start", async () => {
+    mockFetch(true, true);
+    const d = new CapabilityDiscovery({ network: "testnet" });
+    
+    const result = await d.negotiate({
+      minProtocol: 999, // Far future protocol
+    });
+    
+    expect(result.compatible).toBe(false);
+    expect(result.reason).toContain("Protocol");
+  });
+
+  it("should include full capability matrix in session negotiation result", async () => {
+    mockFetch(true, true);
+    const d = new CapabilityDiscovery({ network: "testnet" });
+    
+    const result = await d.negotiate({
+      minProtocol: 20,
+      requiredFeatures: ["sorobanEnabled"],
+    });
+    
+    expect(result.capabilities.versions.protocol).toBe(21);
+    expect(result.capabilities.features.sorobanEnabled).toBe(true);
+    expect(result.capabilities.network).toBe("testnet");
+  });
+});

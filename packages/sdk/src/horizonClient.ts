@@ -2,8 +2,15 @@
  * Horizon Client for Stellar API interactions with cursor-based pagination support
  */
 
-import { combineSignals, throwIfAborted } from "./abort";
+import { combineSignals, throwIfAborted, abortableSleep } from "./abort";
 import type { AbortSignalLike } from "./types";
+
+export interface RetryConfig {
+  maxAttempts?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  backoffMultiplier?: number;
+}
 
 export interface PaginationOptions {
   cursor?: string;
@@ -80,6 +87,7 @@ export interface HorizonClientOptions {
   baseUrl?: string;
   fetchFn?: FetchLike;
   timeout?: number;
+  retry?: RetryConfig;
 }
 
 /**
@@ -89,11 +97,18 @@ export class HorizonClient {
   private baseUrl: string;
   private fetch: FetchLike;
   private timeout?: number;
+  private retryConfig: Required<RetryConfig>;
 
   constructor(options: HorizonClientOptions = {}) {
     this.baseUrl = options.baseUrl ?? "https://horizon.stellar.org";
     this.fetch = options.fetchFn ?? globalThis.fetch;
     this.timeout = options.timeout;
+    this.retryConfig = {
+      maxAttempts: options.retry?.maxAttempts ?? 3,
+      initialDelayMs: options.retry?.initialDelayMs ?? 100,
+      maxDelayMs: options.retry?.maxDelayMs ?? 5000,
+      backoffMultiplier: options.retry?.backoffMultiplier ?? 2,
+    };
   }
 
   /**
@@ -122,46 +137,129 @@ export class HorizonClient {
 
     const url = `${this.baseUrl}/accounts/${accountId}/offers?${params.toString()}`;
 
-    const combined = combineSignals(this.timeout, options?.signal);
-    try {
-      throwIfAborted(combined.signal);
-      const response = await this.fetch(url, {
-        signal: combined.signal as AbortSignal | undefined,
-      });
+    // Apply one end-to-end deadline across all retry attempts
+    const requestStartTime = Date.now();
+    const totalDeadline = this.timeout;
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `Failed to fetch account offers: ${response.status} ${errorText}`
-        );
+    let lastError: Error | undefined;
+    
+    for (let attempt = 0; attempt < this.retryConfig.maxAttempts; attempt++) {
+      // Check if already aborted before starting attempt
+      throwIfAborted(options?.signal);
+
+      // Calculate remaining time for this attempt
+      let attemptTimeout: number | undefined;
+      if (totalDeadline !== undefined) {
+        const elapsed = Date.now() - requestStartTime;
+        const remaining = totalDeadline - elapsed;
+        
+        // Don't start a new attempt if deadline already exceeded
+        if (remaining <= 0) {
+          throw new Error(`Request deadline exceeded after ${elapsed}ms`);
+        }
+        attemptTimeout = remaining;
       }
 
-      const data = (await response.json()) as HorizonApiResponse<AccountOffer>;
+      const combined = combineSignals(attemptTimeout, options?.signal);
+      try {
+        throwIfAborted(combined.signal);
+        const response = await this.fetch(url, {
+          signal: combined.signal as AbortSignal | undefined,
+        });
 
-      // Extract next and previous cursors from Horizon links
-      let nextCursor: string | undefined;
-      let prevCursor: string | undefined;
+        if (!response.ok) {
+          const errorText = await response.text();
+          const error = new Error(
+            `Failed to fetch account offers: ${response.status} ${errorText}`
+          );
+          
+          // Retry on 5xx errors or 429 (rate limit)
+          if (response.status >= 500 || response.status === 429) {
+            lastError = error;
+            combined.cleanup();
+            
+            // Calculate backoff delay for next retry
+            if (attempt < this.retryConfig.maxAttempts - 1) {
+              const delay = Math.min(
+                this.retryConfig.initialDelayMs * Math.pow(this.retryConfig.backoffMultiplier, attempt),
+                this.retryConfig.maxDelayMs
+              );
+              
+              // Check if we have time for backoff within deadline
+              if (totalDeadline !== undefined) {
+                const elapsed = Date.now() - requestStartTime;
+                const remaining = totalDeadline - elapsed;
+                if (remaining < delay) {
+                  throw new Error(`Request deadline exceeded during retry backoff`);
+                }
+              }
+              
+              // Abort during backoff releases timers and prevents next attempt
+              await abortableSleep(delay, options?.signal);
+            }
+            continue;
+          }
+          
+          // Non-retryable error
+          throw error;
+        }
 
-      if (data._links?.next?.href) {
-        const nextUrl = new URL(data._links.next.href);
-        nextCursor = nextUrl.searchParams.get("cursor") ?? undefined;
+        const data = (await response.json()) as HorizonApiResponse<AccountOffer>;
+
+        // Extract next and previous cursors from Horizon links
+        let nextCursor: string | undefined;
+        let prevCursor: string | undefined;
+
+        if (data._links?.next?.href) {
+          const nextUrl = new URL(data._links.next.href);
+          nextCursor = nextUrl.searchParams.get("cursor") ?? undefined;
+        }
+
+        if (data._links?.prev?.href) {
+          const prevUrl = new URL(data._links.prev.href);
+          prevCursor = prevUrl.searchParams.get("cursor") ?? undefined;
+        }
+
+        const records = data._embedded?.records ?? data.records ?? [];
+
+        combined.cleanup();
+        return {
+          records,
+          nextCursor,
+          prevCursor,
+        };
+      } catch (error) {
+        combined.cleanup();
+        
+        // Re-throw abort errors immediately without retry
+        if (error instanceof Error && error.name === "AbortError") {
+          throw error;
+        }
+        
+        lastError = error as Error;
+        
+        // Only retry if we haven't exhausted attempts
+        if (attempt < this.retryConfig.maxAttempts - 1) {
+          const delay = Math.min(
+            this.retryConfig.initialDelayMs * Math.pow(this.retryConfig.backoffMultiplier, attempt),
+            this.retryConfig.maxDelayMs
+          );
+          
+          // Check deadline before backoff
+          if (totalDeadline !== undefined) {
+            const elapsed = Date.now() - requestStartTime;
+            const remaining = totalDeadline - elapsed;
+            if (remaining < delay) {
+              throw new Error(`Request deadline exceeded during retry backoff`);
+            }
+          }
+          
+          await abortableSleep(delay, options?.signal);
+        }
       }
-
-      if (data._links?.prev?.href) {
-        const prevUrl = new URL(data._links.prev.href);
-        prevCursor = prevUrl.searchParams.get("cursor") ?? undefined;
-      }
-
-      const records = data._embedded?.records ?? data.records ?? [];
-
-      return {
-        records,
-        nextCursor,
-        prevCursor,
-      };
-    } finally {
-      combined.cleanup();
     }
+
+    throw lastError ?? new Error("Request failed after all retry attempts");
   }
 
   /**
