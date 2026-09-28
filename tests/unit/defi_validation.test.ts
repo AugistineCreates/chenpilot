@@ -697,6 +697,72 @@ describe("validateDeFiIntent", () => {
         })
       );
     });
+
+    it("should reject partial withdrawal that would breach YieldBlox collateral requirement", () => {
+      // suppliedCollateral=1000, borrowedValue=600, collateralFactor=0.75
+      // requiredCollateral = 600 / 0.75 = 800
+      // withdrawAmountUSD=300 → remaining=700 < 800 → reject
+      const intent: WorkflowStep = {
+        action: "withdraw",
+        payload: {
+          token: "USDC",
+          amount: 300,
+          suppliedCollateralUSD: 1000,
+          borrowedValueUSD: 600,
+          collateralFactor: 0.75,
+          withdrawAmountUSD: 300,
+        },
+      };
+
+      const result = validateDeFiIntent(intent);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({
+          field: "amount",
+          code: "INSUFFICIENT_COLLATERAL_AFTER_WITHDRAW",
+        })
+      );
+    });
+
+    it("should allow partial withdrawal that leaves sufficient collateral", () => {
+      // requiredCollateral = 600 / 0.75 = 800; withdrawAmountUSD=100 → remaining=900 > 800
+      const intent: WorkflowStep = {
+        action: "withdraw",
+        payload: {
+          token: "USDC",
+          amount: 100,
+          suppliedCollateralUSD: 1000,
+          borrowedValueUSD: 600,
+          collateralFactor: 0.75,
+          withdrawAmountUSD: 100,
+        },
+      };
+
+      const result = validateDeFiIntent(intent);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("should warn when partial collateral context is provided but incomplete", () => {
+      const intent: WorkflowStep = {
+        action: "withdraw",
+        payload: {
+          token: "USDC",
+          amount: 100,
+          suppliedCollateralUSD: 1000,
+          // borrowedValueUSD and collateralFactor missing
+        },
+      };
+
+      const result = validateDeFiIntent(intent);
+
+      expect(result.isValid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining("Supply suppliedCollateralUSD")
+      );
+    });
   });
 
   describe("Invalid Action Validation", () => {

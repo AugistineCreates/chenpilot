@@ -406,4 +406,46 @@ function validateRepayWithdrawIntent(
       "No debt/position ID specified. Ensure the correct debt is being repaid."
     );
   }
+
+  // Preflight partial withdrawals against remaining collateral (YieldBlox).
+  // When the caller supplies collateral context, reject the withdrawal if it
+  // would drop the remaining collateral below what open borrows require.
+  if (action === "withdraw") {
+    const suppliedCollateral = payload.suppliedCollateralUSD;
+    const borrowedValue = payload.borrowedValueUSD;
+    const collateralFactor = payload.collateralFactor;
+    const withdrawAmount = payload.withdrawAmountUSD ?? payload.amount;
+
+    if (
+      typeof suppliedCollateral === "number" &&
+      typeof borrowedValue === "number" &&
+      typeof collateralFactor === "number" &&
+      typeof withdrawAmount === "number"
+    ) {
+      // Minimum collateral needed to cover outstanding borrows:
+      //   requiredCollateral = borrowedValue / collateralFactor
+      const requiredCollateral =
+        collateralFactor > 0 ? borrowedValue / collateralFactor : Infinity;
+      const remainingCollateral = suppliedCollateral - withdrawAmount;
+
+      if (remainingCollateral < requiredCollateral) {
+        errors.push({
+          field: "amount",
+          message:
+            `Withdrawal of ${withdrawAmount} USD would leave ${remainingCollateral.toFixed(2)} USD collateral, ` +
+            `below the ${requiredCollateral.toFixed(2)} USD required by YieldBlox for outstanding borrows ` +
+            `(collateral factor: ${collateralFactor}).`,
+          code: "INSUFFICIENT_COLLATERAL_AFTER_WITHDRAW",
+        });
+      }
+    } else if (
+      suppliedCollateral !== undefined ||
+      borrowedValue !== undefined ||
+      collateralFactor !== undefined
+    ) {
+      warnings.push(
+        "Partial collateral context provided. Supply suppliedCollateralUSD, borrowedValueUSD, and collateralFactor to enable preflight collateral checks."
+      );
+    }
+  }
 }
