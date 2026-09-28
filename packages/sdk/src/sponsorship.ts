@@ -1,5 +1,6 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
 import { AssetToTrust, TrustlineWorkflowBuilder } from "./trustline";
+import { isAmount, isPositiveAmount } from "./advancedOps/validation";
 
 export type SponsorshipOperation = "begin" | "end";
 
@@ -213,7 +214,7 @@ export class SponsorshipTransactionBuilder {
    *
    * @param destination - Destination account address
    * @param asset - Asset to send (default: XLM)
-   * @param amount - Amount to send
+   * @param amount - Amount to send (must be a valid decimal string)
    * @returns this builder for chaining
    */
   addSponsoredPayment(
@@ -221,6 +222,10 @@ export class SponsorshipTransactionBuilder {
     asset: StellarSdk.Asset = StellarSdk.Asset.native(),
     amount: string
   ): this {
+    if (!isAmount(amount)) {
+      throw new Error(`Invalid amount "${amount}": must be a non-negative decimal string with at most 7 decimal places`);
+    }
+
     const operation = StellarSdk.Operation.payment({
       source: this.sponsorshipConfig?.sponsoredAccount,
       destination,
@@ -438,6 +443,9 @@ export class SponsorshipWorkflowBuilder {
   }
 
   addPayment(destination: string, amount: string, asset?: StellarSdk.Asset): this {
+    if (!isAmount(amount)) {
+      throw new Error(`Invalid amount "${amount}": must be a non-negative decimal string with at most 7 decimal places`);
+    }
     this.payments.push({ destination, amount, asset });
     this.step = SponsorshipWorkflowStep.BUILDING;
     return this;

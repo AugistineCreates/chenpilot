@@ -38,4 +38,86 @@ describe("SDK fixedAmount (#622)", () => {
       expect(sumAmounts(terms, 7)).toBe("0.0001");
     });
   });
+
+  describe("unsafe numeric amount rejection at API boundaries", () => {
+    it("rejects unsafe amounts in SponsorshipTransactionBuilder.addSponsoredPayment", () => {
+      const { SponsorshipTransactionBuilder } = require("../sponsorship");
+      const keypair = require("@stellar/stellar-sdk").Keypair.random();
+      const builder = new SponsorshipTransactionBuilder(
+        keypair,
+        "Test SDF Network ; September 2015"
+      );
+
+      builder.addBeginSponsorship({
+        sponsor: keypair.publicKey(),
+        sponsoredAccount: "GSPONSORED",
+      });
+
+      expect(() => {
+        builder.addSponsoredPayment("GDEST", undefined, "123.123456789");
+      }).toThrow(/Invalid amount.*7 decimal places/);
+
+      expect(() => {
+        builder.addSponsoredPayment("GDEST", undefined, "-5");
+      }).toThrow(/Invalid amount/);
+
+      expect(() => {
+        builder.addSponsoredPayment("GDEST", undefined, "abc");
+      }).toThrow(/Invalid amount/);
+    });
+
+    it("accepts valid amounts in SponsorshipTransactionBuilder.addSponsoredPayment", () => {
+      const { SponsorshipTransactionBuilder } = require("../sponsorship");
+      const keypair = require("@stellar/stellar-sdk").Keypair.random();
+      const builder = new SponsorshipTransactionBuilder(
+        keypair,
+        "Test SDF Network ; September 2015"
+      );
+
+      builder.addBeginSponsorship({
+        sponsor: keypair.publicKey(),
+        sponsoredAccount: "GSPONSORED",
+      });
+
+      expect(() => {
+        builder.addSponsoredPayment("GDEST", undefined, "100.1234567");
+      }).not.toThrow();
+
+      expect(() => {
+        builder.addSponsoredPayment("GDEST", undefined, "0");
+      }).not.toThrow();
+    });
+
+    it("rejects unsafe amounts in SponsorshipWorkflowBuilder.addPayment", () => {
+      const { SponsorshipWorkflowBuilder } = require("../sponsorship");
+      const builder = new SponsorshipWorkflowBuilder({
+        sponsor: "GSPONSOR",
+        sponsoredAccount: "GSPONSORED",
+      });
+
+      expect(() => {
+        builder.addPayment("GDEST", "999.99999999");
+      }).toThrow(/Invalid amount.*7 decimal places/);
+
+      expect(() => {
+        builder.addPayment("GDEST", "-100");
+      }).toThrow(/Invalid amount/);
+    });
+
+    it("accepts valid amounts in SponsorshipWorkflowBuilder.addPayment", () => {
+      const { SponsorshipWorkflowBuilder } = require("../sponsorship");
+      const builder = new SponsorshipWorkflowBuilder({
+        sponsor: "GSPONSOR",
+        sponsoredAccount: "GSPONSORED",
+      });
+
+      expect(() => {
+        builder.addPayment("GDEST", "50.5");
+      }).not.toThrow();
+
+      expect(() => {
+        builder.addPayment("GDEST", "0.0000001");
+      }).not.toThrow();
+    });
+  });
 });
