@@ -1,7 +1,7 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
 import { createClient } from "redis";
 import nodemailer from "nodemailer";
-import AppDataSource from "../config/Datasource";
+import AppDataSource, { getPoolStats } from "../config/Datasource";
 import config from "../config/config";
 import { clockSkewService } from "./clock/clockSkew.service";
 import type { ClockSample } from "./clock/types";
@@ -32,8 +32,6 @@ export interface HealthReport {
   };
 }
 
-
-
 async function timed<T>(
   fn: () => Promise<T>
 ): Promise<
@@ -52,22 +50,79 @@ async function timed<T>(
 }
 
 async function checkDatabase(): Promise<DependencyHealth> {
-  const out = await timed(async () => {
-    if (!AppDataSource.isInitialized) {
-      throw new Error("DataSource not initialized");
+  if (!AppDataSource.isInitialized) {
+    return {
+      status: "DOWN",
+      latencyMs: 0,
+      error: "DataSource not initialized",
+    };
+  }
+
+  // --- 1. Time connection acquisition (pool wait-time diagnostic) ---
+  const acquireStart = performance.now();
+  let acquireMs = 0;
+  try {
+    // Borrow a raw client from the pool to measure pure acquisition time,
+    // then immediately release it before running the health query.
+    const driver = AppDataSource.driver as unknown as {
+      master?: { connect(): Promise<{ release(): void }> };
+    };
+    if (driver.master) {
+      const client = await driver.master.connect();
+      acquireMs = Math.round(performance.now() - acquireStart);
+      client.release();
     }
+  } catch {
+    // Acquisition failure is surfaced via the query attempt below.
+    acquireMs = Math.round(performance.now() - acquireStart);
+  }
+
+  // --- 2. Run the canonical liveness query ---
+  const out = await timed(async () => {
     const result = await AppDataSource.query("SELECT 1 AS ok");
     return result;
   });
+
+  // --- 3. Collect live pool saturation metrics ---
+  const poolStats = getPoolStats();
 
   if ("error" in out) {
     return {
       status: "DOWN",
       latencyMs: out.latencyMs,
       error: out.error.message,
+      detail: poolStats
+        ? {
+            acquireMs,
+            pool: poolStats,
+          }
+        : { acquireMs },
     };
   }
-  return { status: "UP", latencyMs: out.latencyMs };
+
+  // --- 4. Determine status from pool saturation ---
+  //
+  // Rules:
+  //  • DEGRADED when any requests are already waiting for a free connection
+  //    (waitingRequests > 0) — the pool is exhausted right now.
+  //  • DEGRADED when the saturation ratio is ≥ 0.8 (pool is 80 %+ full) —
+  //    the next burst of requests will likely queue.
+  //  • UP otherwise.
+  const saturated = poolStats
+    ? poolStats.waitingRequests > 0 || poolStats.saturationRatio >= 0.8
+    : false;
+
+  return {
+    status: saturated ? "DEGRADED" : "UP",
+    latencyMs: out.latencyMs,
+    ...(saturated ? { error: "Connection pool is saturated" } : {}),
+    detail: poolStats
+      ? {
+          acquireMs,
+          pool: poolStats,
+        }
+      : { acquireMs },
+  };
 }
 
 async function checkRedis(): Promise<DependencyHealth> {
