@@ -9,5 +9,7 @@ src/Auth/accounts.json
 dist/
 coverage/
 logs/
+contracts/target/
+*.tsbuildinfo
 *.log
 .DS_Store

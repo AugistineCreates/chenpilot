@@ -130,6 +130,28 @@ export interface NetworkIdentityVerifierConfig {
   /** Per-endpoint discovery timeout in ms (default 10_000). */
   timeoutMs?: number;
 }
+
+export interface DeploymentNetworkConfig {
+  packageName: string;
+  network?: SorobanNetwork | "public" | string;
+  horizonUrl?: string;
+  rpcUrl?: string;
+  networkPassphrase?: string;
+}
+
+export interface DeploymentConfigDrift {
+  field: "network" | "horizonUrl" | "rpcUrl" | "networkPassphrase";
+  expectedPackage: string;
+  actualPackage: string;
+  expectedValue: string;
+  actualValue: string;
+}
+
+export interface DeploymentConfigDriftReport {
+  driftDetected: boolean;
+  expectedNetwork: SorobanNetwork | "unknown";
+  drifts: DeploymentConfigDrift[];
+}
 // ─── Pure resolution helpers ───────────────────────────────────────────────────
 
 /**
@@ -180,6 +202,104 @@ export function resolveNetworkFromUrl(
   if (host.includes("mainnet")) return "mainnet";
   if (RELIABLE_MAINNET_HOSTS.has(host)) return "mainnet";
   return undefined;
+}
+
+function normalizeConfiguredNetwork(
+  network: DeploymentNetworkConfig["network"]
+): SorobanNetwork | "unknown" {
+  if (network === "public" || network === "mainnet") return "mainnet";
+  if (network === "testnet") return "testnet";
+  return "unknown";
+}
+
+function comparableEndpoint(value: string | undefined): string | undefined {
+  return value ? normalizeEndpointUrl(value) : undefined;
+}
+
+export function detectDeploymentConfigDrift(
+  expected: DeploymentNetworkConfig,
+  actual: DeploymentNetworkConfig
+): DeploymentConfigDriftReport {
+  const expectedNetwork =
+    normalizeConfiguredNetwork(expected.network) !== "unknown"
+      ? normalizeConfiguredNetwork(expected.network)
+      : expected.networkPassphrase
+        ? resolveNetworkFromPassphrase(expected.networkPassphrase) ?? "unknown"
+        : expected.horizonUrl
+          ? resolveNetworkFromUrl(expected.horizonUrl) ?? "unknown"
+          : "unknown";
+
+  const drifts: DeploymentConfigDrift[] = [];
+  const actualNetwork = normalizeConfiguredNetwork(actual.network);
+
+  if (
+    expectedNetwork !== "unknown" &&
+    actualNetwork !== "unknown" &&
+    actualNetwork !== expectedNetwork
+  ) {
+    drifts.push({
+      field: "network",
+      expectedPackage: expected.packageName,
+      actualPackage: actual.packageName,
+      expectedValue: expectedNetwork,
+      actualValue: actualNetwork,
+    });
+  }
+
+  const expectedPassphraseNetwork = expected.networkPassphrase
+    ? resolveNetworkFromPassphrase(expected.networkPassphrase)
+    : undefined;
+  const actualPassphraseNetwork = actual.networkPassphrase
+    ? resolveNetworkFromPassphrase(actual.networkPassphrase)
+    : undefined;
+
+  if (
+    expectedPassphraseNetwork &&
+    actualPassphraseNetwork &&
+    expectedPassphraseNetwork !== actualPassphraseNetwork
+  ) {
+    drifts.push({
+      field: "networkPassphrase",
+      expectedPackage: expected.packageName,
+      actualPackage: actual.packageName,
+      expectedValue: expectedPassphraseNetwork,
+      actualValue: actualPassphraseNetwork,
+    });
+  }
+
+  const expectedHorizon = comparableEndpoint(expected.horizonUrl);
+  const actualHorizon = comparableEndpoint(actual.horizonUrl);
+  if (expectedHorizon && actualHorizon && expectedHorizon !== actualHorizon) {
+    drifts.push({
+      field: "horizonUrl",
+      expectedPackage: expected.packageName,
+      actualPackage: actual.packageName,
+      expectedValue: expectedHorizon,
+      actualValue: actualHorizon,
+    });
+  }
+
+  const expectedRpcNetwork = expected.rpcUrl
+    ? resolveNetworkFromUrl(expected.rpcUrl)
+    : undefined;
+  const actualRpcNetwork = actual.rpcUrl
+    ? resolveNetworkFromUrl(actual.rpcUrl)
+    : undefined;
+  if (expectedRpcNetwork && actualRpcNetwork && expectedRpcNetwork !== actualRpcNetwork) {
+    drifts.push({
+      field: "rpcUrl",
+      expectedPackage: expected.packageName,
+      actualPackage: actual.packageName,
+      expectedValue: expectedRpcNetwork,
+      actualValue: actualRpcNetwork,
+    });
+  }
+
+  return {
+    driftDetected: drifts.length > 0,
+    expectedNetwork,
+    drifts,
+  };
 }
 
 const SECRET_KEY_PATTERN = /S[1-9A-HJ-NP-Za-km-z]{55}/g;

@@ -14,6 +14,7 @@
 import {
   evaluateInvariant,
   evaluateAllInvariants,
+  evaluateSubmissionReconciliationDivergence,
   summarizeInvariantResults,
   InvariantEvaluationContext,
   InvariantResult,
@@ -298,6 +299,39 @@ describe("Invariant: TX_COMPLETENESS", () => {
     expect(result.status).toBe("passing");
     expect(result.holds).toBe(true);
     expect(result.dataAvailable).toBe(true);
+  });
+});
+
+describe("Submission vs reconciliation divergence alert window", () => {
+  it("alerts only when submission divergence is sustained across the full window", () => {
+    const now = Date.parse("2026-09-28T12:00:00.000Z");
+    const windowMs = 5 * 60 * 1000;
+
+    const transient = evaluateSubmissionReconciliationDivergence(
+      [
+        { submittedCount: 10, reconciledCount: 10, sampledAtMs: now - windowMs },
+        { submittedCount: 12, reconciledCount: 10, sampledAtMs: now - 60_000 },
+        { submittedCount: 12, reconciledCount: 12, sampledAtMs: now },
+      ],
+      { windowMs, thresholdCount: 1, nowMs: now },
+    );
+
+    expect(transient.alert).toBe(false);
+    expect(transient.maxDivergence).toBe(2);
+
+    const sustained = evaluateSubmissionReconciliationDivergence(
+      [
+        { submittedCount: 12, reconciledCount: 10, sampledAtMs: now - windowMs },
+        { submittedCount: 13, reconciledCount: 10, sampledAtMs: now - 3 * 60_000 },
+        { submittedCount: 14, reconciledCount: 10, sampledAtMs: now },
+      ],
+      { windowMs, thresholdCount: 1, nowMs: now },
+    );
+
+    expect(sustained.alert).toBe(true);
+    expect(sustained.consecutiveDivergentSamples).toBe(3);
+    expect(sustained.startedAt).toBe("2026-09-28T11:55:00.000Z");
+    expect(sustained.endedAt).toBe("2026-09-28T12:00:00.000Z");
   });
 });
 
