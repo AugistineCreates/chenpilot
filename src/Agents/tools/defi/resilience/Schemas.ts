@@ -19,6 +19,8 @@ export const PositionResultSchema = z.object({
   amount: z.string(),
   valueUSD: z.number(),
   APY: z.number(),
+  collateral: z.string().optional(),
+  accruedInterest: z.string().optional(),
 });
 
 export const TransactionRequestSchema = z.object({
@@ -58,6 +60,8 @@ export const YieldBloxLendingPositionSchema = z.object({
   supplied: z.string(),
   valueUSD: z.number().optional(),
   supplyAPY: z.number().optional(),
+  collateral: z.string().optional(),
+  accruedInterest: z.string().optional(),
 });
 
 export const YieldBloxLendingPositionsResponseSchema = z.object({
@@ -69,6 +73,8 @@ export const YieldBloxBorrowingPositionSchema = z.object({
   borrowed: z.string(),
   valueUSD: z.number().optional(),
   borrowAPY: z.number().optional(),
+  collateral: z.string().optional(),
+  accruedInterest: z.string().optional(),
 });
 
 export const YieldBloxBorrowingPositionsResponseSchema = z.object({
