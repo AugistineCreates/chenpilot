@@ -4,6 +4,21 @@ import logger from "../config/logger";
 import { EventEmitter } from "events";
 import { evaluateRealtimeAbusePolicy } from "../Security";
 import { propagateSocketContext } from "../observability/socketContext";
+import {
+  DEFAULT_MAX_BUFFERED_EVENTS,
+  DeliveryClass,
+  SocketFlowController,
+} from "./flowControl";
+
+/**
+ * Resolve the per-socket critical-event buffer bound from the environment.
+ */
+function resolveMaxBufferedEvents(value: string | undefined): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_MAX_BUFFERED_EVENTS;
+}
 
 /**
  * Represents a connected client with metadata
@@ -195,6 +210,7 @@ export class SocketManager {
   private eventEmitter: RealtimeEventEmitter;
   private userSockets: Map<string, Set<string>>; // userId -> Set of socketIds
   private jwtService: JwtService;
+  private flowController: SocketFlowController;
 
   constructor(httpServer: HTTPServer) {
     this.io = new SocketIOServer(httpServer, {
@@ -214,6 +230,24 @@ export class SocketManager {
     this.userSockets = new Map();
     this.eventEmitter = new RealtimeEventEmitter();
     this.jwtService = container.resolve(JwtService);
+    this.flowController = new SocketFlowController(
+      {
+        maxBufferedEventsPerSocket: resolveMaxBufferedEvents(
+          process.env.REALTIME_MAX_BUFFERED_EVENTS
+        ),
+      },
+      (slowSocket) => {
+        logger.warn(
+          `Evicting slow consumer ${slowSocket.id}: outbound event buffer exceeded`
+        );
+        slowSocket.emit("error", {
+          code: "slow_consumer",
+          message:
+            "Disconnected: outbound event buffer exceeded. Reconnect to resume.",
+        });
+        slowSocket.disconnect(true);
+      }
+    );
 
     this.setupConnectionHandlers();
     this.setupEventListeners();
@@ -224,10 +258,17 @@ export class SocketManager {
    */
   private setupConnectionHandlers(): void {
     this.io.on("connection", async (socket: Socket) => {
-      const ip = socket.handshake.headers["x-forwarded-for"] as string || socket.handshake.address;
+      const ip =
+        (socket.handshake.headers["x-forwarded-for"] as string) ||
+        socket.handshake.address;
       const userAgent = socket.handshake.headers["user-agent"];
 
       logger.info(`Client connected: ${socket.id} (IP: ${ip})`);
+
+      // Clear the per-socket backpressure counter whenever the transport drains.
+      socket.conn.on("drain", () => {
+        this.flowController.onDrain(socket.id);
+      });
 
       // Listen for authentication immediately
       socket.once("authenticate", async (token: string) => {
@@ -251,7 +292,10 @@ export class SocketManager {
           this.userSockets.get(payload.userId)!.add(socket.id);
 
           socket.join(`user:${payload.userId}`);
-          socket.emit("authenticated", { success: true, userId: payload.userId });
+          socket.emit("authenticated", {
+            success: true,
+            userId: payload.userId,
+          });
 
           await auditLogService.log({
             userId: payload.userId,
@@ -262,19 +306,25 @@ export class SocketManager {
             resource: "realtime:connection",
             metadata: {
               event: "connected",
-              socketId: socket.id
+              socketId: socket.id,
             },
             success: true,
           });
 
-          logger.info(`Client ${socket.id} authenticated as user ${payload.userId}`);
+          logger.info(
+            `Client ${socket.id} authenticated as user ${payload.userId}`
+          );
 
           propagateSocketContext(socket, payload.userId, () => {
             this.setupAuthenticatedListeners(socket, client);
           });
         } catch (error) {
-          logger.warn(`Authentication failed for client ${socket.id}:`, { error: (error as Error).message });
-          socket.emit("error", { message: "Authentication failed. Invalid token." });
+          logger.warn(`Authentication failed for client ${socket.id}:`, {
+            error: (error as Error).message,
+          });
+          socket.emit("error", {
+            message: "Authentication failed. Invalid token.",
+          });
           socket.disconnect(true);
         }
       });
@@ -376,12 +426,13 @@ export class SocketManager {
             metadata: {
               event: "disconnected",
               socketId: socket.id,
-              reason
+              reason,
             },
             success: true,
           });
         }
         this.connectedClients.delete(socket.id);
+        this.flowController.onDrain(socket.id);
         logger.info(`Client disconnected: ${socket.id} (Reason: ${reason})`);
       });
 
@@ -397,7 +448,10 @@ export class SocketManager {
   /**
    * Setup event listeners for authenticated clients
    */
-  private setupAuthenticatedListeners(socket: Socket, client: ConnectedClient): void {
+  private setupAuthenticatedListeners(
+    socket: Socket,
+    client: ConnectedClient
+  ): void {
     // Handle subscription to transaction updates
     socket.on("subscribe:transactions", async (transactionId?: string) => {
       try {
@@ -529,25 +583,61 @@ export class SocketManager {
       RealtimeEventType.AGENT_EXECUTION_STARTED,
       RealtimeEventType.AGENT_STEP_COMPLETED,
       RealtimeEventType.AGENT_EXECUTION_COMPLETED,
-    RealtimeEventType.AGENT_EXECUTION_FAILED,
-    RealtimeEventType.AGENT_APPROVAL_REQUIRED,
-  ].forEach((eventType) => {
-    this.eventEmitter.on(eventType, (update: AgentExecutionUpdate) => {
-      this.broadcastAgentUpdate(eventType, update);
+      RealtimeEventType.AGENT_EXECUTION_FAILED,
+      RealtimeEventType.AGENT_APPROVAL_REQUIRED,
+    ].forEach((eventType) => {
+      this.eventEmitter.on(eventType, (update: AgentExecutionUpdate) => {
+        this.broadcastAgentUpdate(eventType, update);
+      });
     });
-  });
   }
 
   /**
-   * Broadcast transaction status update
+   * Emit an event to every socket in `room`, applying per-socket flow control.
+   *
+   * Bypasses `io.to(room).emit` so each recipient is checked against its own
+   * bounded buffer and can be evicted independently under backpressure.
+   */
+  private emitBounded(
+    room: string,
+    event: string,
+    payload: unknown,
+    delivery: DeliveryClass
+  ): void {
+    const members = this.io.sockets.adapter.rooms.get(room);
+    if (!members || members.size === 0) {
+      return;
+    }
+
+    for (const socketId of members) {
+      const socket = this.io.sockets.sockets.get(socketId);
+      if (socket) {
+        this.flowController.send(socket, event, payload, delivery);
+      }
+    }
+  }
+
+  /**
+   * Broadcast transaction status update.
+   *
+   * Lossy: interim status updates are superseded by the next update, so they are
+   * dropped rather than buffered for a slow consumer.
    */
   private broadcastTransactionUpdate(update: TransactionStatusUpdate): void {
     if (update.userId) {
-      this.io.to(`user:${update.userId}`).emit("transaction:update", update);
+      this.emitBounded(
+        `user:${update.userId}`,
+        "transaction:update",
+        update,
+        DeliveryClass.Lossy
+      );
     }
-    this.io
-      .to(`transaction:${update.transactionId}`)
-      .emit("transaction:update", update);
+    this.emitBounded(
+      `transaction:${update.transactionId}`,
+      "transaction:update",
+      update,
+      DeliveryClass.Lossy
+    );
   }
 
   /**
@@ -559,7 +649,13 @@ export class SocketManager {
   ): void {
     const eventName = `transaction:${eventType}`;
     if (update.userId) {
-      this.io.to(`user:${update.userId}`).emit(eventName, update);
+      // Critical: terminal lifecycle transitions must not be silently dropped.
+      this.emitBounded(
+        `user:${update.userId}`,
+        eventName,
+        update,
+        DeliveryClass.Critical
+      );
     }
   }
 
@@ -568,11 +664,19 @@ export class SocketManager {
    */
   private broadcastSwapStatus(update: TransactionStatusUpdate): void {
     if (update.userId) {
-      this.io.to(`user:${update.userId}`).emit("swap:status", update);
+      this.emitBounded(
+        `user:${update.userId}`,
+        "swap:status",
+        update,
+        DeliveryClass.Lossy
+      );
     }
-    this.io
-      .to(`transaction:${update.transactionId}`)
-      .emit("swap:status", update);
+    this.emitBounded(
+      `transaction:${update.transactionId}`,
+      "swap:status",
+      update,
+      DeliveryClass.Lossy
+    );
   }
 
   /**
@@ -580,10 +684,21 @@ export class SocketManager {
    */
   private broadcastBotAlert(alert: BotAlert): void {
     if (alert.userId) {
-      this.io.to(`user:${alert.userId}`).emit("bot:alert", alert);
+      // Critical: alerts are actionable and must not be dropped silently.
+      this.emitBounded(
+        `user:${alert.userId}`,
+        "bot:alert",
+        alert,
+        DeliveryClass.Critical
+      );
     }
     if (alert.botId) {
-      this.io.to(`bot:${alert.botId}`).emit("bot:alert", alert);
+      this.emitBounded(
+        `bot:${alert.botId}`,
+        "bot:alert",
+        alert,
+        DeliveryClass.Critical
+      );
     }
   }
 
@@ -592,14 +707,25 @@ export class SocketManager {
    */
   private broadcastBotStatusChange(statusChange: BotStatusChange): void {
     if (statusChange.userId) {
-      this.io
-        .to(`user:${statusChange.userId}`)
-        .emit("bot:status-change", statusChange);
+      this.emitBounded(
+        `user:${statusChange.userId}`,
+        "bot:status-change",
+        statusChange,
+        DeliveryClass.Lossy
+      );
     }
-    this.io
-      .to(`bot:${statusChange.botId}`)
-      .emit("bot:status-change", statusChange);
-    this.io.to("bot:all").emit("bot:status-change", statusChange);
+    this.emitBounded(
+      `bot:${statusChange.botId}`,
+      "bot:status-change",
+      statusChange,
+      DeliveryClass.Lossy
+    );
+    this.emitBounded(
+      "bot:all",
+      "bot:status-change",
+      statusChange,
+      DeliveryClass.Lossy
+    );
   }
 
   /**
@@ -607,10 +733,20 @@ export class SocketManager {
    */
   private broadcastBotError(alert: BotAlert): void {
     if (alert.userId) {
-      this.io.to(`user:${alert.userId}`).emit("bot:error", alert);
+      this.emitBounded(
+        `user:${alert.userId}`,
+        "bot:error",
+        alert,
+        DeliveryClass.Critical
+      );
     }
     if (alert.botId) {
-      this.io.to(`bot:${alert.botId}`).emit("bot:error", alert);
+      this.emitBounded(
+        `bot:${alert.botId}`,
+        "bot:error",
+        alert,
+        DeliveryClass.Critical
+      );
     }
   }
 
@@ -619,7 +755,13 @@ export class SocketManager {
    */
   private broadcastDeploymentStatus(status: DeploymentStatus): void {
     if (status.userId) {
-      this.io.to(`user:${status.userId}`).emit("deployment:status", status);
+      // Critical: deployment outcome is a terminal state change.
+      this.emitBounded(
+        `user:${status.userId}`,
+        "deployment:status",
+        status,
+        DeliveryClass.Critical
+      );
     }
   }
 
@@ -630,10 +772,23 @@ export class SocketManager {
     eventType: string,
     update: AgentExecutionUpdate
   ): void {
+    // Terminal agent states are critical; intermediate progress is lossy.
+    const delivery =
+      eventType === RealtimeEventType.AGENT_EXECUTION_COMPLETED ||
+      eventType === RealtimeEventType.AGENT_EXECUTION_FAILED ||
+      eventType === RealtimeEventType.AGENT_APPROVAL_REQUIRED
+        ? DeliveryClass.Critical
+        : DeliveryClass.Lossy;
+
     if (update.userId) {
-      this.io.to(`user:${update.userId}`).emit(eventType, update);
+      this.emitBounded(`user:${update.userId}`, eventType, update, delivery);
     }
-    this.io.to(`execution:${update.executionId}`).emit(eventType, update);
+    this.emitBounded(
+      `execution:${update.executionId}`,
+      eventType,
+      update,
+      delivery
+    );
   }
 
   /**

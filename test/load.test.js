@@ -1,1 +1,0 @@
-test('slow consumer', () => {});
