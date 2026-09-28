@@ -2,10 +2,10 @@ import { describe, it, expect, jest, beforeEach } from "@jest/globals";
 import {
   MultiHopPathFinder,
   RoutePolicyViolationError,
+  PolicyViolation,
   DEFAULT_ROUTE_POLICY,
   RoutePolicy,
 } from "../../src/services/multiHopPathFinder";
-import { PolicyViolation } from "../../src/domain";
 import * as StellarSdk from "@stellar/stellar-sdk";
 
 jest.mock("@stellar/stellar-sdk");
@@ -46,36 +46,6 @@ describe("MultiHopPathFinder", () => {
     pathFinder = new MultiHopPathFinder();
   });
 
-  describe("findOptimalPath", () => {
-    it("should find and evaluate multiple trading paths", async () => {
-      const mockPaths = {
-        records: [
-          {
-            source_amount: "100.0000000",
-            destination_amount: "12.5000000",
-            path: [
-              {
-                asset_type: "credit_alphanum4",
-                asset_code: "USDC",
-                asset_issuer:
-                  "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-              },
-            ],
-          },
-          {
-            source_amount: "100.0000000",
-            destination_amount: "12.3000000",
-            path: [
-              {
-                asset_type: "credit_alphanum4",
-                asset_code: "USDT",
-                asset_issuer:
-                  "GCQTGZQQ5G4PTM2GL7CDIFKUBIPEC52BROAQIAPW53XBRJVN6ZJVTG6V",
-              },
-            ],
-          },
-        ],
-      };
   describe("findOptimalPath — basic evaluation", () => {
     it("returns a result with normalized efficiency in [0,1]", async () => {
       mockServer.call.mockResolvedValue({
@@ -105,28 +75,6 @@ describe("MultiHopPathFinder", () => {
       expect(parseFloat(result.bestPath.destinationAmount)).toBe(15.0);
     });
 
-    it("should select path with highest efficiency", async () => {
-      const mockPaths = {
-        records: [
-          {
-            source_amount: "100.0000000",
-            destination_amount: "15.0000000",
-            path: [],
-          },
-          {
-            source_amount: "100.0000000",
-            destination_amount: "14.5000000",
-            path: [
-              {
-                asset_type: "credit_alphanum4",
-                asset_code: "USDC",
-                asset_issuer:
-                  "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
-              },
-            ],
-          },
-        ],
-      };
     it("evaluationTime is a positive number", async () => {
       mockServer.call.mockResolvedValue({
         records: [makeRecord("12.0000000")],
@@ -142,10 +90,6 @@ describe("MultiHopPathFinder", () => {
     it("throws when no paths are found", async () => {
       mockServer.call.mockResolvedValue({ records: [] });
 
-      expect(
-        parseFloat(result.bestPath.destinationAmount)
-      ).toBeGreaterThanOrEqual(
-        parseFloat(result.allPaths[1]?.destinationAmount || "0")
       await expect(
         pathFinder.findOptimalPath(XLM, USDC, "100")
       ).rejects.toThrow("No valid trading paths found");
@@ -171,33 +115,7 @@ describe("MultiHopPathFinder", () => {
       ];
       mockServer.call.mockResolvedValue({
         records: [
-          {
-            source_amount: "100.0000000",
-            destination_amount: "12.0000000",
-            path: [],
-          },
-          {
-            source_amount: "100.0000000",
-            destination_amount: "12.5000000",
-            path: [
-              {
-                asset_type: "credit_alphanum4",
-                asset_code: "USDC",
-                asset_issuer: "ISSUER1",
-              },
-              {
-                asset_type: "credit_alphanum4",
-                asset_code: "USDT",
-                asset_issuer: "ISSUER2",
-              },
-              {
-                asset_type: "credit_alphanum4",
-                asset_code: "BTC",
-                asset_issuer: "ISSUER3",
-              },
-            ],
-          },
-          makeRecord("12.0000000"), // 1 hop (direct)
+          makeRecord("12.0000000"),           // 1 hop (direct)
           makeRecord("13.0000000", manyHops), // 4 hops — excluded when maxHops=2
         ],
       });
@@ -207,22 +125,16 @@ describe("MultiHopPathFinder", () => {
         policy: { minEfficiency: 0, maxSlippage: 1, maxHops: 10 },
       });
 
-      result.allPaths.forEach((p) => expect(p.hops).toBeLessThan(2));
+      result.allPaths.forEach((p) => expect(p.hops).toBeLessThanOrEqual(2));
     });
   });
 
   describe("findOptimalPath — deterministic tie-breaking", () => {
     it("prefers fewer hops when efficiency is equal", async () => {
-      // Two paths with same destination amount → same outputRatio → same efficiency
-      // before hop discount. After discount, fewer hops wins.
       mockServer.call.mockResolvedValue({
         records: [
           makeRecord("12.0000000", [
-            {
-              asset_type: "credit_alphanum4",
-              asset_code: "X",
-              asset_issuer: "I",
-            },
+            { asset_type: "credit_alphanum4", asset_code: "X", asset_issuer: "I" },
           ]),
           makeRecord("12.0000000"), // direct, fewer hops
         ],
@@ -232,7 +144,6 @@ describe("MultiHopPathFinder", () => {
         policy: { minEfficiency: 0, maxSlippage: 1, maxHops: 10 },
       });
 
-      // Direct path (fewer hops) should win or tie
       expect(result.bestPath.hops).toBeLessThanOrEqual(
         result.allPaths.find((p) => p.hops > result.bestPath.hops)?.hops ??
           result.bestPath.hops
@@ -242,8 +153,6 @@ describe("MultiHopPathFinder", () => {
 
   describe("RoutePolicy enforcement", () => {
     it("throws RoutePolicyViolationError when efficiency is below minEfficiency", async () => {
-      // Single-hop path: efficiency = 1.0 * (1 - 1*0.02) * (1 - 0.003) ≈ 0.977
-      // Set minEfficiency above that to force violation
       mockServer.call.mockResolvedValue({
         records: [makeRecord("12.0000000")],
       });
@@ -324,36 +233,80 @@ describe("MultiHopPathFinder", () => {
       );
     });
 
-    it("throws RoutePolicyViolationError when hops exceed maxHops", async () => {
-      // 3-hop path (2 intermediate assets) with maxHops=2 on the policy
-      // Note: maxHops on PathFinderOptions filters at collection time;
-      // maxHops on RoutePolicy enforces after evaluation. Use a lenient
-      // collection limit so the path reaches enforcePolicy.
-      const twoMidAssets = [
+    it("violations[] contains a structured entry for each breached threshold", async () => {
+      // 4-hop path: slippage = 0.012, efficiency also below 0.999 — both fail
+      const threeIntermediateHops = [
         { asset_type: "credit_alphanum4", asset_code: "A", asset_issuer: "I1" },
         { asset_type: "credit_alphanum4", asset_code: "B", asset_issuer: "I2" },
+        { asset_type: "credit_alphanum4", asset_code: "C", asset_issuer: "I3" },
       ];
       mockServer.call.mockResolvedValue({
-        records: [makeRecord("12.0000000", twoMidAssets)],
+        records: [makeRecord("12.0000000", threeIntermediateHops)],
+      });
+
+      const strictPolicy: RoutePolicy = {
+        minEfficiency: 0.999,
+        maxSlippage: 0.005,
+        maxHops: 10,
+      };
+
+      try {
+        await pathFinder.findOptimalPath(XLM, USDC, "100", {
+          policy: strictPolicy,
+        });
+        fail("Expected RoutePolicyViolationError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(RoutePolicyViolationError);
+        const e = err as RoutePolicyViolationError;
+        expect(e.violations.length).toBeGreaterThanOrEqual(2);
+        expect(e.violations.map((v: PolicyViolation) => v.field)).toContain("efficiency");
+        expect(e.violations.map((v: PolicyViolation) => v.field)).toContain("slippage");
+        e.violations.forEach((v: PolicyViolation) => {
+          expect(typeof v.actual).toBe("number");
+          expect(typeof v.threshold).toBe("number");
+          expect(typeof v.reason).toBe("string");
+        });
+      }
+    });
+
+    it("throws RoutePolicyViolationError when hops exceed policy maxHops", async () => {
+      // 4-hop path (3 intermediate assets)
+      const threeIntermediateHops = [
+        { asset_type: "credit_alphanum4", asset_code: "A", asset_issuer: "I1" },
+        { asset_type: "credit_alphanum4", asset_code: "B", asset_issuer: "I2" },
+        { asset_type: "credit_alphanum4", asset_code: "C", asset_issuer: "I3" },
+      ];
+      mockServer.call.mockResolvedValue({
+        records: [makeRecord("12.0000000", threeIntermediateHops)],
       });
 
       const strictPolicy: RoutePolicy = {
         minEfficiency: 0,
         maxSlippage: 1,
-        maxHops: 2, // path has 3 hops → violation
+        maxHops: 2, // path has 4 hops → violation
       };
 
-      await expect(
-        pathFinder.findOptimalPath(XLM, USDC, "100", {
-          maxHops: 10,
+      try {
+        await pathFinder.findOptimalPath(XLM, USDC, "100", {
           policy: strictPolicy,
-        })
-      ).rejects.toThrow(RoutePolicyViolationError);
+        });
+        fail("Expected RoutePolicyViolationError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(RoutePolicyViolationError);
+        const e = err as RoutePolicyViolationError;
+        expect(e.violations.some((v: PolicyViolation) => v.field === "hops")).toBe(true);
+        const hopsViolation = e.violations.find((v: PolicyViolation) => v.field === "hops")!;
+        expect(hopsViolation.actual).toBeGreaterThan(hopsViolation.threshold);
+      }
     });
 
-    it("violatedPolicy carries structured kind, actual, and limit", async () => {
+    it("all-routes-fail: error carries the best candidate across all failing paths", async () => {
       mockServer.call.mockResolvedValue({
-        records: [makeRecord("12.0000000")],
+        records: [
+          makeRecord("8.0000000"),
+          makeRecord("12.0000000"),
+          makeRecord("10.0000000"),
+        ],
       });
 
       const strictPolicy: RoutePolicy = {
@@ -369,41 +322,9 @@ describe("MultiHopPathFinder", () => {
         fail("Expected RoutePolicyViolationError");
       } catch (err) {
         expect(err).toBeInstanceOf(RoutePolicyViolationError);
-        const violation = (err as RoutePolicyViolationError)
-          .violatedPolicy as PolicyViolation;
-        expect(violation.kind).toBe("efficiency");
-        expect(violation.actual).toBeGreaterThanOrEqual(0);
-        expect(violation.actual).toBeLessThan(0.999);
-        expect(violation.limit).toBe(0.999);
-      }
-    });
-
-    it("violatedPolicy.kind is 'slippage' when slippage is the failing constraint", async () => {
-      const twoMidAssets = [
-        { asset_type: "credit_alphanum4", asset_code: "A", asset_issuer: "I1" },
-        { asset_type: "credit_alphanum4", asset_code: "B", asset_issuer: "I2" },
-      ];
-      mockServer.call.mockResolvedValue({
-        records: [makeRecord("12.0000000", twoMidAssets)],
-      });
-
-      const strictPolicy: RoutePolicy = {
-        minEfficiency: 0,
-        maxSlippage: 0.005, // 3-hop path produces 0.009 slippage
-        maxHops: 10,
-      };
-
-      try {
-        await pathFinder.findOptimalPath(XLM, USDC, "100", {
-          policy: strictPolicy,
-        });
-        fail("Expected RoutePolicyViolationError");
-      } catch (err) {
-        expect(err).toBeInstanceOf(RoutePolicyViolationError);
-        const violation = (err as RoutePolicyViolationError)
-          .violatedPolicy as PolicyViolation;
-        expect(violation.kind).toBe("slippage");
-        expect(violation.limit).toBe(0.005);
+        const e = err as RoutePolicyViolationError;
+        expect(parseFloat(e.bestAvailable.destinationAmount)).toBe(12.0);
+        expect(e.violations.length).toBeGreaterThan(0);
       }
     });
   });
