@@ -42,6 +42,188 @@ jest.mock("stellar-sdk", () => {
   };
 });
 
+describe("checkAccountMergeBlockers", () => {
+  const mockCall = jest.fn();
+  const mockOffers = jest.fn();
+  const mockServerInstance: any = {
+    accounts: () => ({ accountId: () => ({ call: mockCall }) }),
+    offers: () => ({
+      forAccount: () => ({
+        limit: () => ({
+          call: mockOffers,
+        }),
+      }),
+    }),
+  };
+
+  beforeAll(() => {
+    (require("stellar-sdk").Server as jest.Mock).mockImplementation(
+      () => mockServerInstance
+    );
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("reports no blockers when account is merge-ready", async () => {
+    const { checkAccountMergeBlockers } = await import("../trustline");
+    mockCall.mockResolvedValueOnce({
+      id: "GTEST",
+      balances: [{ asset_type: "native", balance: "100" }],
+      data: {},
+      signers: [{ key: "GTEST", weight: 1 }],
+    });
+    mockOffers.mockResolvedValueOnce({ records: [] });
+
+    const result = await checkAccountMergeBlockers(undefined, "GTEST");
+
+    expect(result.canMerge).toBe(true);
+    expect(result.blockers).toHaveLength(0);
+  });
+
+  it("reports non-zero trustline blockers with cleanup instructions", async () => {
+    const { checkAccountMergeBlockers } = await import("../trustline");
+    mockCall.mockResolvedValueOnce({
+      balances: [
+        { asset_type: "native", balance: "100" },
+        {
+          asset_type: "credit_alphanum4",
+          asset_code: "USDC",
+          asset_issuer: "GISSUER",
+          balance: "50.5",
+        },
+      ],
+      data: {},
+      signers: [{ key: "GTEST", weight: 1 }],
+    });
+    mockOffers.mockResolvedValueOnce({ records: [] });
+
+    const result = await checkAccountMergeBlockers(undefined, "GTEST");
+
+    expect(result.canMerge).toBe(false);
+    expect(result.blockers).toHaveLength(1);
+    expect(result.blockers[0].type).toBe("trustline");
+    expect(result.blockers[0].description).toContain("non-zero balance");
+    expect(result.blockers[0].cleanupInstructions).toContain(
+      "Send all asset balances"
+    );
+    expect(result.blockers[0].affectedItems).toContain("USDC:GISSUER");
+  });
+
+  it("reports zero-balance trustline blockers with removal instructions", async () => {
+    const { checkAccountMergeBlockers } = await import("../trustline");
+    mockCall.mockResolvedValueOnce({
+      balances: [
+        { asset_type: "native", balance: "100" },
+        {
+          asset_type: "credit_alphanum4",
+          asset_code: "EMPTY",
+          asset_issuer: "GISSUER",
+          balance: "0",
+        },
+      ],
+      data: {},
+      signers: [{ key: "GTEST", weight: 1 }],
+    });
+    mockOffers.mockResolvedValueOnce({ records: [] });
+
+    const result = await checkAccountMergeBlockers(undefined, "GTEST");
+
+    expect(result.canMerge).toBe(false);
+    expect(result.blockers[0].type).toBe("trustline");
+    expect(result.blockers[0].cleanupInstructions).toContain("changeTrust");
+    expect(result.blockers[0].affectedItems).toContain("EMPTY:GISSUER");
+  });
+
+  it("reports data entry blockers", async () => {
+    const { checkAccountMergeBlockers } = await import("../trustline");
+    mockCall.mockResolvedValueOnce({
+      balances: [{ asset_type: "native", balance: "100" }],
+      data: { config: "base64data", metadata: "base64data" },
+      signers: [{ key: "GTEST", weight: 1 }],
+    });
+    mockOffers.mockResolvedValueOnce({ records: [] });
+
+    const result = await checkAccountMergeBlockers(undefined, "GTEST");
+
+    expect(result.canMerge).toBe(false);
+    const dataBlocker = result.blockers.find((b) => b.type === "data_entry");
+    expect(dataBlocker).toBeDefined();
+    expect(dataBlocker!.cleanupInstructions).toContain("manageData");
+    expect(dataBlocker!.affectedItems).toContain("config");
+  });
+
+  it("reports open offer blockers", async () => {
+    const { checkAccountMergeBlockers } = await import("../trustline");
+    mockCall.mockResolvedValueOnce({
+      balances: [{ asset_type: "native", balance: "100" }],
+      data: {},
+      signers: [{ key: "GTEST", weight: 1 }],
+    });
+    mockOffers.mockResolvedValueOnce({
+      records: [{ id: "12345" }, { id: "67890" }],
+    });
+
+    const result = await checkAccountMergeBlockers(undefined, "GTEST");
+
+    expect(result.canMerge).toBe(false);
+    const offerBlocker = result.blockers.find((b) => b.type === "offers");
+    expect(offerBlocker).toBeDefined();
+    expect(offerBlocker!.cleanupInstructions).toContain("manageSellOffer");
+    expect(offerBlocker!.affectedItems).toHaveLength(2);
+  });
+
+  it("reports additional signer blockers", async () => {
+    const { checkAccountMergeBlockers } = await import("../trustline");
+    mockCall.mockResolvedValueOnce({
+      id: "GTEST",
+      balances: [{ asset_type: "native", balance: "100" }],
+      data: {},
+      signers: [
+        { key: "GTEST", weight: 1 },
+        { key: "GSIGNER2", weight: 1 },
+      ],
+    });
+    mockOffers.mockResolvedValueOnce({ records: [] });
+
+    const result = await checkAccountMergeBlockers(undefined, "GTEST");
+
+    expect(result.canMerge).toBe(false);
+    const signerBlocker = result.blockers.find((b) => b.type === "signers");
+    expect(signerBlocker).toBeDefined();
+    expect(signerBlocker!.cleanupInstructions).toContain("setOptions");
+    expect(signerBlocker!.affectedItems).toContain("GSIGNER2");
+  });
+
+  it("reports multiple blocker types simultaneously", async () => {
+    const { checkAccountMergeBlockers } = await import("../trustline");
+    mockCall.mockResolvedValueOnce({
+      id: "GTEST",
+      balances: [
+        { asset_type: "native", balance: "100" },
+        {
+          asset_type: "credit_alphanum4",
+          asset_code: "USDC",
+          asset_issuer: "GISSUER",
+          balance: "0",
+        },
+      ],
+      data: { key1: "value1" },
+      signers: [
+        { key: "GTEST", weight: 1 },
+        { key: "GSIGNER2", weight: 1 },
+      ],
+    });
+    mockOffers.mockResolvedValueOnce({ records: [{ id: "12345" }] });
+
+    const result = await checkAccountMergeBlockers(undefined, "GTEST");
+
+    expect(result.canMerge).toBe(false);
+    expect(result.blockers.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
 describe("TrustlineWorkflowBuilder", () => {
   describe("constructor", () => {
     it("should initialize with default values", () => {

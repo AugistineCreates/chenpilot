@@ -100,4 +100,50 @@ describe("Soroban Service invokeContract", () => {
     );
     expect(result.raw).toBeDefined();
   });
+
+  it("binds simulation result to originating invocation", async () => {
+    const { invokeContract } =
+      await import("../../src/services/sorobanService");
+
+    const result = await invokeContract({
+      network: "mainnet",
+      contractId: TEST_CONTRACT_ID,
+      method: "execute",
+      args: [],
+    });
+
+    expect(result.raw).toBeDefined();
+    expect((result.raw as any).invocation).toEqual(
+      expect.objectContaining({
+        contractId: TEST_CONTRACT_ID,
+        method: "execute",
+        network: "mainnet",
+      })
+    );
+    expect((result.raw as any).invocation.timestamp).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/
+    );
+  });
+
+  it("preserves invocation binding across multiple calls", async () => {
+    const { invokeContract } =
+      await import("../../src/services/sorobanService");
+
+    const result1 = await invokeContract({
+      network: "testnet",
+      contractId: "CCONTRACT1",
+      method: "method1",
+    });
+
+    const result2 = await invokeContract({
+      network: "mainnet",
+      contractId: "CCONTRACT2",
+      method: "method2",
+    });
+
+    expect((result1.raw as any).invocation.contractId).toBe("CCONTRACT1");
+    expect((result1.raw as any).invocation.method).toBe("method1");
+    expect((result2.raw as any).invocation.contractId).toBe("CCONTRACT2");
+    expect((result2.raw as any).invocation.method).toBe("method2");
+  });
 });

@@ -207,6 +207,102 @@ export function buildTrustlineRemovalOps(
   );
 }
 
+export interface AccountMergeBlocker {
+  type: 'trustline' | 'data_entry' | 'offers' | 'signers';
+  description: string;
+  cleanupInstructions: string;
+  affectedItems?: string[];
+}
+
+export interface AccountMergePreflightResult {
+  canMerge: boolean;
+  blockers: AccountMergeBlocker[];
+}
+
+export async function checkAccountMergeBlockers(
+  horizonUrl: string | undefined,
+  accountId: string
+): Promise<AccountMergePreflightResult> {
+  const server = new Horizon.Server(horizonUrl || "https://horizon.stellar.org");
+  const blockers: AccountMergeBlocker[] = [];
+
+  try {
+    const account = await server.accounts().accountId(accountId).call();
+    const balances: Record<string, unknown>[] = (account.balances as unknown as Record<string, unknown>[]) || [];
+
+    // Check for non-zero balance trustlines
+    const nonZeroTrustlines = balances
+      .filter((b) => b['asset_type'] !== "native" && parseScaledAmount(b['balance'] as string, 7) !== 0n)
+      .map((b) => `${b['asset_code']}:${b['asset_issuer']}`);
+
+    if (nonZeroTrustlines.length > 0) {
+      blockers.push({
+        type: 'trustline',
+        description: `${nonZeroTrustlines.length} trustline(s) with non-zero balance`,
+        cleanupInstructions: 'Send all asset balances to another account or use payment operations to reduce balances to zero before merging',
+        affectedItems: nonZeroTrustlines,
+      });
+    }
+
+    // Check for zero-balance trustlines
+    const zeroBalanceTrustlines = balances
+      .filter((b) => b['asset_type'] !== "native" && parseScaledAmount(b['balance'] as string, 7) === 0n)
+      .map((b) => `${b['asset_code']}:${b['asset_issuer']}`);
+
+    if (zeroBalanceTrustlines.length > 0) {
+      blockers.push({
+        type: 'trustline',
+        description: `${zeroBalanceTrustlines.length} zero-balance trustline(s) must be removed`,
+        cleanupInstructions: 'Use changeTrust operations with limit "0" to remove these trustlines before merging',
+        affectedItems: zeroBalanceTrustlines,
+      });
+    }
+
+    // Check for data entries
+    const dataEntries = Object.keys((account as any).data || {});
+    if (dataEntries.length > 0) {
+      blockers.push({
+        type: 'data_entry',
+        description: `${dataEntries.length} data entry/entries must be removed`,
+        cleanupInstructions: 'Use manageData operations with null value to remove all data entries before merging',
+        affectedItems: dataEntries,
+      });
+    }
+
+    // Check for open offers
+    const offersResponse = await server.offers().forAccount(accountId).limit(200).call();
+    const offers = (offersResponse.records || []) as Array<Record<string, unknown>>;
+    if (offers.length > 0) {
+      blockers.push({
+        type: 'offers',
+        description: `${offers.length} open offer(s) must be cancelled`,
+        cleanupInstructions: 'Use manageSellOffer or manageBuyOffer operations with amount "0" to cancel all open offers before merging',
+        affectedItems: offers.map((o) => `Offer #${o['id']}`),
+      });
+    }
+
+    // Check for additional signers
+    const signers = ((account as any).signers || []) as Array<Record<string, unknown>>;
+    const additionalSigners = signers.filter((s) => s['key'] !== accountId);
+    if (additionalSigners.length > 0) {
+      blockers.push({
+        type: 'signers',
+        description: `${additionalSigners.length} additional signer(s) must be removed`,
+        cleanupInstructions: 'Use setOptions operations with weight 0 to remove all additional signers before merging',
+        affectedItems: additionalSigners.map((s) => s['key'] as string),
+      });
+    }
+
+  } catch (error) {
+    throw new Error(`Failed to check account merge blockers: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  return {
+    canMerge: blockers.length === 0,
+    blockers,
+  };
+}
+
 export async function createTrustlineOperation(
   assetCode: string,
   assetIssuer: string,

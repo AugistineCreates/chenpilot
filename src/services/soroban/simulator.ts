@@ -63,6 +63,13 @@ export interface SimulationResult {
   estimates?: SimulationEstimates;
   /** Auth entries required for this call */
   authEntries: unknown[];
+  /** Invocation binding metadata */
+  invocation: {
+    contractId: string;
+    method: string;
+    network: SorobanNetwork;
+    timestamp: string;
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -193,5 +200,15 @@ export async function simulate(
     ? (success.result!.auth as unknown[])
     : [];
 
-  return { raw: success, estimates, authEntries };
+  return {
+    raw: success,
+    estimates,
+    authEntries,
+    invocation: {
+      contractId: params.contractId,
+      method: params.method,
+      network: params.network,
+      timestamp: new Date().toISOString(),
+    },
+  };
 }
