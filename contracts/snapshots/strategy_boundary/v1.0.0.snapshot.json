@@ -1,0 +1,30 @@
+{
+  "contract": "strategy_boundary",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Config",
+      "storage_tier": "Instance",
+      "value_type": "Config",
+      "sample_value": {
+        "admin": "GADMIN0000000000000000000000000000000000000000000000000000",
+        "oracle": "CORACLE000000000000000000000000000000000000000000000000000",
+        "threshold_bps": 200
+      }
+    },
+    {
+      "key_variant": "ExecutionContext",
+      "storage_tier": "Instance",
+      "value_type": "ExecutionContext",
+      "sample_value": {
+        "caller": "GCALLER000000000000000000000000000000000000000000000000000",
+        "operation": "swap",
+        "intent_price": 6500000000000,
+        "min_amount_out": 950000000,
+        "max_slippage_bps": 50,
+        "deadline_ledger": 5001000
+      }
+    }
+  ]
+}

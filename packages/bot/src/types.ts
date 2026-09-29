@@ -195,3 +195,60 @@ export interface TrendingAsset {
   holders: number;
   trustlines: number;
 }
+
+/**
+ * Generic button definition that works for both Telegram and Discord
+ */
+export interface Button {
+  /**
+   * Button text label
+   */
+  label: string;
+  /**
+   * Unique action ID used to identify the button when pressed
+   */
+  id: string;
+  /**
+   * Button style (used by Discord, ignored by Telegram)
+   */
+  style?: 'primary' | 'secondary' | 'success' | 'danger' | 'link';
+  /**
+   * URL for link buttons
+   */
+  url?: string;
+}
+
+/**
+ * Generic button interaction context
+ */
+export interface ButtonInteraction {
+  /**
+   * The platform ('discord' or 'telegram')
+   */
+  platform: 'discord' | 'telegram';
+  /**
+   * User ID of the person who pressed the button
+   */
+  userId: string;
+  /**
+   * The ID of the pressed button
+   */
+  buttonId: string;
+  /**
+   * The chat/channel ID where the button was pressed
+   */
+  chatId: string;
+  /**
+   * Platform-specific interaction object
+   */
+  raw: any;
+  /**
+   * Reply to the button interaction
+   */
+  reply: (message: string) => Promise<void>;
+}
+
+/**
+ * Handler function type for button interactions
+ */
+export type ButtonHandler = (interaction: ButtonInteraction) => Promise<void>;

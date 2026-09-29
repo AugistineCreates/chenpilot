@@ -54,11 +54,11 @@ async function main() {
     console.log("\n❌ Disconnected:", reason);
   });
 
-  socket.on("connect_error", (error: any) => {
+  socket.on("connect_error", (error: Error) => {
     console.log("❌ Connection Error:", error?.message || error);
   });
 
-  socket.on("error", (error: any) => {
+  socket.on("error", (error: Error) => {
     console.log("⚠️  Socket Error:", error);
   });
 

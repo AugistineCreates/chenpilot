@@ -1,6 +1,5 @@
 import { Router, Request, Response } from "express";
-import { authenticateToken } from "../../Auth/auth.middleware";
-import { requireAdmin } from "../../Gateway/middleware/rbac.middleware";
+import { requireAdminAuth } from "../../Gateway/middleware/adminAuth";
 import { agentMetricsService } from "../agentMetrics.service";
 import { AgentType, ExecutionStatus } from "../agentExecutionMetrics.entity";
 import { PromptVersion } from "../registry/PromptVersion.entity";
@@ -8,9 +7,24 @@ import { promptRolloutService } from "../registry/PromptRolloutService";
 import { durableExecutor } from "../planner/DurableExecutor";
 import { durableOperationService } from "../../Reliability/DurableOperationService";
 import { OperationStatus } from "../../Reliability/DurableOperation.entity";
+import { requireAdminWorkflow } from "./workflow.middleware";
+import { SensitiveActionType } from "./workflow.types";
 import AppDataSource from "../../config/Datasource";
+import interventionRouter from "../planner/intervention.routes";
 
 const router = Router();
+
+/**
+ * Mount intervention routes: /api/admin/agents/interventions/...
+ *
+ * Provides signed operator interventions for stuck/failed durable executions:
+ *   POST /submit       — apply a signed intervention command
+ *   POST /dry-run      — preview state changes without committing
+ *   GET  /executions/:executionId — list interventions for an execution
+ *   GET  /:id          — get a single intervention record
+ *   POST /sign-helper  — compute the canonical signing payload
+ */
+router.use("/interventions", interventionRouter);
 
 /**
  * GET /api/admin/reliability/operations
@@ -23,12 +37,13 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { status, category, limit, offset } = req.query;
-      const [operations, total] = await durableOperationService.getAllOperations({
-        status: status as OperationStatus,
-        category: category as string,
-        limit: limit ? parseInt(limit as string, 10) : 50,
-        offset: offset ? parseInt(offset as string, 10) : 0,
-      });
+      const [operations, total] =
+        await durableOperationService.getAllOperations({
+          status: status as OperationStatus,
+          category: category as string,
+          limit: limit ? parseInt(limit as string, 10) : 50,
+          offset: offset ? parseInt(offset as string, 10) : 0,
+        });
 
       return res.status(200).json({
         success: true,
@@ -65,7 +80,8 @@ router.post(
       console.error("Error replaying operation:", error);
       return res.status(500).json({
         success: false,
-        message: error instanceof Error ? error.message : "Failed to replay operation",
+        message:
+          error instanceof Error ? error.message : "Failed to replay operation",
       });
     }
   }
@@ -118,7 +134,8 @@ router.post(
       console.error("Error retrying step:", error);
       return res.status(500).json({
         success: false,
-        message: error instanceof Error ? error.message : "Failed to retry step",
+        message:
+          error instanceof Error ? error.message : "Failed to retry step",
       });
     }
   }
@@ -137,7 +154,11 @@ router.post(
     try {
       const { id, step } = req.params;
       const { resultOverride } = req.body;
-      await durableExecutor.repairSkipStep(id, parseInt(step, 10), resultOverride);
+      await durableExecutor.repairSkipStep(
+        id,
+        parseInt(step, 10),
+        resultOverride
+      );
       return res.status(200).json({
         success: true,
         message: `Skipped step ${step} for execution ${id}`,
@@ -165,7 +186,11 @@ router.post(
     try {
       const { id, step } = req.params;
       const { newPayload } = req.body;
-      await durableExecutor.repairUpdateAndRetry(id, parseInt(step, 10), newPayload);
+      await durableExecutor.repairUpdateAndRetry(
+        id,
+        parseInt(step, 10),
+        newPayload
+      );
       return res.status(200).json({
         success: true,
         message: `Updated and retrying step ${step} for execution ${id}`,
@@ -174,7 +199,10 @@ router.post(
       console.error("Error updating and retrying step:", error);
       return res.status(500).json({
         success: false,
-        message: error instanceof Error ? error.message : "Failed to update and retry step",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to update and retry step",
       });
     }
   }
@@ -192,10 +220,10 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const adminId = (req as any).user?.id;
-      
+      const adminId = req.user?.userId;
+
       await durableExecutor.resumeExecution(id, adminId);
-      
+
       return res.status(200).json({
         success: true,
         message: `Execution ${id} approved and resumed`,
@@ -204,7 +232,10 @@ router.post(
       console.error("Error approving execution:", error);
       return res.status(500).json({
         success: false,
-        message: error instanceof Error ? error.message : "Failed to approve execution",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to approve execution",
       });
     }
   }
@@ -217,8 +248,7 @@ router.post(
  */
 router.get(
   "/metrics",
-  authenticateToken,
-  requireAdmin,
+  requireAdminAuth(),
   async (req: Request, res: Response) => {
     try {
       const { agentType, userId, status, startDate, endDate, limit, offset } =
@@ -255,8 +285,7 @@ router.get(
  */
 router.get(
   "/metrics/daily",
-  authenticateToken,
-  requireAdmin,
+  requireAdminAuth(),
   async (req: Request, res: Response) => {
     try {
       const { days } = req.query;
@@ -286,8 +315,7 @@ router.get(
  */
 router.get(
   "/metrics/time-series",
-  authenticateToken,
-  requireAdmin,
+  requireAdminAuth(),
   async (req: Request, res: Response) => {
     try {
       const { hours } = req.query;
@@ -318,8 +346,7 @@ router.get(
  */
 router.get(
   "/prompts",
-  authenticateToken,
-  requireAdmin,
+  requireAdminAuth(),
   async (req: Request, res: Response) => {
     try {
       const promptPerformance =
@@ -346,8 +373,7 @@ router.get(
  */
 router.put(
   "/prompts/:promptId",
-  authenticateToken,
-  requireAdmin,
+  requireAdminAuth(),
   async (req: Request, res: Response) => {
     try {
       const { promptId } = req.params;
@@ -465,8 +491,7 @@ router.get(
  */
 router.post(
   "/prompts",
-  authenticateToken,
-  requireAdmin,
+  requireAdminAuth(),
   async (req: Request, res: Response) => {
     try {
       const { name, type, content, version, isActive, weight } = req.body;
@@ -512,8 +537,7 @@ router.post(
  */
 router.get(
   "/tools",
-  authenticateToken,
-  requireAdmin,
+  requireAdminAuth(),
   async (req: Request, res: Response) => {
     try {
       const tools = await agentMetricsService.getAgentTools();
@@ -540,8 +564,8 @@ router.get(
  */
 router.put(
   "/tools/:toolId/toggle",
-  authenticateToken,
-  requireAdmin,
+  requireAdminAuth(),
+  requireAdminWorkflow(SensitiveActionType.ENABLE_TOOL),
   async (req: Request, res: Response) => {
     try {
       const { toolId } = req.params;
@@ -588,8 +612,7 @@ router.put(
  */
 router.get(
   "/performance",
-  authenticateToken,
-  requireAdmin,
+  requireAdminAuth(),
   async (req: Request, res: Response) => {
     try {
       const { hours = 24 } = req.query;

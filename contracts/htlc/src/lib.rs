@@ -3,6 +3,11 @@ use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short,
     Address, Bytes, BytesN, Env, token,
 };
+use contract_failure::{fail, FailureReason};
+
+// TTL for swap state: swaps auto-expire after the expiry ledger + grace period
+// Add 7 days (1_209_600 ledgers at 5s/ledger) beyond expiry for post-claim/refund records
+const SWAP_TTL_GRACE_LEDGERS: u32 = 1_209_600;
 
 // ---------------------------------------------------------------------------
 // Storage keys
@@ -42,6 +47,42 @@ pub struct Swap {
     pub status: SwapStatus,
 }
 
+#[contracttype]
+#[derive(Clone)]
+pub struct EvtSwapInit {
+    pub version: u32,
+    pub ledger: u32,
+    pub actor: Address,
+    pub swap_id: BytesN<32>,
+    pub initiator: Address,
+    pub recipient: Address,
+    pub token: Address,
+    pub amount: i128,
+    pub expiry_ledger: u32,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct EvtClaim {
+    pub version: u32,
+    pub ledger: u32,
+    pub actor: Address,
+    pub swap_id: BytesN<32>,
+    pub recipient: Address,
+    pub amount: i128,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct EvtRefund {
+    pub version: u32,
+    pub ledger: u32,
+    pub actor: Address,
+    pub swap_id: BytesN<32>,
+    pub initiator: Address,
+    pub amount: i128,
+}
+
 // ---------------------------------------------------------------------------
 // Contract
 // ---------------------------------------------------------------------------
@@ -69,17 +110,17 @@ impl HtlcContract {
         initiator.require_auth();
 
         if amount <= 0 {
-            panic!("amount must be positive");
+            fail(&env, FailureReason::AmountNotPositive);
         }
         if expiry_ledger <= env.ledger().sequence() {
-            panic!("expiry must be in the future");
+            fail(&env, FailureReason::ExpiryNotInFuture);
         }
 
         // Derive a unique swap_id from the parameters
         let swap_id = Self::derive_swap_id(&env, &secret_hash, &initiator, expiry_ledger);
 
         if env.storage().persistent().has(&DataKey::Swap(swap_id.clone())) {
-            panic!("swap already exists");
+            fail(&env, FailureReason::SwapAlreadyExists);
         }
 
         // Pull funds from initiator into the contract
@@ -95,9 +136,15 @@ impl HtlcContract {
             expiry_ledger,
             status: SwapStatus::Active,
         };
-        env.storage().persistent().set(&DataKey::Swap(swap_id.clone()), &swap);
+        
+        // Calculate TTL: expiry + grace period for post-completion records
+        let ttl_ledgers = expiry_ledger.saturating_add(SWAP_TTL_GRACE_LEDGERS);
+        env.storage().persistent().set_with_ttl(&DataKey::Swap(swap_id.clone()), &swap, ttl_ledgers);
 
-        env.events().publish((symbol_short!("SwapInit"),), swap_id.clone());
+        env.events().publish(
+            (symbol_short!("SwapInit"),),
+            (swap_id.clone(), initiator.clone(), recipient.clone(), token.clone(), amount, expiry_ledger),
+        );
         swap_id
     }
 
@@ -111,13 +158,13 @@ impl HtlcContract {
             .storage()
             .persistent()
             .get(&DataKey::Swap(swap_id.clone()))
-            .expect("swap not found");
+            .unwrap_or_else(|| fail(&env, FailureReason::NotFound));
 
         if swap.status != SwapStatus::Active {
-            panic!("swap not active");
+            fail(&env, FailureReason::SwapNotActive);
         }
         if env.ledger().sequence() > swap.expiry_ledger {
-            panic!("swap expired");
+            fail(&env, FailureReason::SwapExpired);
         }
 
         // Verify the recipient is who they claim to be
@@ -130,17 +177,23 @@ impl HtlcContract {
         let computed: BytesN<32> = env.crypto().sha256(&combined).into();
 
         if computed != swap.secret_hash {
-            panic!("invalid preimage or recipient key mismatch");
+            fail(&env, FailureReason::InvalidPreimage);
         }
 
         swap.status = SwapStatus::Claimed;
-        env.storage().persistent().set(&DataKey::Swap(swap_id.clone()), &swap);
+        
+        // Extend TTL to keep claimed record queryable for grace period
+        let ttl_ledgers = swap.expiry_ledger.saturating_add(SWAP_TTL_GRACE_LEDGERS);
+        env.storage().persistent().set_with_ttl(&DataKey::Swap(swap_id.clone()), &swap, ttl_ledgers);
 
         // Release funds to recipient
         let token_client = token::Client::new(&env, &swap.token);
         token_client.transfer(&env.current_contract_address(), &swap.recipient, &swap.amount);
 
-        env.events().publish((symbol_short!("Claimed"),), swap_id);
+        env.events().publish(
+            (symbol_short!("Claimed"),),
+            (swap_id.clone(), swap.recipient.clone(), swap.token.clone(), swap.amount),
+        );
     }
 
     /// Refund the locked funds back to the initiator after expiry.
@@ -149,25 +202,31 @@ impl HtlcContract {
             .storage()
             .persistent()
             .get(&DataKey::Swap(swap_id.clone()))
-            .expect("swap not found");
+            .unwrap_or_else(|| fail(&env, FailureReason::NotFound));
 
         if swap.status != SwapStatus::Active {
-            panic!("swap not active");
+            fail(&env, FailureReason::SwapNotActive);
         }
         if env.ledger().sequence() <= swap.expiry_ledger {
-            panic!("swap not yet expired");
+            fail(&env, FailureReason::SwapNotYetExpired);
         }
 
         swap.initiator.require_auth();
 
         swap.status = SwapStatus::Refunded;
-        env.storage().persistent().set(&DataKey::Swap(swap_id.clone()), &swap);
+        
+        // Extend TTL to keep refunded record queryable for grace period
+        let ttl_ledgers = swap.expiry_ledger.saturating_add(SWAP_TTL_GRACE_LEDGERS);
+        env.storage().persistent().set_with_ttl(&DataKey::Swap(swap_id.clone()), &swap, ttl_ledgers);
 
         // Return funds to initiator
         let token_client = token::Client::new(&env, &swap.token);
         token_client.transfer(&env.current_contract_address(), &swap.initiator, &swap.amount);
 
-        env.events().publish((symbol_short!("Refunded"),), swap_id);
+        env.events().publish(
+            (symbol_short!("Refunded"),),
+            (swap_id.clone(), swap.initiator.clone(), swap.token.clone(), swap.amount),
+        );
     }
 
     /// Returns the swap details for a given swap_id.
@@ -188,14 +247,12 @@ impl HtlcContract {
     ) -> BytesN<32> {
         let mut data = Bytes::new(env);
         data.extend_from_slice(secret_hash.to_array().as_ref());
+        data.extend_from_slice(&initiator.to_array());
         // Encode expiry as 4 little-endian bytes
         data.push_back((expiry_ledger & 0xff) as u8);
         data.push_back(((expiry_ledger >> 8) & 0xff) as u8);
         data.push_back(((expiry_ledger >> 16) & 0xff) as u8);
         data.push_back(((expiry_ledger >> 24) & 0xff) as u8);
-        // Include initiator address bytes via its string representation length as entropy
-        // We use the secret_hash + expiry as the primary uniqueness factor
-        let _ = initiator; // initiator auth already enforced above
         env.crypto().sha256(&data).into()
     }
 }

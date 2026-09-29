@@ -4,15 +4,15 @@
  * Uses Soroban contracts for persistent storage.
  */
 
-// @ts-ignore: dependency is provided at the workspace root
 import {
-  Server,
+  Horizon,
   Account as StellarAccount,
   TransactionBuilder,
   Networks,
   Operation,
-  BASE_FEE,
-} from "stellar-sdk";
+} from "@stellar/stellar-sdk";
+
+const Server = Horizon.Server;
 
 /**
  * Metadata operation parameters for set/get operations
@@ -70,6 +70,8 @@ export interface MetadataManagerConfig {
   networkPassphrase?: string;
   /** Default fee in stroops per operation */
   baseFee?: number;
+  /** Optional signal applied to all Horizon calls by default. */
+  signal?: AbortSignalLike;
 }
 
 /**
@@ -79,15 +81,15 @@ export class StellarMetadataManager {
   private server: any;
   private horizonUrl: string;
   private networkPassphrase: string;
-  private baseFee: number;
+  private baseFee: string;
   private metadataCache: Map<string, MetadataEntry[]> = new Map();
 
   constructor(config?: MetadataManagerConfig) {
     this.horizonUrl = config?.horizonUrl || "https://horizon.stellar.org";
-    this.networkPassphrase =
-      config?.networkPassphrase || Networks.PUBLIC_NETWORK_PASSPHRASE;
-    this.baseFee = config?.baseFee || BASE_FEE;
-    this.server = new Server(this.horizonUrl);
+    this.networkPassphrase = config?.networkPassphrase || Networks.PUBLIC;
+    this.baseFee = String(config?.baseFee ?? 100);
+    this.defaultSignal = config?.signal;
+    this.server = new Horizon.Server(this.horizonUrl);
   }
 
   /**
@@ -96,9 +98,13 @@ export class StellarMetadataManager {
    * For larger metadata, data is chunked and indexed.
    *
    * @param params - Metadata set parameters
+   * @param signal - Optional signal to cancel the Horizon fetch
    * @returns Transaction XDR for signing
    */
-  async prepareSetMetadata(params: MetadataSetParams): Promise<string> {
+  async prepareSetMetadata(
+    params: MetadataSetParams,
+    signal?: AbortSignalLike
+  ): Promise<string> {
     if (!params.key || !params.accountId) {
       throw new Error("accountId and key are required");
     }
@@ -116,10 +122,10 @@ export class StellarMetadataManager {
 
     try {
       // Fetch current account sequence
-      const account = await this.server
-        .accounts()
-        .accountId(params.accountId)
-        .call();
+      const account: any = await abortableWait(
+        this.server!.accounts()!.accountId(params.accountId)!.call(),
+        signal ?? this.defaultSignal
+      );
       const stellarAccount = new StellarAccount(
         params.accountId,
         String(account.sequence)
@@ -174,6 +180,9 @@ export class StellarMetadataManager {
       const transaction = builder.setTimeout(300).build();
       return transaction.toXDR();
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
       throw new Error(
         `Failed to prepare metadata transaction: ${String(error)}`
       );
@@ -184,9 +193,13 @@ export class StellarMetadataManager {
    * Retrieve metadata for an account
    *
    * @param params - Metadata get parameters
+   * @param signal - Optional signal to cancel the Horizon fetch
    * @returns Metadata entry if found, null otherwise
    */
-  async getMetadata(params: MetadataGetParams): Promise<MetadataEntry | null> {
+  async getMetadata(
+    params: MetadataGetParams,
+    signal?: AbortSignalLike
+  ): Promise<MetadataEntry | null> {
     if (!params.key || !params.accountId) {
       throw new Error("accountId and key are required");
     }
@@ -209,10 +222,10 @@ export class StellarMetadataManager {
       }
 
       // Fetch from Horizon
-      const account = await this.server
-        .accounts()
-        .accountId(params.accountId)
-        .call();
+      const account: any = await abortableWait(
+        this.server!.accounts()!.accountId(params.accountId)!.call(),
+        signal ?? this.defaultSignal
+      );
 
       const datumKey = `md:${params.key}`;
       const datum = account.data_attr?.[datumKey];
@@ -250,6 +263,9 @@ export class StellarMetadataManager {
 
       return entry;
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
       if (String(error).includes("not found")) {
         return null;
       }
@@ -261,9 +277,13 @@ export class StellarMetadataManager {
    * List all metadata for an account
    *
    * @param accountId - Stellar account address
+   * @param signal - Optional signal to cancel the Horizon fetch
    * @returns List of metadata entries
    */
-  async listMetadata(accountId: string): Promise<MetadataListResponse> {
+  async listMetadata(
+    accountId: string,
+    signal?: AbortSignalLike
+  ): Promise<MetadataListResponse> {
     if (!accountId) {
       throw new Error("accountId is required");
     }
@@ -283,7 +303,10 @@ export class StellarMetadataManager {
       }
 
       // Fetch from Horizon
-      const account = await this.server.accounts().accountId(accountId).call();
+      const account: any = await abortableWait(
+        this.server!.accounts()!.accountId(accountId)!.call(),
+        signal ?? this.defaultSignal
+      );
       const dataAttr = account.data_attr || {};
       const metadata: MetadataEntry[] = [];
 
@@ -327,6 +350,9 @@ export class StellarMetadataManager {
         hasMore: false,
       };
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
       throw new Error(`Failed to list metadata: ${String(error)}`);
     }
   }
@@ -336,15 +362,23 @@ export class StellarMetadataManager {
    *
    * @param accountId - Stellar account address
    * @param key - Metadata key to delete
+   * @param signal - Optional signal to cancel the Horizon fetch
    * @returns Transaction XDR for signing
    */
-  async prepareDeleteMetadata(accountId: string, key: string): Promise<string> {
+  async prepareDeleteMetadata(
+    accountId: string,
+    key: string,
+    signal?: AbortSignalLike
+  ): Promise<string> {
     if (!accountId || !key) {
       throw new Error("accountId and key are required");
     }
 
     try {
-      const account = await this.server.accounts().accountId(accountId).call();
+      const account: any = await abortableWait(
+        this.server!.accounts()!.accountId(accountId)!.call(),
+        signal ?? this.defaultSignal
+      );
       const stellarAccount = new StellarAccount(
         accountId,
         String(account.sequence)
@@ -371,6 +405,9 @@ export class StellarMetadataManager {
 
       return transaction.toXDR();
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
       throw new Error(
         `Failed to prepare delete metadata transaction: ${String(error)}`
       );
@@ -382,17 +419,19 @@ export class StellarMetadataManager {
    *
    * @param accountId - Stellar account address
    * @param keys - Array of metadata keys to retrieve
+   * @param signal - Optional signal to cancel the Horizon fetches
    * @returns Map of keys to metadata entries
    */
   async getMetadataBatch(
     accountId: string,
-    keys: string[]
+    keys: string[],
+    signal?: AbortSignalLike
   ): Promise<Map<string, MetadataEntry | null>> {
     const results = new Map<string, MetadataEntry | null>();
 
     for (const key of keys) {
       try {
-        const entry = await this.getMetadata({ accountId, key });
+        const entry = await this.getMetadata({ accountId, key }, signal);
         results.set(key, entry);
       } catch {
         results.set(key, null);

@@ -57,7 +57,9 @@ export class ToolAutoDiscovery {
       // Validate registry after initialization
       const validation = toolRegistry.validateRegistry();
       if (!validation.valid) {
-        logger.error("Tool registry validation failed", { errors: validation.errors });
+        logger.error("Tool registry validation failed", {
+          errors: validation.errors,
+        });
         // In a strict capability system, we might want to throw here
         // throw new Error(`Registry validation failed: ${validation.errors.join("; ")}`);
       }

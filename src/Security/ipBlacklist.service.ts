@@ -1,6 +1,7 @@
 import AppDataSource from "../config/Datasource";
 import { IPBlacklist, BlacklistReason } from "./ipBlacklist.entity";
 import logger from "../config/logger";
+import * as ipaddr from "ipaddr.js";
 
 interface AddToBlacklistOptions {
   reason: BlacklistReason;
@@ -305,21 +306,42 @@ class IPBlacklistService {
   /**
    * Normalize IP address (handle IPv6)
    */
+  /**
+   * Normalize IP address for consistent blacklist lookups
+   * Handles IPv4, IPv6 (including compressed forms), and IPv4-mapped IPv6 addresses
+   * Uses ipaddr.js for RFC-compliant parsing
+   */
   private normalizeIP(ip: string): string {
-    // Remove port if present
-    let normalized = ip.split(":")[0];
+    try {
+      const trimmed = ip.trim();
 
-    // Handle IPv6 localhost
-    if (normalized === "::1") {
-      normalized = "127.0.0.1";
+      // Parse the IP using ipaddr.js
+      let parsed: ipaddr.IPv4 | ipaddr.IPv6;
+
+      try {
+        parsed = ipaddr.process(trimmed);
+      } catch {
+        // If ipaddr.js fails, return the trimmed IP as fallback
+        logger.warn("Failed to parse IP address with ipaddr.js", { ip: trimmed });
+        return trimmed;
+      }
+
+      // Handle IPv4-mapped IPv6 addresses (e.g., ::ffff:192.0.2.1)
+      if (parsed.kind() === "ipv6" && (parsed as ipaddr.IPv6).isIPv4MappedAddress()) {
+        const ipv4Mapped = (parsed as ipaddr.IPv6).toIPv4Address();
+        return ipv4Mapped.toString();
+      }
+
+      // Return the normalized representation
+      // For IPv6, this expands compressed forms to full canonical form
+      return parsed.toString();
+    } catch (error) {
+      logger.error("Error normalizing IP address", {
+        ip,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+      return ip.trim();
     }
-
-    // Handle IPv6 mapped IPv4
-    if (normalized.includes("::ffff:")) {
-      normalized = normalized.replace("::ffff:", "");
-    }
-
-    return normalized.trim();
   }
 }
 

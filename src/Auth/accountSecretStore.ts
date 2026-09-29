@@ -101,6 +101,15 @@ export class AccountSecretStore {
     }
     return account as T;
   }
+
+  /**
+   * Clear the in-memory cache of decrypted account data.
+   * Sensitive material will be recreated on next access from the
+   * encrypted source, reducing the window of plaintext retention.
+   */
+  clearCache(): void {
+    this.accountsCache = undefined;
+  }
 }
 
 export const accountSecretStore = new AccountSecretStore();

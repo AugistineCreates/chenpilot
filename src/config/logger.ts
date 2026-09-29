@@ -2,15 +2,26 @@ import winston from "winston";
 import DailyRotateFile from "winston-daily-rotate-file";
 import path from "path";
 import { getObservabilityLogFields } from "../observability";
+import { SecretBuffer } from "../utils/secretBuffer";
 
 // Sensitive fields to redact from logs
-const SENSITIVE_FIELDS = ["pk", "privateKey", "password", "token", "secret"];
+const SENSITIVE_FIELDS = [
+  "pk", "privateKey", "password", "token", "secret",
+  "fullName", "dateOfBirth", "email", "phoneNumber",
+  "addressLine1", "addressLine2", "postalCode", "countryCode",
+  "documentId", "fileUrl"
+];
 
 /**
  * Recursively redacts sensitive data from objects
  */
-function redactSensitiveData(obj: unknown): unknown {
+export function redactSensitiveData(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
+
+  // SecretBuffer instances must never have their contents exposed.
+  if (obj instanceof SecretBuffer) {
+    return obj.toString();
+  }
 
   if (Array.isArray(obj)) {
     return obj.map(redactSensitiveData);
@@ -190,4 +201,5 @@ export const logWarn = (message: string, meta?: Record<string, unknown>) =>
 export const logDebug = (message: string, meta?: Record<string, unknown>) =>
   logger.debug(message, meta);
 
+export { logger };
 export default logger;

@@ -1,0 +1,40 @@
+{
+  "contract": "fee_distribution",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Config",
+      "storage_tier": "Instance",
+      "value_type": "Config",
+      "sample_value": {
+        "admin": "GADMIN0000000000000000000000000000000000000000000000000000",
+        "treasury": "GTREASURY000000000000000000000000000000000000000000000000",
+        "ai_agent_pool": "GAIAGENT000000000000000000000000000000000000000000000000",
+        "lp_pool": "GLPPOOL0000000000000000000000000000000000000000000000000000",
+        "treasury_bps": 3000,
+        "ai_agent_bps": 5000
+      }
+    },
+    {
+      "key_variant": "DistributionNonce",
+      "storage_tier": "Instance",
+      "value_type": "u32",
+      "sample_value": 17
+    },
+    {
+      "key_variant": "LastDistribution",
+      "storage_tier": "Instance",
+      "value_type": "DistributionRecord",
+      "sample_value": {
+        "nonce": 17,
+        "token": "CTOKEN000000000000000000000000000000000000000000000000000",
+        "from": "GSENDER000000000000000000000000000000000000000000000000000",
+        "amount": 1000000000,
+        "treasury_share": 300000000,
+        "ai_agent_share": 500000000,
+        "lp_share": 200000000
+      }
+    }
+  ]
+}

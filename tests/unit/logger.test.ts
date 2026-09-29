@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
+import { redactSensitiveData } from "../../src/config/logger";
 import logger, {
   logInfo,
   logError,
@@ -51,5 +52,35 @@ describe("Logger", () => {
       pk: "private-key-data",
     });
     expect(spy).toHaveBeenCalled();
+  });
+
+  it("should redact KYC PII fields", () => {
+    const kycPayload = {
+      userId: "user-abc-123",
+      fullName: "Jane Doe",
+      dateOfBirth: "1990-01-15",
+      email: "jane.doe@example.com",
+      phoneNumber: "+1-555-123-4567",
+      addressLine1: "123 Main Street",
+      addressLine2: "Apt 4B",
+      postalCode: "10001",
+      countryCode: "US",
+      documentId: "AB1234567",
+      fileUrl: "https://storage.example.com/documents/passport.pdf",
+    };
+
+    const result = redactSensitiveData(kycPayload) as Record<string, unknown>;
+
+    expect(result.userId).toBe("user-abc-123");
+    expect(result.fullName).toBe("[REDACTED]");
+    expect(result.dateOfBirth).toBe("[REDACTED]");
+    expect(result.email).toBe("[REDACTED]");
+    expect(result.phoneNumber).toBe("[REDACTED]");
+    expect(result.addressLine1).toBe("[REDACTED]");
+    expect(result.addressLine2).toBe("[REDACTED]");
+    expect(result.postalCode).toBe("[REDACTED]");
+    expect(result.countryCode).toBe("[REDACTED]");
+    expect(result.documentId).toBe("[REDACTED]");
+    expect(result.fileUrl).toBe("[REDACTED]");
   });
 });

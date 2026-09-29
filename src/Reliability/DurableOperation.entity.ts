@@ -38,10 +38,10 @@ export class DurableOperation {
   status!: OperationStatus;
 
   @Column({ type: "jsonb" })
-  payload!: Record<string, any>;
+  payload!: Record<string, unknown>;
 
   @Column({ type: "jsonb", nullable: true })
-  result?: any;
+  result?: unknown;
 
   @Column({ type: "text", nullable: true })
   errorMessage?: string;
@@ -59,7 +59,7 @@ export class DurableOperation {
   scheduledAt?: Date;
 
   @Column({ type: "jsonb", nullable: true })
-  conditions?: Record<string, any>;
+  conditions?: Record<string, unknown>;
 
   @CreateDateColumn()
   createdAt!: Date;

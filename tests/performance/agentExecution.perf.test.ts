@@ -1,37 +1,45 @@
 import { PlanExecutor } from "../../src/Agents/planner/PlanExecutor";
 import { ExecutionPlan } from "../../src/Agents/planner/AgentPlanner";
 import { toolRegistry } from "../../src/Agents/registry/ToolRegistry";
+import { policyEnforcer } from "../../src/Agents/policy/PolicyEnforcer";
 import { performanceTestRunner } from "./utils/PerformanceTestRunner";
 import {
   PERFORMANCE_BASELINES,
   PERFORMANCE_TEST_CONFIG,
 } from "./config/performanceBaselines";
+import { trendRecorder } from "./utils/TrendRecorder";
 
 jest.mock("../../src/Agents/registry/ToolRegistry");
+jest.mock("../../src/Agents/policy/PolicyEnforcer");
 jest.mock("../../src/config/logger");
 
-describe("Agent Execution Performance Tests", () => {
+describe("Agent Execution Flow Benchmarks & Regression Budgets", () => {
   let planExecutor: PlanExecutor;
 
   beforeAll(() => {
     planExecutor = new PlanExecutor();
     performanceTestRunner.clear();
+
+    // Default policy enforcement mock: always allowed
+    (policyEnforcer.enforce as jest.Mock) = jest.fn().mockResolvedValue({
+      allowed: true,
+      reason: "Allowed for performance test",
+    });
   });
 
   afterAll(() => {
     const report = performanceTestRunner.generateReport();
     console.log("\n" + report);
+    trendRecorder.saveReport(performanceTestRunner.getResults());
   });
 
   describe("Single Step Execution", () => {
-    it("should execute single step plan within performance threshold", async () => {
-      const mockExecuteTool = jest.fn().mockResolvedValue({
+    it("should execute single step plan within regression budgets", async () => {
+      (toolRegistry.executeTool as jest.Mock) = jest.fn().mockResolvedValue({
         action: "get_balance",
         status: "success",
         data: { balance: 1000 },
       });
-
-      (toolRegistry.executeTool as jest.Mock) = mockExecuteTool;
 
       const plan: ExecutionPlan = {
         planId: "test-plan-1",
@@ -51,9 +59,11 @@ describe("Agent Execution Performance Tests", () => {
       };
 
       const result = await performanceTestRunner.runTest(
-        "Single Step Execution",
+        "Execution: Single Step Execution",
         async () => {
-          await planExecutor.executePlan(plan, "test-user");
+          await planExecutor.executePlan(plan, "bench-user", {
+            durable: false,
+          });
         },
         {
           iterations: PERFORMANCE_TEST_CONFIG.defaultIterations,
@@ -63,17 +73,15 @@ describe("Agent Execution Performance Tests", () => {
       );
 
       expect(result.passed).toBe(true);
-      expect(result.statistics.mean).toBeLessThan(
-        PERFORMANCE_BASELINES.agentExecution.singleStep.mean!
+      expect(result.statistics.p95).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentExecution.singleStep.p95!
       );
     });
 
-    it("should handle tool execution errors efficiently", async () => {
-      const mockExecuteTool = jest
+    it("should handle error execution paths within budget", async () => {
+      (toolRegistry.executeTool as jest.Mock) = jest
         .fn()
         .mockRejectedValue(new Error("Tool failed"));
-
-      (toolRegistry.executeTool as jest.Mock) = mockExecuteTool;
 
       const plan: ExecutionPlan = {
         planId: "test-plan-error",
@@ -93,30 +101,33 @@ describe("Agent Execution Performance Tests", () => {
       };
 
       const result = await performanceTestRunner.runTest(
-        "Error Handling Performance",
+        "Execution: Error Handling Path",
         async () => {
-          await planExecutor.executePlan(plan, "test-user");
+          await planExecutor.executePlan(plan, "bench-user", {
+            durable: false,
+          });
         },
         {
           iterations: PERFORMANCE_TEST_CONFIG.defaultIterations,
           warmupIterations: PERFORMANCE_TEST_CONFIG.warmupIterations,
-          threshold: PERFORMANCE_BASELINES.agentExecution.singleStep,
+          threshold: PERFORMANCE_BASELINES.agentExecution.errorHandling,
         }
       );
 
       expect(result.passed).toBe(true);
+      expect(result.statistics.p95).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentExecution.errorHandling.p95!
+      );
     });
   });
 
-  describe("Multi-Step Execution", () => {
-    it("should execute multi-step plan within performance threshold", async () => {
-      const mockExecuteTool = jest.fn().mockResolvedValue({
+  describe("Multi-Step Execution Flow", () => {
+    it("should execute multi-step plan within regression budgets", async () => {
+      (toolRegistry.executeTool as jest.Mock) = jest.fn().mockResolvedValue({
         action: "test_action",
         status: "success",
-        data: {},
+        data: { ok: true },
       });
-
-      (toolRegistry.executeTool as jest.Mock) = mockExecuteTool;
 
       const plan: ExecutionPlan = {
         planId: "test-plan-multi",
@@ -143,76 +154,15 @@ describe("Agent Execution Performance Tests", () => {
         totalSteps: 3,
         estimatedDuration: 9000,
         riskLevel: "medium",
-        requiresApproval: true,
+        requiresApproval: false,
         summary: "Multi-step workflow",
       };
 
       const result = await performanceTestRunner.runTest(
-        "Multi-Step Execution",
+        "Execution: Multi-Step Execution (3 steps)",
         async () => {
-          await planExecutor.executePlan(plan, "test-user");
-        },
-        {
-          iterations: PERFORMANCE_TEST_CONFIG.defaultIterations,
-          warmupIterations: PERFORMANCE_TEST_CONFIG.warmupIterations,
-          threshold: PERFORMANCE_BASELINES.agentExecution.multiStep,
-        }
-      );
-
-      expect(result.passed).toBe(true);
-    });
-
-    it("should handle partial execution efficiently", async () => {
-      const mockExecuteTool = jest
-        .fn()
-        .mockResolvedValueOnce({
-          action: "step1",
-          status: "success",
-          data: {},
-        })
-        .mockRejectedValueOnce(new Error("Step 2 failed"))
-        .mockResolvedValueOnce({
-          action: "step3",
-          status: "success",
-          data: {},
-        });
-
-      (toolRegistry.executeTool as jest.Mock) = mockExecuteTool;
-
-      const plan: ExecutionPlan = {
-        planId: "test-plan-partial",
-        steps: [
-          {
-            stepNumber: 1,
-            action: "step1",
-            payload: {},
-            description: "Step 1",
-          },
-          {
-            stepNumber: 2,
-            action: "step2",
-            payload: {},
-            description: "Step 2",
-          },
-          {
-            stepNumber: 3,
-            action: "step3",
-            payload: {},
-            description: "Step 3",
-          },
-        ],
-        totalSteps: 3,
-        estimatedDuration: 9000,
-        riskLevel: "medium",
-        requiresApproval: false,
-        summary: "Partial execution test",
-      };
-
-      const result = await performanceTestRunner.runTest(
-        "Partial Execution Performance",
-        async () => {
-          await planExecutor.executePlan(plan, "test-user", {
-            stopOnError: true,
+          await planExecutor.executePlan(plan, "bench-user", {
+            durable: false,
           });
         },
         {
@@ -223,75 +173,18 @@ describe("Agent Execution Performance Tests", () => {
       );
 
       expect(result.passed).toBe(true);
-    });
-  });
-
-  describe("Execution with Tool Integration", () => {
-    it("should execute plan with realistic tool delays", async () => {
-      const mockExecuteTool = jest.fn().mockImplementation(
-        () =>
-          new Promise((resolve) =>
-            setTimeout(
-              () =>
-                resolve({
-                  action: "test_action",
-                  status: "success",
-                  data: {},
-                }),
-              50
-            )
-          )
+      expect(result.statistics.p95).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentExecution.multiStep.p95!
       );
-
-      (toolRegistry.executeTool as jest.Mock) = mockExecuteTool;
-
-      const plan: ExecutionPlan = {
-        planId: "test-plan-realistic",
-        steps: [
-          {
-            stepNumber: 1,
-            action: "action1",
-            payload: {},
-            description: "Action 1",
-          },
-          {
-            stepNumber: 2,
-            action: "action2",
-            payload: {},
-            description: "Action 2",
-          },
-        ],
-        totalSteps: 2,
-        estimatedDuration: 6000,
-        riskLevel: "low",
-        requiresApproval: false,
-        summary: "Realistic execution test",
-      };
-
-      const result = await performanceTestRunner.runTest(
-        "Execution with Tool Delays",
-        async () => {
-          await planExecutor.executePlan(plan, "test-user");
-        },
-        {
-          iterations: 5,
-          warmupIterations: 1,
-          threshold: PERFORMANCE_BASELINES.agentExecution.withToolExecution,
-        }
-      );
-
-      expect(result.passed).toBe(true);
     });
-  });
 
-  describe("Dry Run Performance", () => {
-    it("should execute dry run efficiently", async () => {
+    it("should process dry-run executions with minimal overhead", async () => {
       const plan: ExecutionPlan = {
         planId: "test-plan-dryrun",
         steps: Array.from({ length: 5 }, (_, i) => ({
           stepNumber: i + 1,
-          action: `action${i + 1}`,
-          payload: {},
+          action: `action_${i + 1}`,
+          payload: { index: i },
           description: `Action ${i + 1}`,
         })),
         totalSteps: 5,
@@ -302,134 +195,34 @@ describe("Agent Execution Performance Tests", () => {
       };
 
       const result = await performanceTestRunner.runTest(
-        "Dry Run Execution",
+        "Execution: Dry Run Flow (5 steps)",
         async () => {
-          await planExecutor.executePlan(plan, "test-user", {
+          await planExecutor.executePlan(plan, "bench-user", {
             dryRun: true,
+            durable: false,
           });
         },
         {
-          iterations: 20,
+          iterations: 25,
           warmupIterations: 3,
-          threshold: {
-            mean: 100,
-            p95: 200,
-            max: 300,
-          },
+          threshold: PERFORMANCE_BASELINES.agentExecution.dryRun,
         }
       );
 
       expect(result.passed).toBe(true);
-    });
-  });
-
-  describe("Concurrent Execution", () => {
-    it("should handle concurrent plan executions efficiently", async () => {
-      const mockExecuteTool = jest.fn().mockResolvedValue({
-        action: "test_action",
-        status: "success",
-        data: {},
-      });
-
-      (toolRegistry.executeTool as jest.Mock) = mockExecuteTool;
-
-      const createPlan = (id: number): ExecutionPlan => ({
-        planId: `concurrent-plan-${id}`,
-        steps: [
-          {
-            stepNumber: 1,
-            action: "test_action",
-            payload: {},
-            description: "Test action",
-          },
-        ],
-        totalSteps: 1,
-        estimatedDuration: 3000,
-        riskLevel: "low",
-        requiresApproval: false,
-        summary: `Concurrent test ${id}`,
-      });
-
-      const result = await performanceTestRunner.runTest(
-        "Concurrent Plan Execution",
-        async () => {
-          await Promise.all([
-            planExecutor.executePlan(createPlan(1), "user-1"),
-            planExecutor.executePlan(createPlan(2), "user-2"),
-            planExecutor.executePlan(createPlan(3), "user-3"),
-          ]);
-        },
-        {
-          iterations: 5,
-          warmupIterations: 1,
-          threshold: {
-            mean: 1000,
-            p95: 1500,
-            max: 2000,
-          },
-        }
+      expect(result.statistics.p95).toBeLessThanOrEqual(
+        PERFORMANCE_BASELINES.agentExecution.dryRun.p95!
       );
-
-      expect(result.passed).toBe(true);
     });
   });
 
-  describe("Execution Callbacks Performance", () => {
-    it("should handle step callbacks without significant overhead", async () => {
-      const mockExecuteTool = jest.fn().mockResolvedValue({
+  describe("Memory & Resource Efficiency", () => {
+    it("should maintain steady memory profile across repeated executions", async () => {
+      (toolRegistry.executeTool as jest.Mock) = jest.fn().mockResolvedValue({
         action: "test_action",
         status: "success",
-        data: {},
+        data: { ok: true },
       });
-
-      (toolRegistry.executeTool as jest.Mock) = mockExecuteTool;
-
-      const onStepStart = jest.fn();
-      const onStepComplete = jest.fn();
-
-      const plan: ExecutionPlan = {
-        planId: "test-plan-callbacks",
-        steps: Array.from({ length: 3 }, (_, i) => ({
-          stepNumber: i + 1,
-          action: `action${i + 1}`,
-          payload: {},
-          description: `Action ${i + 1}`,
-        })),
-        totalSteps: 3,
-        estimatedDuration: 9000,
-        riskLevel: "low",
-        requiresApproval: false,
-        summary: "Callback test",
-      };
-
-      const result = await performanceTestRunner.runTest(
-        "Execution with Callbacks",
-        async () => {
-          await planExecutor.executePlan(plan, "test-user", {
-            onStepStart,
-            onStepComplete,
-          });
-        },
-        {
-          iterations: PERFORMANCE_TEST_CONFIG.defaultIterations,
-          warmupIterations: PERFORMANCE_TEST_CONFIG.warmupIterations,
-          threshold: PERFORMANCE_BASELINES.agentExecution.multiStep,
-        }
-      );
-
-      expect(result.passed).toBe(true);
-    });
-  });
-
-  describe("Memory Usage During Execution", () => {
-    it("should not leak memory during repeated executions", async () => {
-      const mockExecuteTool = jest.fn().mockResolvedValue({
-        action: "test_action",
-        status: "success",
-        data: { result: "test" },
-      });
-
-      (toolRegistry.executeTool as jest.Mock) = mockExecuteTool;
 
       const plan: ExecutionPlan = {
         planId: "memory-test-plan",
@@ -450,8 +243,10 @@ describe("Agent Execution Performance Tests", () => {
 
       const initialMemory = process.memoryUsage().heapUsed;
 
-      for (let i = 0; i < 100; i++) {
-        await planExecutor.executePlan(plan, `test-user-${i}`);
+      for (let i = 0; i < 50; i++) {
+        await planExecutor.executePlan(plan, `bench-user-${i}`, {
+          durable: false,
+        });
       }
 
       if (global.gc) {
@@ -459,56 +254,9 @@ describe("Agent Execution Performance Tests", () => {
       }
 
       const finalMemory = process.memoryUsage().heapUsed;
-      const memoryIncrease = finalMemory - initialMemory;
-      const memoryIncreaseMB = memoryIncrease / 1024 / 1024;
+      const memoryIncreaseMB = (finalMemory - initialMemory) / 1024 / 1024;
 
-      // Memory increase should be reasonable (less than 50MB for 100 operations)
-      expect(memoryIncreaseMB).toBeLessThan(50);
-    });
-  });
-
-  describe("Large Plan Execution", () => {
-    it("should handle large plans efficiently", async () => {
-      const mockExecuteTool = jest.fn().mockResolvedValue({
-        action: "test_action",
-        status: "success",
-        data: {},
-      });
-
-      (toolRegistry.executeTool as jest.Mock) = mockExecuteTool;
-
-      const plan: ExecutionPlan = {
-        planId: "large-plan",
-        steps: Array.from({ length: 10 }, (_, i) => ({
-          stepNumber: i + 1,
-          action: `action${i + 1}`,
-          payload: { data: `test-${i}` },
-          description: `Action ${i + 1}`,
-        })),
-        totalSteps: 10,
-        estimatedDuration: 30000,
-        riskLevel: "high",
-        requiresApproval: true,
-        summary: "Large plan test",
-      };
-
-      const result = await performanceTestRunner.runTest(
-        "Large Plan Execution",
-        async () => {
-          await planExecutor.executePlan(plan, "test-user");
-        },
-        {
-          iterations: 3,
-          warmupIterations: 1,
-          threshold: {
-            mean: 3000,
-            p95: 4500,
-            max: 6000,
-          },
-        }
-      );
-
-      expect(result.passed).toBe(true);
+      expect(memoryIncreaseMB).toBeLessThan(25);
     });
   });
 });

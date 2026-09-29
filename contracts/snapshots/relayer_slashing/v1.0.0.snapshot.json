@@ -1,0 +1,32 @@
+{
+  "contract": "relayer_slashing",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Config",
+      "storage_tier": "Instance",
+      "value_type": "Config",
+      "sample_value": {
+        "admin": "GADMIN0000000000000000000000000000000000000000000000000000",
+        "staking_token": "CSTAKE00000000000000000000000000000000000000000000000000000",
+        "treasury": "GTREASURY000000000000000000000000000000000000000000000000",
+        "slashing_bps": 1000,
+        "unbonding_period": 604800
+      }
+    },
+    {
+      "key_variant": "Relayer",
+      "key_payload": "Address",
+      "storage_tier": "Persistent",
+      "value_type": "RelayerInfo",
+      "sample_value": {
+        "stake_amount": 50000000000,
+        "status": "Active",
+        "unstake_requested_at": 0,
+        "dispute_count": 0,
+        "last_transition_at": 1700000000
+      }
+    }
+  ]
+}

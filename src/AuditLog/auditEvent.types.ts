@@ -103,13 +103,31 @@ export enum IntegrationAction {
   EXTERNAL_API_FAILED = "integration.external_api.failed",
 }
 
+/**
+ * Workload identity category actions
+ *
+ * These actions track the full lifecycle of internal service-to-service
+ * credential operations.  All events land in EventCategory.INTEGRATION.
+ */
+export enum WorkloadIdentityAction {
+  /** A new short-lived workload token was successfully issued */
+  WORKLOAD_TOKEN_ISSUED = "integration.workload.token_issued",
+  /** An inbound workload token passed all verification checks */
+  WORKLOAD_TOKEN_VERIFIED = "integration.workload.token_verified",
+  /** An inbound workload token was rejected (signature, expiry, audience, or env) */
+  WORKLOAD_TOKEN_REJECTED = "integration.workload.token_rejected",
+  /** A near-expired token was proactively rotated */
+  WORKLOAD_TOKEN_ROTATED = "integration.workload.token_rotated",
+}
+
 /** Union of all typed action enums */
 export type AuditEventAction =
   | AuthAction
   | AdminAction
   | ExecutionAction
   | PolicyAction
-  | IntegrationAction;
+  | IntegrationAction
+  | WorkloadIdentityAction;
 
 // ─── Core AuditEvent Interface ───────────────────────────────────────────────
 

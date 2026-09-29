@@ -1,9 +1,25 @@
+import {
+  parseScaledAmount,
+  serializeScaledAmount,
+} from "./fixedAmount";
+
 /**
  * Stellar Claimable Balance Utilities
  *
  * Provides functionality to search for and claim pending claimable balances
  * for a given Stellar account.
  */
+
+import {
+  BASE_FEE,
+  Horizon,
+  Keypair,
+  Networks,
+  Operation,
+  TransactionBuilder,
+} from "@stellar/stellar-sdk";
+import { abortableWait, isAbortError } from "./abort";
+import type { AbortSignalLike } from "./types";
 
 export interface ClaimableBalance {
   /** Unique identifier for the claimable balance */
@@ -32,6 +48,8 @@ export interface ClaimableBalanceSearchOptions {
   horizonUrl?: string;
   /** Limit number of results (default: 200) */
   limit?: number;
+  /** Optional external signal to cancel the operation. */
+  signal?: AbortSignalLike;
 }
 
 export interface ClaimBalanceOptions {
@@ -43,6 +61,8 @@ export interface ClaimBalanceOptions {
   network?: "testnet" | "mainnet";
   /** Optional custom Horizon URL */
   horizonUrl?: string;
+  /** Optional external signal to cancel the operation. */
+  signal?: AbortSignalLike;
 }
 
 export interface ClaimBalanceResult {
@@ -54,6 +74,11 @@ export interface ClaimBalanceResult {
   error?: string;
   /** Claimed balance details */
   balance?: ClaimableBalance;
+  /**
+   * True when the outcome is unknown because the submission was cancelled or
+   * timed out after the transaction may have already reached the network.
+   */
+  ambiguous?: boolean;
 }
 
 /**
@@ -62,15 +87,13 @@ export interface ClaimBalanceResult {
 export async function searchClaimableBalances(
   options: ClaimableBalanceSearchOptions
 ): Promise<ClaimableBalance[]> {
-  const StellarSdk = await import("stellar-sdk");
-
   const horizonUrl =
     options.horizonUrl ||
     (options.network === "mainnet"
       ? "https://horizon.stellar.org"
       : "https://horizon-testnet.stellar.org");
 
-  const server = new StellarSdk.Horizon.Server(horizonUrl);
+  const server = new Horizon.Server(horizonUrl);
 
   try {
     const balancesCall = server
@@ -78,7 +101,7 @@ export async function searchClaimableBalances(
       .claimant(options.accountId)
       .limit(options.limit || 200);
 
-    const response = await balancesCall.call();
+    const response = await abortableWait(balancesCall.call(), options.signal);
 
     return response.records.map((record: unknown) => {
       const rec = record as Record<string, unknown>;
@@ -98,6 +121,10 @@ export async function searchClaimableBalances(
       };
     });
   } catch (error) {
+    // Cancellation must propagate unmasked.
+    if (isAbortError(error)) {
+      throw error;
+    }
     throw new Error(
       `Failed to search claimable balances: ${error instanceof Error ? error.message : String(error)}`
     );
@@ -110,8 +137,6 @@ export async function searchClaimableBalances(
 export async function claimBalance(
   options: ClaimBalanceOptions
 ): Promise<ClaimBalanceResult> {
-  const StellarSdk = await import("stellar-sdk");
-
   const horizonUrl =
     options.horizonUrl ||
     (options.network === "mainnet"
@@ -119,26 +144,27 @@ export async function claimBalance(
       : "https://horizon-testnet.stellar.org");
 
   const networkPassphrase =
-    options.network === "mainnet"
-      ? StellarSdk.Networks.PUBLIC
-      : StellarSdk.Networks.TESTNET;
+    options.network === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
 
-  const server = new StellarSdk.Horizon.Server(horizonUrl);
+  const server = new Horizon.Server(horizonUrl);
+
+  let balance: ClaimableBalance | undefined;
 
   try {
     // Load the claimant keypair
-    const claimantKeypair = StellarSdk.Keypair.fromSecret(
-      options.claimantSecret
-    );
+    const claimantKeypair = Keypair.fromSecret(options.claimantSecret);
     const claimantPublicKey = claimantKeypair.publicKey();
 
     // Fetch balance details first
-    const balanceRecord = await server
-      .claimableBalances()
-      .claimableBalance(options.balanceId)
-      .call();
+    const balanceRecord = await abortableWait(
+      server
+        .claimableBalances()
+        .claimableBalance(options.balanceId)
+        .call(),
+      options.signal
+    );
 
-    const balance: ClaimableBalance = {
+    balance = {
       id: balanceRecord.id,
       asset:
         balanceRecord.asset === "native"
@@ -171,15 +197,18 @@ export async function claimBalance(
     }
 
     // Load the claimant account
-    const account = await server.loadAccount(claimantPublicKey);
+    const account = await abortableWait(
+      server.loadAccount(claimantPublicKey),
+      options.signal
+    );
 
     // Build the claim transaction
-    const transaction = new StellarSdk.TransactionBuilder(account, {
-      fee: StellarSdk.BASE_FEE,
+    const transaction = new TransactionBuilder(account, {
+      fee: BASE_FEE,
       networkPassphrase,
     })
       .addOperation(
-        StellarSdk.Operation.claimClaimableBalance({
+        Operation.claimClaimableBalance({
           balanceId: options.balanceId,
         })
       )
@@ -189,8 +218,15 @@ export async function claimBalance(
     // Sign the transaction
     transaction.sign(claimantKeypair);
 
-    // Submit the transaction
-    const result = await server.submitTransaction(transaction);
+    // Submit the transaction. If the caller cancels (or the request times
+    // out) while Horizon is processing, the claim may still have been
+    // recorded — surface that ambiguity instead of a plain failure.
+    let ambiguous = false;
+    const result = await abortableWait(
+      server.submitTransaction(transaction),
+      options.signal,
+      { onAbort: () => (ambiguous = true) }
+    );
 
     return {
       success: true,
@@ -198,11 +234,29 @@ export async function claimBalance(
       balance,
     };
   } catch (error) {
-    return {
+    const outcome: ClaimBalanceResult = {
       success: false,
       error: error instanceof Error ? error.message : String(error),
+      balance,
     };
+
+    if (isAbortError(error) || isAmbiguousSubmissionError(error)) {
+      outcome.ambiguous = true;
+    }
+
+    return outcome;
   }
+}
+
+/**
+ * Horizon submissions that may have been recorded despite signalling failure
+ * (gateway timeouts, dropped connections, or missing HTTP status).
+ */
+function isAmbiguousSubmissionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const status = (error as { response?: { status?: number } }).response?.status;
+  if (status === undefined) return true;
+  return status === 408 || status === 504;
 }
 
 /**
@@ -213,17 +267,18 @@ export async function getTotalClaimableAmount(
 ): Promise<Record<string, string>> {
   const balances = await searchClaimableBalances(options);
 
-  const totals: Record<string, number> = {};
+  // #622: aggregate with fixed-precision (BigInt) arithmetic at Stellar's
+  // default 7 decimals — never float `number`.
+  const totals: Record<string, bigint> = {};
 
   for (const balance of balances) {
-    const amount = parseFloat(balance.amount);
-    totals[balance.asset] = (totals[balance.asset] || 0) + amount;
+    totals[balance.asset] =
+      (totals[balance.asset] ?? 0n) + parseScaledAmount(balance.amount, 7);
   }
 
-  // Convert back to strings with proper precision
   const result: Record<string, string> = {};
-  for (const [asset, amount] of Object.entries(totals)) {
-    result[asset] = amount.toFixed(7);
+  for (const [asset, units] of Object.entries(totals)) {
+    result[asset] = serializeScaledAmount(units, 7);
   }
 
   return result;

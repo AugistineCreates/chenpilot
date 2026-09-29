@@ -1,0 +1,1037 @@
+{
+  "network": {
+    "max_ttl_ledgers": 3110400,
+    "ledgers_per_day": 17280
+  },
+  "contracts": {
+    "btc_relay": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Config",
+          "tier": "Instance",
+          "owner": "btc_relay",
+          "writers": ["initialize", "update_config"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "Claimed",
+          "tier": "Persistent",
+          "owner": "btc_relay",
+          "writers": [],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        },
+        {
+          "key": "Header",
+          "tier": "Persistent",
+          "owner": "btc_relay",
+          "writers": [],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        },
+        {
+          "key": "Checkpoint",
+          "tier": "Instance",
+          "owner": "btc_relay",
+          "writers": ["set_genesis_checkpoint", "submit_header"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "MaxSafeReorgDepth",
+          "tier": "Instance",
+          "owner": "btc_relay",
+          "writers": ["set_max_safe_reorg_depth"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "MaxStaleDepth",
+          "tier": "Instance",
+          "owner": "btc_relay",
+          "writers": ["set_max_stale_depth"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        }
+      ],
+      "max_keys": {
+        "Instance": 4,
+        "Persistent": 2
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "core_vault": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Admin",
+          "tier": "Instance",
+          "owner": "core_vault",
+          "writers": ["init", "transfer_admin"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "UnifiedAuth",
+          "tier": "Instance",
+          "owner": "core_vault",
+          "writers": ["init", "set_unified_auth"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "PendingUpgrade",
+          "tier": "Instance",
+          "owner": "core_vault",
+          "writers": ["apply_upgrade", "cancel_upgrade", "propose_upgrade"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "BackendOnline",
+          "tier": "Instance",
+          "owner": "core_vault",
+          "writers": ["init", "set_backend_status"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "Deposit",
+          "tier": "Persistent",
+          "owner": "core_vault",
+          "writers": ["deposit", "force_exit_complete", "withdrawal"],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        },
+        {
+          "key": "ForceExit",
+          "tier": "Persistent",
+          "owner": "core_vault",
+          "writers": ["force_exit_complete", "force_exit_request", "recovery"],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        },
+        {
+          "key": "VaultToken",
+          "tier": "Instance",
+          "owner": "core_vault",
+          "writers": ["init"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "UpgradeMode",
+          "tier": "Instance",
+          "owner": "core_vault",
+          "writers": [
+            "apply_upgrade",
+            "cancel_upgrade",
+            "init",
+            "propose_upgrade"
+          ],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "AuthNonce",
+          "tier": "Instance",
+          "owner": "core_vault",
+          "writers": ["require_legacy_admin"],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-account data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        }
+      ],
+      "max_keys": {
+        "Instance": 7,
+        "Persistent": 2
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "fee_distribution": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Config",
+          "tier": "Instance",
+          "owner": "fee_distribution",
+          "writers": ["initialize", "update_config"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "DistributionNonce",
+          "tier": "Instance",
+          "owner": "fee_distribution",
+          "writers": ["distribute", "initialize"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "LastDistribution",
+          "tier": "Instance",
+          "owner": "fee_distribution",
+          "writers": ["distribute"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "Rewards",
+          "tier": "Instance",
+          "owner": "fee_distribution",
+          "writers": ["store_rewards"],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-account data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "User",
+          "tier": "Instance",
+          "owner": "fee_distribution",
+          "writers": ["store_user"],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-account data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        }
+      ],
+      "max_keys": {
+        "Instance": 5
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "flash_loan_guard": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Config",
+          "tier": "Instance",
+          "owner": "flash_loan_guard",
+          "writers": ["initialize", "update_config"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "LastSnapshotLedger",
+          "tier": "Instance",
+          "owner": "flash_loan_guard",
+          "writers": [],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "note": "declared but no storage access found; confirm whether the key is dead"
+        },
+        {
+          "key": "PriceSnapshot",
+          "tier": "Instance",
+          "owner": "flash_loan_guard",
+          "writers": ["record_snapshot"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "OracleFreshness",
+          "tier": "Instance",
+          "owner": "flash_loan_guard",
+          "writers": [],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "note": "declared but no storage access found; confirm whether the key is dead"
+        },
+        {
+          "key": "PriceSequenceHistory",
+          "tier": "Instance",
+          "owner": "flash_loan_guard",
+          "writers": ["record_snapshot"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "CircuitBreaker",
+          "tier": "Instance",
+          "owner": "flash_loan_guard",
+          "writers": [
+            "initialize",
+            "record_snapshot",
+            "update_circuit_breaker"
+          ],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        }
+      ],
+      "max_keys": {
+        "Instance": 6
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "htlc": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Swap",
+          "tier": "Persistent",
+          "owner": "htlc",
+          "writers": ["claim", "init_swap", "refund"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        }
+      ],
+      "max_keys": {
+        "Persistent": 1
+      }
+    },
+    "intent_market_validator": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Config",
+          "tier": "Instance",
+          "owner": "intent_market_validator",
+          "writers": ["initialize", "update_config"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "TrustedSources",
+          "tier": "Instance",
+          "owner": "intent_market_validator",
+          "writers": ["initialize", "register_trusted_source"],
+          "class": "list",
+          "max_entry_bytes": 2048,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "List in instance storage with no cap verified. Needs a maximum length or one persistent entry per item; tracked separately."
+        }
+      ],
+      "max_keys": {
+        "Instance": 2
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "lending_liquidation": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Config",
+          "tier": "Instance",
+          "owner": "lending_liquidation",
+          "writers": ["initialize", "update_config"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "Position",
+          "tier": "Persistent",
+          "owner": "lending_liquidation",
+          "writers": ["deposit_and_borrow", "liquidate"],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        }
+      ],
+      "max_keys": {
+        "Instance": 1,
+        "Persistent": 1
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "liquidity_vault": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Config",
+          "tier": "Instance",
+          "owner": "liquidity_vault",
+          "writers": ["initialize", "update_config"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "ExecutionContext",
+          "tier": "Instance",
+          "owner": "liquidity_vault",
+          "writers": [],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "note": "declared but no storage access found; confirm whether the key is dead"
+        }
+      ],
+      "max_keys": {
+        "Instance": 2
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "multi_hop_swap": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Swap",
+          "tier": "Persistent",
+          "owner": "multi_hop_swap",
+          "writers": ["swap"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        }
+      ],
+      "max_keys": {
+        "Persistent": 1
+      }
+    },
+    "oracle_aggregator": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Config",
+          "tier": "Instance",
+          "owner": "oracle_aggregator",
+          "writers": ["initialize", "update_config"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "SourceList",
+          "tier": "Instance",
+          "owner": "oracle_aggregator",
+          "writers": ["add_source", "initialize", "remove_source"],
+          "class": "list",
+          "max_entry_bytes": 2048,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "List in instance storage with no cap verified. Needs a maximum length or one persistent entry per item; tracked separately."
+        },
+        {
+          "key": "Source",
+          "tier": "Instance",
+          "owner": "oracle_aggregator",
+          "writers": [],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-account data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "LastAggregate",
+          "tier": "Instance",
+          "owner": "oracle_aggregator",
+          "writers": ["aggregate"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        }
+      ],
+      "max_keys": {
+        "Instance": 4
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "por_validator": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Config",
+          "tier": "Instance",
+          "owner": "por_validator",
+          "writers": ["initialize", "set_safety_policy", "update_config"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "CurrentProof",
+          "tier": "Instance",
+          "owner": "por_validator",
+          "writers": ["invalidate_cache", "verify_reserves"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-item data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        }
+      ],
+      "max_keys": {
+        "Instance": 2
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "rbac": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "SuperAdmin",
+          "tier": "Instance",
+          "owner": "rbac",
+          "writers": ["init", "transfer_admin"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "HasRole",
+          "tier": "Persistent",
+          "owner": "rbac",
+          "writers": ["grant_role", "revoke_role"],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        },
+        {
+          "key": "Asset",
+          "tier": "Persistent",
+          "owner": "rbac",
+          "writers": ["register_asset"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        }
+      ],
+      "max_keys": {
+        "Instance": 1,
+        "Persistent": 2
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "relayer_slashing": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Config",
+          "tier": "Instance",
+          "owner": "relayer_slashing",
+          "writers": ["initialize"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "LivenessConfig",
+          "tier": "Instance",
+          "owner": "relayer_slashing",
+          "writers": ["configure_liveness", "set_liveness_config"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "Relayer",
+          "tier": "Persistent",
+          "owner": "relayer_slashing",
+          "writers": [
+            "apply_equivocation_penalty",
+            "dispute_relayer",
+            "register_relayer",
+            "request_unstake",
+            "slash_relayer",
+            "slash_relayer_for_liveness",
+            "withdraw_stake"
+          ],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        },
+        {
+          "key": "EpochState",
+          "tier": "Instance",
+          "owner": "relayer_slashing",
+          "writers": ["_roll_epoch", "configure_liveness"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "EpochReward",
+          "tier": "Instance",
+          "owner": "relayer_slashing",
+          "writers": ["_roll_epoch", "configure_liveness", "submit_work"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "Liveness",
+          "tier": "Persistent",
+          "owner": "relayer_slashing",
+          "writers": [
+            "claim_rewards",
+            "evaluate_liveness",
+            "save_liveness",
+            "submit_work"
+          ],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        },
+        {
+          "key": "RelayerEpoch",
+          "tier": "Persistent",
+          "owner": "relayer_slashing",
+          "writers": ["submit_work"],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        }
+      ],
+      "max_keys": {
+        "Instance": 4,
+        "Persistent": 3
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "strategy_boundary": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Admin",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": ["init"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "UnifiedAuth",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": ["init"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "StrategyMetadata",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": ["register_strategy"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-item data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "AllocationLimits",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": ["init", "set_allocation_limits"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "RiskLimits",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": ["init", "set_risk_limits"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "StrategyAllocation",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": [
+            "allocate_to_strategy",
+            "complete_strategy_withdrawal",
+            "emergency_strategy_withdrawal"
+          ],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-item data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "TotalStrategyAllocation",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": [
+            "allocate_to_strategy",
+            "complete_strategy_withdrawal",
+            "emergency_strategy_withdrawal"
+          ],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "WithdrawalRequest",
+          "tier": "Persistent",
+          "owner": "strategy_boundary",
+          "writers": [
+            "complete_strategy_withdrawal",
+            "request_strategy_withdrawal"
+          ],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        },
+        {
+          "key": "StrategyHealth",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": ["update_strategy_health"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-item data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "DisabledStrategy",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": ["disable_strategy"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-item data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "ActiveStrategies",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": ["register_strategy"],
+          "class": "list",
+          "max_entry_bytes": 2048,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "List in instance storage with no cap verified. Needs a maximum length or one persistent entry per item; tracked separately."
+        },
+        {
+          "key": "AuthorizedStrategies",
+          "tier": "Instance",
+          "owner": "strategy_boundary",
+          "writers": ["authorize_strategy_address", "init"],
+          "class": "list",
+          "max_entry_bytes": 2048,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "List in instance storage with no cap verified. Needs a maximum length or one persistent entry per item; tracked separately."
+        }
+      ],
+      "max_keys": {
+        "Instance": 11,
+        "Persistent": 1
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "strategy_registry": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "Admin",
+          "tier": "Instance",
+          "owner": "strategy_registry",
+          "writers": ["init"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "AiAgent",
+          "tier": "Instance",
+          "owner": "strategy_registry",
+          "writers": ["set_ai_agent"],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-account data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "VerifiedPool",
+          "tier": "Instance",
+          "owner": "strategy_registry",
+          "writers": ["add_verified_pool", "remove_verified_pool"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-item data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "PoolMeta",
+          "tier": "Instance",
+          "owner": "strategy_registry",
+          "writers": ["add_verified_pool", "remove_verified_pool"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-item data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "CurrentStrategy",
+          "tier": "Instance",
+          "owner": "strategy_registry",
+          "writers": ["vote_strategy"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "Votes",
+          "tier": "Instance",
+          "owner": "strategy_registry",
+          "writers": ["vote_strategy"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-item data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "VotedPools",
+          "tier": "Instance",
+          "owner": "strategy_registry",
+          "writers": ["vote_strategy"],
+          "class": "list",
+          "max_entry_bytes": 2048,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "List in instance storage with no cap verified. Needs a maximum length or one persistent entry per item; tracked separately."
+        }
+      ],
+      "max_keys": {
+        "Instance": 7
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    },
+    "unified_auth": {
+      "adopted": false,
+      "keys": [
+        {
+          "key": "SuperAdmin",
+          "tier": "Instance",
+          "owner": "unified_auth",
+          "writers": ["init", "transfer_super_admin"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "HasRole",
+          "tier": "Persistent",
+          "owner": "unified_auth",
+          "writers": ["grant_role", "revoke_role"],
+          "class": "per_account",
+          "max_entry_bytes": 256,
+          "renewal": {
+            "threshold": 518400,
+            "extend_to": 2592000
+          },
+          "on_expiry": "restore"
+        },
+        {
+          "key": "RegisteredContract",
+          "tier": "Instance",
+          "owner": "unified_auth",
+          "writers": ["register_contract", "unregister_contract"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-item data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        },
+        {
+          "key": "EmergencyState",
+          "tier": "Instance",
+          "owner": "unified_auth",
+          "writers": ["end_emergency", "trigger_emergency"],
+          "class": "singleton",
+          "max_entry_bytes": 1024,
+          "renewal": "none",
+          "on_expiry": "restore"
+        },
+        {
+          "key": "ContractAddress",
+          "tier": "Instance",
+          "owner": "unified_auth",
+          "writers": ["register_contract", "unregister_contract"],
+          "class": "per_item",
+          "max_entry_bytes": 512,
+          "renewal": "none",
+          "on_expiry": "restore",
+          "waiver": "Per-item data in instance storage (64 KB cap, loaded on every call). Should live in persistent storage; moving it needs a storage migration, tracked separately."
+        }
+      ],
+      "max_keys": {
+        "Instance": 4,
+        "Persistent": 1
+      },
+      "instance_renewal": {
+        "threshold": 518400,
+        "extend_to": 2073600
+      }
+    }
+  }
+}

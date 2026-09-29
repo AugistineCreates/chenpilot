@@ -1,0 +1,100 @@
+{
+  "contract": "intent_market_validator",
+  "source": "contracts/intent_market_validator/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.558Z",
+  "ttl_constants": {},
+  "data_key_variants": [
+    {
+      "key_variant": "Config",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "ValidationConfig",
+      "fields": [
+        {
+          "name": "threshold_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "threshold_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtCfgUpd",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "threshold_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtDevAlert",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "market_value",
+          "rust_type": "i128"
+        },
+        {
+          "name": "intent_value",
+          "rust_type": "i128"
+        },
+        {
+          "name": "deviation_bps",
+          "rust_type": "i128"
+        }
+      ]
+    }
+  ]
+}

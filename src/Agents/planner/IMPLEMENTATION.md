@@ -303,12 +303,8 @@ import { agentPlanner, planExecutor } from "./Agents/planner";
 const plan = await agentPlanner.createPlan({
   userId: "user123",
   userInput: "Your natural language request",
-  availableBalance: {
-    /* optional */
-  },
-  constraints: {
-    /* optional */
-  },
+  availableBalance: {/* optional */},
+  constraints: {/* optional */},
 });
 ```
 

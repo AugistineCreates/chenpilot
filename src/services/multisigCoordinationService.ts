@@ -1,4 +1,5 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
+import { SafeXdrDecoder } from "../utils/xdr";
 
 export interface PendingTransaction {
   xdr: string;
@@ -20,7 +21,9 @@ export class MultisigCoordinationService {
     xdr: string,
     threshold: number
   ): Promise<string> {
-    const tx = new StellarSdk.Transaction(xdr, StellarSdk.Networks.TESTNET);
+    const tx = SafeXdrDecoder.decodeTransaction(xdr, {
+      networkPassphrase: StellarSdk.Networks.TESTNET,
+    }) as StellarSdk.Transaction;
     const hash = tx.hash().toString("hex");
 
     this.pendingTransactions.set(hash, {
@@ -69,10 +72,10 @@ export class MultisigCoordinationService {
       throw new Error("Transaction is not ready for submission");
     }
 
-    const tx = new StellarSdk.Transaction(
+    const tx = SafeXdrDecoder.decodeTransaction(
       pending.xdr,
-      StellarSdk.Networks.TESTNET
-    );
+      { networkPassphrase: StellarSdk.Networks.TESTNET }
+    ) as StellarSdk.Transaction;
 
     // Add all collected signatures to the transaction object
     pending.signatures.forEach(() => {

@@ -5,6 +5,16 @@ extern crate std;
 use super::*;
 use soroban_sdk::{testutils::Address as _, vec, Env, Address, contract, contractimpl, token::{Client as TokenClient, StellarAssetClient}};
 
+// Trust assumptions for privileged cross-contract calls:
+// - `MultiHopSwap::swap` is always invoked with an explicit `caller` address.
+//   That address MUST have authorized *this exact invocation* (contract, function,
+//   hop arguments, and nonce where applicable) before any token movement happens.
+// - Each hop's `pool` is a trusted external contract for the corresponding
+//   token pair; it is expected to transfer `token_out` to `caller` after receiving `token_in`.
+// - No intermediary contract may reuse a caller's authorization for `swap` unless the
+//   caller has separately authorized the nested `MultiHopSwap` invocation with identical
+//   arguments.
+
 // Mock pool contract for testing
 #[contract]
 pub struct MockPool;
@@ -26,6 +36,47 @@ impl MockPool {
         }
 
         // Transfer tokens to recipient from pool
+        TokenClient::new(&env, &token_out).transfer(&env.current_contract_address(), &to, &amount_out);
+
+        amount_out
+    }
+}
+
+// Adversarial intermediary contract used to prove that a nested invocation cannot
+// reuse the caller's authorization for the outer call.
+#[contract]
+pub struct BadIntermediary;
+
+#[contractimpl]
+impl BadIntermediary {
+    pub fn invoke_swap(env: Env, multi_hop: Address, caller: Address, hops: Vec<Hop>) {
+        MultiHopSwapClient::new(&env, &multi_hop).swap(&caller, &hops);
+    }
+}
+
+// Malicious pool that attempts to reenter MultiHopSwap inside a swap.
+#[contract]
+pub struct ReentrantPool;
+
+#[contractimpl]
+impl ReentrantPool {
+    pub fn initialize(env: Env, multi_hop: Address, bad_hops: Vec<Hop>) {
+        env.storage().instance().set(&symbol_short!("multi_hop"), &multi_hop);
+        env.storage().instance().set(&symbol_short!("bad_hops"), &bad_hops);
+    }
+
+    pub fn swap(env: Env, to: Address, _token_in: Address, token_out: Address, amount_in: i128, min_amount_out: i128) -> i128 {
+        let amount_out = amount_in; // 1:1
+
+        if amount_out < min_amount_out {
+            panic!("slippage exceeded");
+        }
+
+        // Attempt to reenter MultiHopSwap with the same caller but different hop arguments.
+        let multi_hop: Address = env.storage().instance().get(&symbol_short!("multi_hop")).unwrap();
+        let bad_hops: Vec<Hop> = env.storage().instance().get(&symbol_short!("bad_hops")).unwrap();
+        MultiHopSwapClient::new(&env, &multi_hop).swap(&to, &bad_hops);
+
         TokenClient::new(&env, &token_out).transfer(&env.current_contract_address(), &to, &amount_out);
 
         amount_out
@@ -66,7 +117,7 @@ fn test_single_hop_swap() {
         amount_in: 100,
         min_amount_out: 199,
     }];
-    let results = multi_hop_client.swap(&caller, &hops);
+    let (swap_id, results) = multi_hop_client.swap(&caller, &hops);
 
     // Check results
     assert_eq!(results.len(), 1);
@@ -78,6 +129,11 @@ fn test_single_hop_swap() {
 
     // Check last out
     assert_eq!(multi_hop_client.get_last_out(), Some(200));
+
+    // Check get_swap returns correct data
+    let swap = multi_hop_client.get_swap(&swap_id).unwrap();
+    assert_eq!(swap.caller, caller);
+    assert_eq!(swap.status, SwapStatus::Completed);
 }
 
 #[test]
@@ -128,7 +184,7 @@ fn test_multi_hop_swap() {
             min_amount_out: 599,
         },
     ];
-    let results = multi_hop_client.swap(&caller, &hops);
+    let (swap_id, results) = multi_hop_client.swap(&caller, &hops);
 
     // Check results
     assert_eq!(results.len(), 2);
@@ -137,6 +193,10 @@ fn test_multi_hop_swap() {
 
     // Check caller has received tokens
     assert_eq!(TokenClient::new(&env, &token_c).balance(&caller), 600);
+
+    // Check get_swap returns correct data
+    let swap = multi_hop_client.get_swap(&swap_id).unwrap();
+    assert_eq!(swap.caller, caller);
 }
 
 #[test]
@@ -179,5 +239,42 @@ fn test_slippage_guard() {
         amount_in: 100,
         min_amount_out: 999, // Too high
     }];
+    multi_hop_client.swap(&caller, &hops);
+}
+
+#[test]
+#[should_panic(expected = "swap already executed (replay attempt)")]
+fn test_replay_attack_blocked() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let token_admin = Address::generate(&env);
+    let token_a = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+    let token_b = env.register_stellar_asset_contract_v2(token_admin.clone()).address();
+
+    let pool_id = env.register(MockPool, ());
+    let pool_client = MockPoolClient::new(&env, &pool_id);
+    pool_client.initialize(&2, &1);
+    StellarAssetClient::new(&env, &token_b).mint(&pool_id, &1000);
+
+    let multi_hop_id = env.register(MultiHopSwap, ());
+    let multi_hop_client = MultiHopSwapClient::new(&env, &multi_hop_id);
+
+    let caller = Address::generate(&env);
+    StellarAssetClient::new(&env, &token_a).mint(&caller, &200); // Mint enough for 2 swaps
+
+    let hops = vec![&env, Hop {
+        pool: pool_id,
+        token_in: token_a.clone(),
+        token_out: token_b.clone(),
+        amount_in: 100,
+        min_amount_out: 199,
+    }];
+
+    // First swap (ok)
+    multi_hop_client.swap(&caller, &hops);
+
+    // Second swap with same hops (replay attempt, should panic)
+    // Need to bump ledger to get different swap_id? Wait no, same ledger would have same swap_id
     multi_hop_client.swap(&caller, &hops);
 }

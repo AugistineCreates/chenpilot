@@ -1,0 +1,168 @@
+{
+  "contract": "strategy_registry",
+  "source": "contracts/strategy_registry/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.618Z",
+  "ttl_constants": {
+    "VOTE_TTL_LEDGERS": 1209600
+  },
+  "data_key_variants": [
+    {
+      "key_variant": "Admin",
+      "value_type": "Address",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "AiAgent",
+      "value_type": "bool",
+      "storage_tier": "Instance",
+      "key_payload": "Address"
+    },
+    {
+      "key_variant": "VerifiedPool",
+      "value_type": "unknown",
+      "storage_tier": "Instance",
+      "key_payload": "BytesN<32>"
+    },
+    {
+      "key_variant": "CurrentStrategy",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "Votes",
+      "value_type": "u32",
+      "storage_tier": "Instance",
+      "key_payload": "BytesN<32>"
+    },
+    {
+      "key_variant": "VotedPools",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtAgentSet",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "ai_agent",
+          "rust_type": "Address"
+        },
+        {
+          "name": "authorized",
+          "rust_type": "bool"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtPoolAdd",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "pool_id",
+          "rust_type": "BytesN<32>"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtPoolRm",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "pool_id",
+          "rust_type": "BytesN<32>"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtVote",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "ai_agent",
+          "rust_type": "Address"
+        },
+        {
+          "name": "pool_id",
+          "rust_type": "BytesN<32>"
+        },
+        {
+          "name": "total_votes",
+          "rust_type": "u32"
+        }
+      ]
+    }
+  ]
+}

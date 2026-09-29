@@ -1,10 +1,47 @@
 import { ChainId } from "../types";
+import { ErrorCategory } from "../errors";
+
+/**
+ * Maps a SignatureProvider error code to its ErrorCategory.
+ */
+function codeToCategory(code: string): ErrorCategory {
+  switch (code) {
+    case "CONNECTION_ERROR":
+    case "CONNECTION_TIMEOUT":
+    case "PROVIDER_NOT_FOUND":
+    case "NETWORK_ERROR":
+      return ErrorCategory.TRANSPORT;
+    case "INVALID_TRANSACTION":
+    case "INVALID_PROVIDER_IMPLEMENTATION":
+    case "INVALID_PROVIDER_ID":
+    case "INVALID_PROVIDER_METADATA":
+    case "UNSUPPORTED_PROVIDER_TYPE":
+      return ErrorCategory.VALIDATION;
+    case "SIGNING_ERROR":
+    case "INSUFFICIENT_FUNDS":
+    case "HARDWARE_WALLET_ERROR":
+    case "DEVICE_NOT_FOUND":
+    case "DEVICE_BUSY":
+    case "DEVICE_LOCKED":
+      return ErrorCategory.EXECUTION;
+    case "AUTHENTICATION_ERROR":
+    case "USER_REJECTED":
+    case "UNAUTHORIZED":
+      return ErrorCategory.POLICY;
+    case "UNSUPPORTED_CHAIN":
+    case "UNSUPPORTED_OPERATION":
+      return ErrorCategory.COMPATIBILITY;
+    default:
+      return ErrorCategory.UNKNOWN;
+  }
+}
 
 /**
  * Base error class for all SignatureProvider related errors
  */
 export abstract class SignatureProviderError extends Error {
   public readonly code: string;
+  public readonly category: ErrorCategory;
   public readonly providerId?: string;
   public readonly chainId?: ChainId;
   public readonly recoverable: boolean;
@@ -19,6 +56,7 @@ export abstract class SignatureProviderError extends Error {
     super(message);
     this.name = this.constructor.name;
     this.code = code;
+    this.category = codeToCategory(code);
     this.providerId = providerId;
     this.chainId = chainId;
     this.recoverable = recoverable;

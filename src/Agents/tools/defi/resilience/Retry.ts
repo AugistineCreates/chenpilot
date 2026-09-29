@@ -8,10 +8,10 @@ export interface RetryConfig {
 export async function executeWithRetry<T>(
   fn: () => Promise<T>,
   config: RetryConfig,
-  onRetry?: (attempt: number, error: any, nextDelayMs: number) => void
+  onRetry?: (attempt: number, error: unknown, nextDelayMs: number) => void
 ): Promise<T> {
   const { maxAttempts, baseDelayMs, maxDelayMs, jitterRangeMs } = config;
-  let lastError: any;
+  let lastError: unknown;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {

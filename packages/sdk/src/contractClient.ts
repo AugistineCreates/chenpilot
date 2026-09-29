@@ -1,4 +1,8 @@
 import { SorobanNetwork } from "./types";
+import {
+  NetworkIdentityVerifier,
+  NetworkIdentityVerifierConfig,
+} from "./networkIdentity";
 
 export type ContractFunctionKind = "query" | "simulate" | "execute";
 export type ApprovalCheckpoint =
@@ -14,6 +18,14 @@ export interface ContractClientConfig {
   fetcher?: typeof fetch;
   defaultIdempotencyKey?: string;
   compatibility?: CompatibilityPolicy;
+  /**
+   * Enable runtime network identity verification.
+   *
+   * - `true` verifies the configured RPC endpoint against the declared network
+   *   on every call, force-refreshing discovery before submissions.
+   * - An object form overrides discovery thresholds / service registries.
+   */
+  verifyNetworkIdentity?: boolean | NetworkIdentityVerifierConfig;
 }
 
 export interface CompatibilityPolicy {
@@ -30,18 +42,21 @@ export interface ContractCall<Args extends readonly unknown[] = unknown[]> {
 
 export interface QueryRequest<TDecoded = unknown> extends ContractCall {
   decoder?: ResultDecoder<TDecoded>;
+  signal?: AbortSignalLike;
 }
 
 export interface SimulationRequest<TDecoded = unknown> extends ContractCall {
   sourceAccount?: string;
   transactionXdr?: string;
   decoder?: ResultDecoder<TDecoded>;
+  signal?: AbortSignalLike;
 }
 
 export interface ExecuteRequest<TDecoded = unknown> extends ContractCall {
   signedTransactionXdr: string;
   idempotencyKey?: string;
   decoder?: ResultDecoder<TDecoded>;
+  signal?: AbortSignalLike;
 }
 
 export type ResultDecoder<T> = (value: unknown) => T;
@@ -133,6 +148,7 @@ export class ContractClient {
   private readonly fetcher: typeof fetch;
   private readonly defaultIdempotencyKey?: string;
   private readonly compatibility?: CompatibilityPolicy;
+  private readonly verifier: NetworkIdentityVerifier | null;
   private protocolVersion?: number;
 
   constructor(config: ContractClientConfig) {
@@ -145,12 +161,54 @@ export class ContractClient {
     this.fetcher = config.fetcher ?? globalThis.fetch;
     this.defaultIdempotencyKey = config.defaultIdempotencyKey;
     this.compatibility = config.compatibility;
+
+    if (config.verifyNetworkIdentity) {
+      const base: NetworkIdentityVerifierConfig = {
+        expectedNetwork: this.network,
+        rpcUrls: [this.rpcUrl],
+        fetcher: config.fetcher,
+        ...(typeof config.verifyNetworkIdentity === "object" &&
+        config.verifyNetworkIdentity !== null
+          ? config.verifyNetworkIdentity
+          : {}),
+      };
+      this.verifier = new NetworkIdentityVerifier(base);
+    } else {
+      this.verifier = null;
+    }
+  }
+
+  /**
+   * Run network identity verification against all configured services.
+   * Throws {@link NetworkIdentityError} (fail-closed) on mismatch.
+   */
+  async verifyNetworkIdentity(
+    options?: { forceRefresh?: boolean }
+  ): Promise<void> {
+    if (!this.verifier) {
+      return;
+    }
+    const opts = options?.forceRefresh ? { forceRefresh: true } : {};
+    if (options?.forceRefresh) {
+      await this.verifier.verifyBeforeSigning(opts);
+    } else {
+      await this.verifier.assertVerified(opts);
+    }
+  }
+
+  private async assertNetworkIdentity(
+    verify: boolean,
+    forceRefresh: boolean
+  ): Promise<void> {
+    if (!verify || !this.verifier) return;
+    await this.verifyNetworkIdentity({ forceRefresh });
   }
 
   async query<TDecoded = unknown>(
     request: QueryRequest<TDecoded>
   ): Promise<ContractResult<TDecoded>> {
     this.validateCall(request);
+    await this.assertNetworkIdentity(true, false);
     const raw = await this.rpc("getLedgerEntries", {
       keys: [this.ledgerEntryKey(request.contractId, request.method, request.args)],
     });
@@ -161,6 +219,7 @@ export class ContractClient {
     request: SimulationRequest<TDecoded>
   ): Promise<SimulationResult<TDecoded>> {
     this.validateCall(request);
+    await this.assertNetworkIdentity(true, false);
     const raw = await this.rpc<Record<string, unknown>>("simulateTransaction", {
       transaction: request.transactionXdr,
       contractId: request.contractId,
@@ -192,9 +251,14 @@ export class ContractClient {
     request: ExecuteRequest<TDecoded>
   ): Promise<ExecutionResult<TDecoded>> {
     this.validateCall(request);
+    throwIfAborted(request.signal);
     if (!request.signedTransactionXdr) {
       throw new Error("signedTransactionXdr is required for execution");
     }
+
+    // Submissions are irreversible — always re-discover the network identity
+    // so a stale discovery cache can never mask a changed endpoint.
+    await this.assertNetworkIdentity(true, true);
 
     const idempotencyKey =
       request.idempotencyKey ??
@@ -204,7 +268,8 @@ export class ContractClient {
     const raw = await this.rpc<Record<string, unknown>>(
       "sendTransaction",
       { xdr: request.signedTransactionXdr },
-      { "Idempotency-Key": idempotencyKey }
+      { "Idempotency-Key": idempotencyKey },
+      request.signal
     );
     const base = await this.toContractResult(raw, request.decoder);
 
@@ -256,12 +321,15 @@ export class ContractClient {
   private async rpc<T>(
     method: string,
     params: unknown,
-    headers: Record<string, string> = {}
+    headers: Record<string, string> = {},
+    signal?: AbortSignalLike
   ): Promise<T> {
+    throwIfAborted(signal);
     const response = await this.fetcher(this.rpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: signal as AbortSignal | undefined,
     });
 
     if (!response.ok) {
@@ -360,6 +428,22 @@ export function createContractBinding<TSpec extends ContractSpec>(
   spec: TSpec
 ): ContractBinding<TSpec> {
   return client.bind(spec);
+}
+
+/**
+ * Create a {@link ContractClient} that verifies network identity before every
+ * call and force-refreshes discovery before every submission.
+ */
+export function createVerifiedContractClient(
+  config: ContractClientConfig & { verifyNetworkIdentity?: true }
+): ContractClient {
+  return new ContractClient({
+    ...config,
+    verifyNetworkIdentity:
+      typeof config.verifyNetworkIdentity === "object"
+        ? config.verifyNetworkIdentity
+        : true,
+  });
 }
 
 export function decodeObject<T extends Record<string, unknown>>(

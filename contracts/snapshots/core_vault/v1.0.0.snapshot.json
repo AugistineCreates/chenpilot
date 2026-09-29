@@ -1,0 +1,54 @@
+{
+  "contract": "core_vault",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Admin",
+      "storage_tier": "Instance",
+      "value_type": "Address",
+      "sample_value": "GADMIN0000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "key_variant": "UnifiedAuth",
+      "storage_tier": "Instance",
+      "value_type": "Address",
+      "sample_value": "CUNIFIEDAUTH0000000000000000000000000000000000000000000000"
+    },
+    {
+      "key_variant": "VaultToken",
+      "storage_tier": "Instance",
+      "value_type": "Address",
+      "sample_value": "CVAULTTOKEN000000000000000000000000000000000000000000000000"
+    },
+    {
+      "key_variant": "BackendOnline",
+      "storage_tier": "Instance",
+      "value_type": "bool",
+      "sample_value": true
+    },
+    {
+      "key_variant": "UpgradeMode",
+      "storage_tier": "Instance",
+      "value_type": "bool",
+      "sample_value": false
+    },
+    {
+      "key_variant": "Deposit",
+      "key_payload": "Address",
+      "storage_tier": "Persistent",
+      "value_type": "i128",
+      "sample_value": 1000000000
+    },
+    {
+      "key_variant": "ForceExit",
+      "key_payload": "Address",
+      "storage_tier": "Persistent",
+      "value_type": "ForceExitRequest",
+      "sample_value": {
+        "amount": 1000000000,
+        "eligible_at": 1700000000
+      }
+    }
+  ]
+}

@@ -1,0 +1,248 @@
+{
+  "contract": "por_validator",
+  "source": "contracts/por_validator/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.603Z",
+  "ttl_constants": {
+    "DEFAULT_MAX_STALE_LEDERS": 10000,
+    "DEFAULT_PROOF_CADENCE_LEDGERS": 1000
+  },
+  "data_key_variants": [
+    {
+      "key_variant": "Config",
+      "value_type": "Config",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "CurrentProof",
+      "value_type": "Option<ProofRecord>",
+      "storage_tier": "Instance"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "ReserveData",
+      "fields": [
+        {
+          "name": "balance",
+          "rust_type": "i128"
+        },
+        {
+          "name": "circulating_supply",
+          "rust_type": "i128"
+        },
+        {
+          "name": "timestamp",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "ProofRecord",
+      "fields": [
+        {
+          "name": "reserve_data",
+          "rust_type": "ReserveData"
+        },
+        {
+          "name": "is_valid",
+          "rust_type": "bool"
+        },
+        {
+          "name": "verified_ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "valid_until_ledger",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "VaultSafetyStatus",
+      "fields": [
+        {
+          "name": "is_safe",
+          "rust_type": "bool"
+        },
+        {
+          "name": "proof_is_fresh",
+          "rust_type": "bool"
+        },
+        {
+          "name": "proof_is_valid",
+          "rust_type": "bool"
+        },
+        {
+          "name": "verified_ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "valid_until_ledger",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "Config",
+      "fields": [
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "wbtc_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "tolerance_bps",
+          "rust_type": "u32"
+        },
+        {
+          "name": "proof_cadence_ledgers",
+          "rust_type": "u32"
+        },
+        {
+          "name": "max_stale_ledgers",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "wbtc_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "tolerance_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtCfgUpd",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "tolerance_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtSafetyCfg",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "proof_cadence_ledgers",
+          "rust_type": "u32"
+        },
+        {
+          "name": "max_stale_ledgers",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtProof",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "is_valid",
+          "rust_type": "bool"
+        },
+        {
+          "name": "balance",
+          "rust_type": "i128"
+        },
+        {
+          "name": "circulating_supply",
+          "rust_type": "i128"
+        },
+        {
+          "name": "verified_ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "valid_until_ledger",
+          "rust_type": "u32"
+        }
+      ]
+    }
+  ]
+}

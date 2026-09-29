@@ -2,7 +2,7 @@
  * Market Overview Service
  *
  * Fetches and formats daily market summaries of top-performing Stellar assets
- * for automated daily digest posts in Discord channels.
+ * for automated daily digest posts across bot platforms (Discord, Telegram).
  */
 
 export interface AssetData {
@@ -90,9 +90,17 @@ export class MarketOverviewService {
   }
 
   /**
-   * Format market overview data for Discord message
+   * Format market overview data for Discord (markdown-flavoured).
+   * Alias kept for backwards compatibility — callers may use either name.
    */
   formatMarketOverviewMessage(data: MarketOverviewData): string {
+    return this.formatForDiscord(data);
+  }
+
+  /**
+   * Format market overview data for Discord (markdown bold/italics).
+   */
+  formatForDiscord(data: MarketOverviewData): string {
     const date = new Date(data.timestamp).toLocaleDateString("en-US", {
       weekday: "long",
       year: "numeric",
@@ -157,6 +165,73 @@ export class MarketOverviewService {
 
     message += `\n*Data provided by Chen Pilot*`;
     return message;
+  }
+
+  /**
+   * Format market overview data for Telegram (HTML parse mode).
+   * Telegram does not support markdown bold/italic in the same way as Discord.
+   */
+  formatForTelegram(data: MarketOverviewData): string {
+    const date = new Date(data.timestamp).toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    let msg = `📊 <b>Daily Market Overview — ${date}</b>\n\n`;
+
+    if (data.networkStatus) {
+      const healthEmoji = data.networkStatus.isHealthy ? "🟢" : "🔴";
+      msg += `${healthEmoji} <b>Stellar Network:</b> Ledger ${data.networkStatus.latestLedger}\n\n`;
+    }
+
+    msg += `📈 <b>Top Gainers (24h)</b>\n`;
+    if (data.topGainers.length === 0) {
+      msg += `No data available\n`;
+    } else {
+      for (const asset of data.topGainers) {
+        const change =
+          asset.priceChange24h >= 0
+            ? `+${asset.priceChange24h.toFixed(2)}%`
+            : `${asset.priceChange24h.toFixed(2)}%`;
+        msg += `• <b>${asset.code}</b>${asset.domain ? ` (${asset.domain})` : ""}\n`;
+        msg += `  $${asset.price.toFixed(4)} | 24h: ${change} | Vol: ${this.formatNumber(asset.volume24h)}\n`;
+      }
+    }
+    msg += `\n`;
+
+    msg += `📉 <b>Top Losers (24h)</b>\n`;
+    if (data.topLosers.length === 0) {
+      msg += `No data available\n`;
+    } else {
+      for (const asset of data.topLosers) {
+        const change =
+          asset.priceChange24h >= 0
+            ? `+${asset.priceChange24h.toFixed(2)}%`
+            : `${asset.priceChange24h.toFixed(2)}%`;
+        msg += `• <b>${asset.code}</b>${asset.domain ? ` (${asset.domain})` : ""}\n`;
+        msg += `  $${asset.price.toFixed(4)} | 24h: ${change} | Vol: ${this.formatNumber(asset.volume24h)}\n`;
+      }
+    }
+    msg += `\n`;
+
+    msg += `💰 <b>Top by Volume (24h)</b>\n`;
+    if (data.topVolume.length === 0) {
+      msg += `No data available\n`;
+    } else {
+      for (const asset of data.topVolume) {
+        const change =
+          asset.priceChange24h >= 0
+            ? `+${asset.priceChange24h.toFixed(2)}%`
+            : `${asset.priceChange24h.toFixed(2)}%`;
+        msg += `• <b>${asset.code}</b>${asset.domain ? ` (${asset.domain})` : ""}\n`;
+        msg += `  $${asset.price.toFixed(4)} | 24h: ${change} | Vol: ${this.formatNumber(asset.volume24h)}\n`;
+      }
+    }
+
+    msg += `\n<i>Data provided by Chen Pilot</i>`;
+    return msg;
   }
 
   /**

@@ -1,19 +1,22 @@
 /// Tests for oracle freshness, sequencing attack detection, and delayed update handling
-#[cfg(test)]
+#c[cfg(test)]
 mod oracle_freshness_tests {
     use super::*;
-    use soroban_sdk::{
-        testutils::{Address as _, Ledger as _},
+    use sorban_sdk::
+        testutils:::{
+            Address as _,
+            Ledger as _,
+        },
         contract, contractimpl, Address, Env,
-    };
+    );
 
-    // ---------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------------------
     // Mock oracle with timestamp support
-    // ---------------------------------------------------------------------------
-    #[contract]
+    // ---------------------------------------------------------------------------------------
+    [contract]
     pub struct MockOracleWithTimestamp;
 
-    #[contractimpl]
+    [contractimpl]
     impl MockOracleWithTimestamp {
         pub fn get_price(env: Env, _asset: Address) -> i128 {
             env.storage().instance().get(&0u32).unwrap_or(100_000_000i128)
@@ -63,7 +66,18 @@ mod oracle_freshness_tests {
         (client, asset)
     }
 
-    #[test]
+    // Helper to simulate a contract upgrade by bumping a version key in the contract's storage.
+    fn set_contract_version(env: &Env, client: &FlashLoanGuardContractClient, version: u32) {
+        env.as_contract(&client.contract_id, || {
+            env.storage().instance().set(&100u32, &version);
+        });
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Oracle freshness tests
+    // ---------------------------------------------------------------------------------------
+
+    [test]
     fn test_oracle_freshness_valid() {
         let env = Env::default();
         env.mock_all_auths();
@@ -76,12 +90,12 @@ mod oracle_freshness_tests {
         client.record_snapshot(1000000, 1);
 
         let snap = client.get_snapshot().unwrap();
-        assert_eq!(snap.oracle_timestamp, 1000000);
-        assert_eq!(snap.oracle_sequence, 1);
+        assert_eq(snap.oracle_timestamp, 1000000);
+        assert_eq(snap.oracle_sequence, 1);
     }
 
-    #[test]
-    #[should_panic(expected = "oracle data too stale")]
+    [test]
+    [#should_panic(expected = "oracle data too stale")]
     fn test_oracle_freshness_stale_data() {
         let env = Env::default();
         env.mock_all_auths();
@@ -95,8 +109,8 @@ mod oracle_freshness_tests {
         client.record_snapshot(1000000, 1);
     }
 
-    #[test]
-    #[should_panic(expected = "oracle sequence not increasing")]
+    [test]
+    [#should_panic(expected = "oracle sequence not increasing")]
     fn test_sequencing_attack_sequence_not_increasing() {
         let env = Env::default();
         env.mock_all_auths();
@@ -116,8 +130,8 @@ mod oracle_freshness_tests {
         client.record_snapshot(1000001, 5);
     }
 
-    #[test]
-    #[should_panic(expected = "consecutive price change exceeds threshold")]
+    [test]
+    [#should_panic(expected = "consecutive price change exceeds threshold")]
     fn test_sequencing_attack_price_jump() {
         let env = Env::default();
         env.mock_all_auths();
@@ -139,8 +153,8 @@ mod oracle_freshness_tests {
         client.record_snapshot(1000001, 2);
     }
 
-    #[test]
-    #[should_panic(expected = "oracle update gap exceeded")]
+    [test]
+    [#should_panic(expected = "oracle update gap exceeded")]
     fn test_delayed_update_detection() {
         let env = Env::default();
         env.mock_all_auths();
@@ -156,12 +170,12 @@ mod oracle_freshness_tests {
         env.ledger().set_sequence_number(200);
         env.ledger().set_timestamp_ns((1000000 + 8000) * 10_u64.pow(9)); // 8000 seconds later (exceeds 7200)
 
-        // Try to record new snapshot — should panic due to delayed update check
+        // Try to record new snapshot - should panic due to delayed update check
         client.record_snapshot(1008000, 2);
     }
 
-    #[test]
-    #[should_panic(expected = "oracle data stale during assert_price_safe")]
+    [test]
+    [#should_panic(expected = "oracle data stale during assert_price_safe")]
     fn test_assert_price_safe_stale_check() {
         let env = Env::default();
         env.mock_all_auths();
@@ -181,8 +195,8 @@ mod oracle_freshness_tests {
         client.assert_price_safe();
     }
 
-    #[test]
-    #[should_panic(expected = "snapshot too old")]
+    [test]
+    [#should_panic(expected = "snapshot too old")]
     fn test_ledger_timing_edge_case() {
         let env = Env::default();
         env.mock_all_auths();
@@ -203,7 +217,7 @@ mod oracle_freshness_tests {
         client.assert_price_safe();
     }
 
-    #[test]
+    [test]
     fn test_normal_operation_with_freshness_checks() {
         let env = Env::default();
         env.mock_all_auths();
@@ -226,5 +240,132 @@ mod oracle_freshness_tests {
         env.ledger().set_sequence_number(103);
         let price = client.assert_price_safe();
         assert!(price > 0);
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Version-aware cache invalidation tests
+    // ----------------------------------------------------------------------------------------
+
+    [test]
+    fn test_cache_entry_exposes_provenance_and_freshness() {
+        let env = Env::default();
+        env.mock_all_auths();
+        env.ledger().set_sequence_number(100);
+        env.ledger().set_timestamp_ns(1000000 * 10_u64.pow(9));
+
+        let (client, _asset) = setup_freshness(&env);
+
+        // Record snapshot
+        client.record_snapshot(1000000, 1);
+
+        let snap = client.get_snapshot().unwrap();
+        // Verify provenance and freshness fields are populated
+        assert_eq(snap.ledger_seq, 100);
+        assert_eq(snap.contract_version, 1); // For now arbitrary unit
+        assert_eq(snap.schema_version, 1); // For now arbitrary unit
+        assert_eq(snap.oracle_timestamp, 1000000);
+        assert_eq(snap.oracle_sequence, 1);
+    }
+
+    [test]
+    [#should_panic(expected = "cache entry from future ledger")]
+    fn test_reorg_invalidates_cache_and_requires_fresh_snapshot() {
+        let env = Env::default();
+        env.mock_all_auths();
+        env.ledger().set_sequence_number(100);
+        env.ledger().set_timestamp_ns(1000000 * 10_u64.pow(9));
+
+        let (client, _asset) = setup_freshness(&env);
+
+        client.record_snapshot(1000000, 1);
+
+        // Simulate a reorg: ledger rewinds to a lower sequence
+        env.ledger().set_sequence_number(99);
+        env.ledger().set_timestamp_ns(1000001 * 10_u64.pow(9)); // time still moves forward
+
+        // The cached snapshot is from ledger 100, which is now in the future.
+        // assert_price_safe must not use it.
+        client.assert_price_safe();
+    }
+
+    [test]
+    [#should_panic(expected = "cache entry from previous contract version")]
+    fn test_contract_upgrade_invalidates_cache_via_version_bump() {
+        let env = Env::default();
+        env.mock_all_auths();
+        env.ledger().set_sequence_number(100);
+        env.ledger().set_timestamp_ns(1000000 * 10_u64.pow(9));
+
+        let (client, _asset) = setup_freshness(&env);
+
+        client.record_snapshot(1000000, 1);
+
+
+        // Simulate contract upgrade by bumping the version in storage
+        set_contract_version(&env, &client, 2);
+
+        // The cached snapshot is from version 1 and must not authorize a financial action
+        client.assert_price_safe();
+    }
+
+    [test]
+    fn test_concurrent_fill_and_invalidation_race() {
+        let env = Env::default();
+        env.mock_all_auths();
+        env.ledger().set_sequence_number(100);
+        env.ledger().set_timestamp_ns(1000000 * 10_u64.pow(9));
+
+        let (client, _asset) = setup_freshness(&env);
+
+        // Simulate concurrent fill: multiple snapshots in quick succession
+        client.record_snapshot(1000000, 1);
+        env.ledger().set_sequence_number(101);
+        env.ledger().set_timestamp_ns(1000001 * 10_u64.pow(9));
+        client.record_snapshot(1000001, 2);
+        env.ledger().set_sequence_number(102);
+        env.ledger().set_timestamp_ns(1000002 * 10_u64.pow(9));
+        client.record_snapshot(1000002, 3);
+
+
+        // Now reorg to a lower ledger, invalidating all previous entries
+        env.ledger().set_sequence_number(100);
+        env.ledger().set_timestamp_ns(1000003 * 10_u64.pow(9));
+
+
+        // A new snapshot on the reorged chain must be accepted
+        client.record_snapshot(1000003, 4);
+        let snap = client.get_snapshot().unwrap();
+        assert_eq(snap.ledger_seq, 100);
+        assert_eq(snap.oracle_sequence, 4);
+    }
+
+    [test]
+    fn test_rollback_rebuilds_cache() {
+        let env = Env::default();
+        env.mock_all_auths();
+        env.ledger().set_sequence_number(100);
+        env.ledger().set_timestamp_ns(1000000 * 10_u64.pow(9));
+
+        let (client, _asset) = setup_freshness(&env);
+
+        client.record_snapshot(1000000, 1);
+        assert!(client.assert_price_safe() > 0);
+
+        // Advance chain
+        env.ledger().set_sequence_number(101);
+        env.ledger().set_timestamp_ns(1000001 * 10_u64.pow(9));
+        client.record_snapshot(1000001, 2);
+
+
+        // Rollback to previous ledger (simulating a reorg)
+        env.ledger().set_sequence_number(100);
+        env.ledger().set_timestamp_ns(1000002 * 10_u64.pow(9));
+
+        // The cache from ledger 101 is now invalid; assert_price_safe should fail
+        assert!(client.try_assert_price_safe().is_err());
+
+        // Rebuild with a snapshot on the current ledger
+        client.record_snapshot(1000002, 3);
+        assert!(client.assert_price_safe() > 0);
     }
 }

@@ -5,9 +5,11 @@ import {
   TransactionRequest,
   PositionResult,
 } from "./DeFiAdapter";
-import { DeFiAdapter, AdapterResult, QuoteResult, TransactionRequest, PositionResult } from "./DeFiAdapter";
 import { SwapCapability, LiquidityCapability } from "./CapabilityContract";
-import { EquilibreSwapQuoteResponseSchema, EquilibreLiquidityPositionsResponseSchema } from "./resilience/Schemas";
+import {
+  EquilibreSwapQuoteResponseSchema,
+  EquilibreLiquidityPositionsResponseSchema,
+} from "./resilience/Schemas";
 
 /**
  * Equilibre DEX Adapter
@@ -22,9 +24,6 @@ export class EquilibreAdapter extends DeFiAdapter implements SwapCapability, Liq
     super("equilibre");
   }
 
-  /**
-   * Get a quote for a swap operation
-   */
   async getSwapQuote(
     fromToken: string,
     toToken: string,
@@ -44,11 +43,7 @@ export class EquilibreAdapter extends DeFiAdapter implements SwapCapability, Liq
         EquilibreSwapQuoteResponseSchema,
         {
           method: "POST",
-          body: JSON.stringify({
-            fromToken,
-            toToken,
-            amount,
-          }),
+          body: JSON.stringify({ fromToken, toToken, amount }),
         }
       );
 
@@ -68,16 +63,12 @@ export class EquilibreAdapter extends DeFiAdapter implements SwapCapability, Liq
     } catch (error) {
       return {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Failed to get swap quote",
+        error: error instanceof Error ? error.message : "Failed to get swap quote",
         timestamp: new Date().toISOString(),
       };
     }
   }
 
-  /**
-   * Execute a swap transaction
-   */
   async executeSwap(
     fromToken: string,
     toToken: string,
@@ -98,24 +89,14 @@ export class EquilibreAdapter extends DeFiAdapter implements SwapCapability, Liq
         throw new Error("Router contract not configured");
       }
 
-      // Build the swap transaction data
-      // For Stellar, this would typically be a pathPayment operation
-      const transactionData = {
-        // Swap parameters encoded for the router contract
-        function: "swap",
-        args: {
-          fromToken,
-          toToken,
-          amount,
-          minReceived: minReceived || "0",
-        },
-      };
-
       return {
         success: true,
         data: {
           to: routerAddress,
-          data: JSON.stringify(transactionData),
+          data: JSON.stringify({
+            function: "swap",
+            args: { fromToken, toToken, amount, minReceived: minReceived || "0" },
+          }),
           value: amount,
         },
         timestamp: new Date().toISOString(),
@@ -123,16 +104,12 @@ export class EquilibreAdapter extends DeFiAdapter implements SwapCapability, Liq
     } catch (error) {
       return {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Failed to execute swap",
+        error: error instanceof Error ? error.message : "Failed to execute swap",
         timestamp: new Date().toISOString(),
       };
     }
   }
 
-  /**
-   * Get liquidity positions for an address
-   */
   async getLiquidityPositions(
     address: string
   ): Promise<AdapterResult<PositionResult[]>> {
@@ -145,15 +122,13 @@ export class EquilibreAdapter extends DeFiAdapter implements SwapCapability, Liq
     }
 
     try {
-      const response = await this.fetchWithRetry<any>(
-        `/v1/liquidity/positions/${address}`
       const response = await this.fetchWithSchema<any>(
         `/v1/liquidity/positions/${address}`,
         EquilibreLiquidityPositionsResponseSchema
       );
 
       const positions: PositionResult[] = (response.positions || []).map(
-        (pos: any) => ({
+        (pos: { token: string; amount: string; valueUSD?: number; apy?: number }) => ({
           token: pos.token,
           amount: pos.amount,
           valueUSD: pos.valueUSD || 0,
@@ -169,18 +144,12 @@ export class EquilibreAdapter extends DeFiAdapter implements SwapCapability, Liq
     } catch (error) {
       return {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to get liquidity positions",
+        error: error instanceof Error ? error.message : "Failed to get liquidity positions",
         timestamp: new Date().toISOString(),
       };
     }
   }
 
-  /**
-   * Get lending positions (not supported by Equilibre)
-   */
   async getLendingPositions(
     address: string
   ): Promise<AdapterResult<PositionResult[]>> {
@@ -191,9 +160,6 @@ export class EquilibreAdapter extends DeFiAdapter implements SwapCapability, Liq
     };
   }
 
-  /**
-   * Get borrowing positions (not supported by Equilibre)
-   */
   async getBorrowingPositions(
     address: string
   ): Promise<AdapterResult<PositionResult[]>> {
@@ -205,5 +171,4 @@ export class EquilibreAdapter extends DeFiAdapter implements SwapCapability, Liq
   }
 }
 
-// Export singleton instance
 export const equilibreAdapter = new EquilibreAdapter();

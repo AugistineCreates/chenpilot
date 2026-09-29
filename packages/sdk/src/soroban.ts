@@ -4,6 +4,8 @@ import {
   GetExecutionLogsParams,
   SorobanNetwork,
 } from "./types";
+import { throwIfAborted } from "./abort";
+import type { AbortSignalLike } from "./types";
 
 // ─── Internal types for raw RPC payloads ─────────────────────────────────────
 
@@ -68,12 +70,16 @@ async function fetchRpc<T>(
   rpcUrl: string,
   method: string,
   params: unknown,
-  fetcher: typeof fetch
+  fetcher: typeof fetch,
+  signal?: AbortSignalLike
 ): Promise<T> {
+  throwIfAborted(signal);
+
   const resp = await fetcher(rpcUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    signal: signal as AbortSignal | undefined,
   });
 
   if (!resp.ok) {
@@ -100,16 +106,20 @@ async function fetchRpc<T>(
  * @param rpcUrl - The RPC endpoint URL
  * @param requests - Array of RPC requests to batch
  * @param fetcher - Optional fetch implementation
+ * @param signal - Optional external signal to cancel the request
  * @returns Array of results corresponding to input requests
  */
 async function fetchBatchRpc<T>(
   rpcUrl: string,
   requests: BatchRequest[],
-  fetcher: typeof fetch
+  fetcher: typeof fetch,
+  signal?: AbortSignalLike
 ): Promise<BatchResult<T>[]> {
   if (requests.length === 0) {
     return [];
   }
+
+  throwIfAborted(signal);
 
   // Build batch request with unique IDs
   const jsonRpcRequests: JsonRpcRequest[] = requests.map((req, index) => ({
@@ -123,6 +133,7 @@ async function fetchBatchRpc<T>(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(jsonRpcRequests),
+    signal: signal as AbortSignal | undefined,
   });
 
   if (!resp.ok) {
@@ -164,10 +175,12 @@ function formatEvents(raw: RpcEvent[]): ExecutionLogEntry[] {
  * @param params - Network, transaction hash and optional RPC URL override.
  * @param fetcher - Optional `fetch` implementation (defaults to globalThis.fetch).
  *                  Inject a custom fetcher in tests to avoid real network calls.
+ * @param signal - Optional external signal to cancel the request.
  */
 export async function getExecutionLogs(
   params: GetExecutionLogsParams,
-  fetcher: typeof fetch = globalThis.fetch
+  fetcher: typeof fetch = globalThis.fetch,
+  signal?: AbortSignalLike
 ): Promise<ExecutionLog> {
   if (!params.txHash || typeof params.txHash !== "string") {
     throw new Error("Missing or invalid txHash");
@@ -179,7 +192,8 @@ export async function getExecutionLogs(
     rpcUrl,
     "getTransaction",
     { hash: params.txHash },
-    fetcher
+    fetcher,
+    signal
   );
 
   if (raw.status === "NOT_FOUND") {
@@ -271,10 +285,12 @@ export class SorobanBatchBuilder {
   /**
    * Execute the batch request and retrieve all execution logs
    * @param fetcher - Optional fetch implementation
+   * @param signal - Optional external signal to cancel the request
    * @returns Array of execution logs in the same order as added
    */
   async execute(
-    fetcher: typeof fetch = globalThis.fetch
+    fetcher: typeof fetch = globalThis.fetch,
+    signal?: AbortSignalLike
   ): Promise<ExecutionLog[]> {
     if (this.txHashes.length === 0) {
       return [];
@@ -292,7 +308,8 @@ export class SorobanBatchBuilder {
       const results = await fetchBatchRpc<RpcGetTransactionResult>(
         rpcUrl,
         batchRequests,
-        fetcher
+        fetcher,
+        signal
       );
 
       // Map results back to ExecutionLog format

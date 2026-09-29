@@ -1,5 +1,6 @@
 import { ChainId } from "../types";
 import { SignatureProvider } from "./interfaces";
+import { ProviderType, ProviderSelectionPreferences, ProviderResolutionResult } from "./types";
 import {
   ProviderNotFoundError,
   ProviderAlreadyRegisteredError,
@@ -105,6 +106,57 @@ export class SignatureProviderRegistry {
       const supportedChains = provider.getCapabilities().supportedChains;
       return chainIds.every((chainId) => supportedChains.includes(chainId));
     });
+  }
+
+  resolveProviders(
+    chainId: ChainId,
+    preferences: ProviderSelectionPreferences = {}
+  ): ProviderResolutionResult[] {
+    return this.listProviders()
+      .filter((provider) => provider.getCapabilities().supportedChains.includes(chainId))
+      .map((provider) => {
+        const capabilities = provider.getCapabilities();
+        let score = 10;
+        const reason: string[] = ["supports requested chain"];
+
+        if (preferences.preferHardwareWallet && provider.providerId.includes("ledger")) {
+          score += 5;
+          reason.push("hardware wallet preference");
+        }
+        if (preferences.preferBrowserExtension && provider.providerId.includes("albedo")) {
+          score += 5;
+          reason.push("browser extension preference");
+        }
+        if (preferences.requireUserInteraction === capabilities.requiresUserInteraction) {
+          score += 3;
+          reason.push("interaction preference matched");
+        }
+        if (preferences.requireMessageSigning && capabilities.supportsMessageSigning) {
+          score += 2;
+          reason.push("message signing supported");
+        }
+        if (preferences.minConcurrentSignatures && capabilities.maxConcurrentSignatures >= preferences.minConcurrentSignatures) {
+          score += 2;
+          reason.push("concurrency requirement met");
+        }
+        if (preferences.preferredProviderIds?.includes(provider.providerId)) {
+          score += 10;
+          reason.push("preferred provider id");
+        }
+
+        return {
+          providerType: provider.providerId.includes("ledger")
+            ? ProviderType.LEDGER
+            : provider.providerId.includes("albedo")
+              ? ProviderType.ALBEDO
+              : ProviderType.MOCK,
+          providerId: provider.providerId,
+          score,
+          capabilities,
+          reason,
+        } satisfies ProviderResolutionResult;
+      })
+      .sort((a, b) => b.score - a.score);
   }
 
   /**

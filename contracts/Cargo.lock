@@ -194,6 +194,8 @@ name = "btc_relay"
 version = "0.1.0"
 dependencies = [
  "btc_relay_crypto",
+ "contract_failure",
+ "pause_state",
  "soroban-sdk",
 ]
 
@@ -257,6 +259,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
+name = "contract_failure"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -266,6 +275,9 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 name = "core_vault"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
+ "diff_fuzz_engine",
+ "pause_state",
  "soroban-sdk",
 ]
 
@@ -466,6 +478,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "diff_fuzz_engine"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -565,14 +584,18 @@ checksum = "2bfcf67fea2815c2fc3b90873fae90957be12ff417335dfadc7f52927feb03b2"
 
 [[package]]
 name = "ethnum"
-version = "1.5.2"
+version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca81e6b4777c89fd810c25a4be2b1bd93ea034fbe58e6a75216a34c6b82c539b"
+checksum = "40404c3f5f511ec4da6fe866ddf6a717c309fdbb69fbbad7b0f3edab8f2e835f"
 
 [[package]]
 name = "fee_distribution"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
+ "diff_fuzz_engine",
+ "num-bigint",
+ "num-traits",
  "soroban-sdk",
 ]
 
@@ -602,6 +625,8 @@ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 name = "flash_loan_guard"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
+ "pause_state",
  "soroban-sdk",
 ]
 
@@ -695,6 +720,7 @@ dependencies = [
 name = "htlc"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
  "soroban-sdk",
 ]
 
@@ -761,6 +787,7 @@ checksum = "8e04e2fd2b8188ea827b32ef11de88377086d690286ab35747ef7f9bf3ccb590"
 name = "intent_market_validator"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
  "soroban-sdk",
 ]
 
@@ -814,6 +841,7 @@ dependencies = [
 name = "lending_liquidation"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
  "soroban-sdk",
 ]
 
@@ -833,6 +861,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 name = "liquidity_vault"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
  "soroban-sdk",
 ]
 
@@ -852,6 +881,8 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 name = "multi_hop_swap"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
+ "diff_fuzz_engine",
  "soroban-sdk",
 ]
 
@@ -907,6 +938,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
+name = "oracle_aggregator"
+version = "0.1.0"
+dependencies = [
+ "contract_failure",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "p256"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -925,6 +964,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
+name = "pause_state"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "pkcs8"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -938,6 +984,7 @@ dependencies = [
 name = "por_validator"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
  "soroban-sdk",
 ]
 
@@ -985,6 +1032,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "protocol_conservation"
+version = "0.1.0"
+dependencies = [
+ "contract_failure",
+ "core_vault",
+ "fee_distribution",
+ "multi_hop_swap",
+ "pause_state",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1027,6 +1086,7 @@ dependencies = [
 name = "rbac"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
  "soroban-sdk",
 ]
 
@@ -1481,9 +1541,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "storage_policy"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
+name = "strategy_boundary"
+version = "0.1.0"
+dependencies = [
+ "contract_failure",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "strategy_registry"
 version = "0.1.0"
 dependencies = [
+ "contract_failure",
+ "diff_fuzz_engine",
  "soroban-sdk",
 ]
 
@@ -1583,6 +1660,14 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "unified_auth"
+version = "0.1.0"
+dependencies = [
+ "contract_failure",
+ "soroban-sdk",
+]
 
 [[package]]
 name = "version_check"

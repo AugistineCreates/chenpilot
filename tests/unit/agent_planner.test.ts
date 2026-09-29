@@ -1,10 +1,117 @@
-import { describe, it, expect, beforeEach } from "@jest/globals";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from "@jest/globals";
+
+jest.mock("../../src/services/stellarPrice.service", () => ({
+  __esModule: true,
+  default: {
+    getPrice: jest.fn().mockResolvedValue({
+      price: 1,
+      estimatedOutput: 1,
+      cached: false,
+      path: [],
+    }),
+  },
+}));
+
+jest.mock("../../src/services/flashSwapRiskAnalyzer", () => ({
+  flashSwapRiskAnalyzer: {
+    analyzeSwapRisk: jest.fn().mockResolvedValue({
+      riskLevel: "low",
+      sandwichAttackRisk: 0,
+      warnings: [],
+      recommendations: [],
+    }),
+  },
+}));
+
+jest.mock("../../src/Auth/accountSecretStore", () => ({
+  accountSecretStore: {
+    getAccountByUserId: jest.fn(() => ({
+      secretKey: "SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      publicKey: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    })),
+  },
+}));
+
+jest.mock("../../src/transactions/TransactionLifecycle.service", () => ({
+  transactionLifecycleService: {
+    create: jest.fn().mockResolvedValue({ id: "lifecycle-1" }),
+    transition: jest.fn().mockResolvedValue({}),
+    fail: jest.fn().mockResolvedValue({}),
+  },
+}));
+
+jest.mock("../../src/services/lock", () => ({
+  RedisLockService: jest.fn().mockImplementation(() => ({
+    acquireLock: jest
+      .fn()
+      .mockResolvedValue({
+        acquired: true,
+        lockKey: "lock:test",
+        lockValue: "test",
+      }),
+    releaseLock: jest.fn().mockResolvedValue(true),
+    extendLock: jest.fn().mockResolvedValue(true),
+    isLocked: jest.fn().mockResolvedValue(false),
+    getLockInfo: jest.fn().mockResolvedValue(null),
+    forceReleaseLock: jest.fn().mockResolvedValue(true),
+  })),
+}));
+
+jest.mock("@stellar/stellar-sdk", () => ({
+  Asset: class {
+    constructor(
+      public code: string,
+      public issuer?: string
+    ) {}
+    static native() {
+      return new (this as unknown as {
+        new (code: string, issuer?: string): unknown;
+      })("XLM");
+    }
+  },
+  Horizon: { Server: class {} },
+  TransactionBuilder: class {
+    constructor() {}
+    addOperation() {
+      return this;
+    }
+    setTimeout() {
+      return this;
+    }
+    build() {
+      return { sign: jest.fn() };
+    }
+  },
+  Operation: { pathPaymentStrictSend: jest.fn(() => ({})) },
+  BASE_FEE: "100",
+  Networks: {
+    PUBLIC: "Public Global Stellar Network ; September 2015",
+    TESTNET: "Test SDF Network ; September 2015",
+  },
+}));
+
+jest.mock("../../src/services/networkConfig", () => ({
+  NetworkConfigService: class {
+    static getInstance() {
+      return new (this as unknown as { new (): unknown })();
+    }
+  },
+}));
+
 import { AgentPlanner } from "../../src/Agents/planner/AgentPlanner";
 import { PlanExecutor } from "../../src/Agents/planner/PlanExecutor";
 import { toolRegistry } from "../../src/Agents/registry/ToolRegistry";
 import { walletTool } from "../../src/Agents/tools/wallet";
 import { swapTool } from "../../src/Agents/tools/swap";
 import { sorobanTool } from "../../src/Agents/tools/soroban";
+import { policyEnforcer } from "../../src/Agents/policy/PolicyEnforcer";
 
 describe("AgentPlanner", () => {
   let planner: AgentPlanner;
@@ -221,6 +328,10 @@ describe("PlanExecutor", () => {
     toolRegistry.register(sorobanTool);
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   describe("executePlan", () => {
     it("should execute a simple plan in dry-run mode", async () => {
       const context = {
@@ -306,6 +417,156 @@ describe("PlanExecutor", () => {
         expect(stepResult.duration).toBeGreaterThanOrEqual(0);
         expect(stepResult.timestamp).toBeDefined();
       });
+    });
+  });
+
+  describe("failure semantics", () => {
+    it("should stop after the first failed step and report partial completion", async () => {
+      const plan = {
+        planId: "plan_failure_first",
+        userId: "test-user",
+        totalSteps: 3,
+        steps: [
+          {
+            stepNumber: 1,
+            action: "wallet_tool",
+            description: "step 1",
+            payload: {},
+          },
+          {
+            stepNumber: 2,
+            action: "swap_tool",
+            description: "step 2",
+            payload: {},
+          },
+          {
+            stepNumber: 3,
+            action: "soroban_invoke",
+            description: "step 3",
+            payload: {},
+          },
+        ],
+        riskLevel: "medium",
+      } as Record<string, unknown>;
+
+      jest
+        .spyOn(policyEnforcer, "enforce")
+        .mockResolvedValue({ allowed: true } as never);
+      const executeToolSpy = jest.spyOn(toolRegistry, "executeTool");
+      executeToolSpy.mockResolvedValueOnce({
+        action: "wallet_tool",
+        status: "success",
+        message: "ok",
+      } as never);
+      executeToolSpy.mockRejectedValueOnce(new Error("boom"));
+
+      const result = await executor.executePlan(plan, "test-user");
+
+      expect(result.status).toBe("partial");
+      expect(result.completedSteps).toBe(1);
+      expect(result.stepResults[0].status).toBe("success");
+      expect(result.stepResults[1].status).toBe("failed");
+      expect(result.stepResults).toHaveLength(2);
+    });
+
+    it("should preserve earlier completed steps when a middle step fails", async () => {
+      const plan = {
+        planId: "plan_failure_middle",
+        userId: "test-user",
+        totalSteps: 3,
+        steps: [
+          {
+            stepNumber: 1,
+            action: "wallet_tool",
+            description: "step 1",
+            payload: {},
+          },
+          {
+            stepNumber: 2,
+            action: "swap_tool",
+            description: "step 2",
+            payload: {},
+          },
+          {
+            stepNumber: 3,
+            action: "soroban_invoke",
+            description: "step 3",
+            payload: {},
+          },
+        ],
+        riskLevel: "medium",
+      } as Record<string, unknown>;
+
+      jest
+        .spyOn(policyEnforcer, "enforce")
+        .mockResolvedValue({ allowed: true } as never);
+      const executeToolSpy = jest.spyOn(toolRegistry, "executeTool");
+      executeToolSpy.mockResolvedValueOnce({
+        action: "wallet_tool",
+        status: "success",
+        message: "ok",
+      } as never);
+      executeToolSpy.mockRejectedValueOnce(new Error("boom"));
+
+      const result = await executor.executePlan(plan, "test-user");
+
+      expect(result.status).toBe("partial");
+      expect(result.completedSteps).toBe(1);
+      expect(result.stepResults[0].status).toBe("success");
+      expect(result.stepResults[1].status).toBe("failed");
+    });
+
+    it("should report a failed last step without rolling back earlier successes", async () => {
+      const plan = {
+        planId: "plan_failure_last",
+        userId: "test-user",
+        totalSteps: 3,
+        steps: [
+          {
+            stepNumber: 1,
+            action: "wallet_tool",
+            description: "step 1",
+            payload: {},
+          },
+          {
+            stepNumber: 2,
+            action: "swap_tool",
+            description: "step 2",
+            payload: {},
+          },
+          {
+            stepNumber: 3,
+            action: "soroban_invoke",
+            description: "step 3",
+            payload: {},
+          },
+        ],
+        riskLevel: "medium",
+      } as Record<string, unknown>;
+
+      jest
+        .spyOn(policyEnforcer, "enforce")
+        .mockResolvedValue({ allowed: true } as never);
+      const executeToolSpy = jest.spyOn(toolRegistry, "executeTool");
+      executeToolSpy.mockResolvedValueOnce({
+        action: "wallet_tool",
+        status: "success",
+        message: "ok",
+      } as never);
+      executeToolSpy.mockResolvedValueOnce({
+        action: "swap_tool",
+        status: "success",
+        message: "ok",
+      } as never);
+      executeToolSpy.mockRejectedValueOnce(new Error("boom"));
+
+      const result = await executor.executePlan(plan, "test-user");
+
+      expect(result.status).toBe("partial");
+      expect(result.completedSteps).toBe(2);
+      expect(result.stepResults[0].status).toBe("success");
+      expect(result.stepResults[1].status).toBe("success");
+      expect(result.stepResults[2].status).toBe("failed");
     });
   });
 

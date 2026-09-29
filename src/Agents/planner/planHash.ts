@@ -1,12 +1,21 @@
 // chenpilot/src/Agents/planner/planHash.ts
 import crypto from "crypto";
 import { ExecutionPlan, PlanStep } from "./AgentPlanner";
+import { SecretBuffer } from "../../utils/secretBuffer";
+
+export interface ClientApproval {
+  approvedAt: string;
+  approverId: string;
+  signature: string;
+  signedHash: string;
+}
 
 export interface HashedPlan extends ExecutionPlan {
   planHash: string;
   signature?: string;
   signedBy?: string;
   signedAt?: string;
+  clientApproval?: ClientApproval;
 }
 
 export interface PlanHashMetadata {
@@ -103,13 +112,21 @@ export class PlanHashService {
   }
 
   /**
-   * Sign a plan hash with a private key (for backend signing)
+   * Sign a plan hash with a private key (for backend signing).
+   * The private key is wrapped in a SecretBuffer and zeroized after use.
    */
   signPlanHash(planHash: string, privateKey: string): string {
-    const sign = crypto.createSign("RSA-SHA256");
-    sign.update(planHash);
-    sign.end();
-    return sign.sign(privateKey, "base64");
+    const secret = SecretBuffer.fromString(privateKey, "plan-signing-key");
+    try {
+      return secret.consumeString((plainKey) => {
+        const sign = crypto.createSign("RSA-SHA256");
+        sign.update(planHash);
+        sign.end();
+        return sign.sign(plainKey, "base64");
+      });
+    } finally {
+      secret.destroy();
+    }
   }
 
   /**
@@ -125,6 +142,49 @@ export class PlanHashService {
       verify.update(planHash);
       verify.end();
       return verify.verify(publicKey, signature, "base64");
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Sign a plan on the client side
+   */
+  signClientApproval(
+    planHash: string,
+    approverId: string,
+    privateKey: string
+  ): ClientApproval {
+    const sign = crypto.createSign("RSA-SHA256");
+    sign.update(planHash);
+    sign.end();
+    const signature = sign.sign(privateKey, "base64");
+
+    return {
+      approvedAt: new Date().toISOString(),
+      approverId,
+      signature,
+      signedHash: planHash,
+    };
+  }
+
+  /**
+   * Verify client approval signature
+   */
+  verifyClientApproval(
+    planHash: string,
+    clientApproval: ClientApproval,
+    clientPublicKey: string
+  ): boolean {
+    if (clientApproval.signedHash !== planHash) {
+      return false;
+    }
+
+    try {
+      const verify = crypto.createVerify("RSA-SHA256");
+      verify.update(clientApproval.signedHash);
+      verify.end();
+      return verify.verify(clientPublicKey, clientApproval.signature, "base64");
     } catch {
       return false;
     }

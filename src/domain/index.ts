@@ -15,8 +15,22 @@ export * from './quotes';
 // Routing exports
 export * from './routing';
 
+// Execution exports
+export * from './execution';
+
 // Convenience exports
 export { Asset, AssetAmount } from './assets';
 export { Balance, BalanceSnapshot } from './balances';
 export { Quote } from './quotes';
-export { Path } from './routing';
+export {
+  Path,
+  TradePath,
+  RoutePolicy,
+  PolicyViolation,
+  DEFAULT_ROUTE_POLICY,
+  RoutePolicyViolationError,
+  PathEvaluationResult,
+  PathFinderOptions,
+  parseStellarAsset,
+  stellarAssetToString
+} from './routing';

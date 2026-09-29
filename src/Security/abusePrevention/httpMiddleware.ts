@@ -35,14 +35,14 @@ export function createAbusePreventionMiddleware(
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const ipAddress = normalizeIp(extractClientIp(req));
-      (req as any).clientIP = ipAddress;
+      req.clientIP = ipAddress;
 
       const result = await service.evaluate({
         surface: "api",
         action,
         subject: {
           ipAddress,
-          userId: (req as any).user?.userId || req.body?.userId,
+          userId: req.user?.userId || req.body?.userId,
         },
         metadata: {
           method: req.method,

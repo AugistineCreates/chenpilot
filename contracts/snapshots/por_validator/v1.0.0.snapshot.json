@@ -1,0 +1,31 @@
+{
+  "contract": "por_validator",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Config",
+      "storage_tier": "Instance",
+      "value_type": "Config",
+      "sample_value": {
+        "admin": "GADMIN0000000000000000000000000000000000000000000000000000",
+        "wbtc_token": "CWBTC00000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "key_variant": "CurrentProof",
+      "storage_tier": "Instance",
+      "value_type": "ProofRecord",
+      "sample_value": {
+        "reserve_data": {
+          "balance": 100000000000,
+          "circulating_supply": 99000000000,
+          "timestamp": 1700000000
+        },
+        "is_valid": true,
+        "verified_ledger": 5000000,
+        "valid_until_ledger": 5010000
+      }
+    }
+  ]
+}

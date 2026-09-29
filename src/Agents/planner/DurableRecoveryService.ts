@@ -7,7 +7,7 @@ export class DurableRecoveryService {
   async recoverInterruptedExecutions(): Promise<void> {
     const executionRepo = AppDataSource.getRepository(DurableExecution);
     logger.info("Checking for interrupted durable executions...");
-    
+
     const interruptedExecutions = await executionRepo.find({
       where: { status: ExecutionStatus.RUNNING },
     });
@@ -17,16 +17,22 @@ export class DurableRecoveryService {
       return;
     }
 
-    logger.info(`Found ${interruptedExecutions.length} interrupted executions. Resuming...`);
+    logger.info(
+      `Found ${interruptedExecutions.length} interrupted executions. Resuming...`
+    );
 
     for (const execution of interruptedExecutions) {
       try {
         // Resume in background
-        durableExecutor.resumeExecution(execution.id).catch(err => {
-          logger.error(`Failed to resume execution ${execution.id}`, { error: err });
+        durableExecutor.resumeExecution(execution.id).catch((err) => {
+          logger.error(`Failed to resume execution ${execution.id}`, {
+            error: err,
+          });
         });
       } catch (error) {
-        logger.error(`Failed to mark execution ${execution.id} for recovery`, { error });
+        logger.error(`Failed to mark execution ${execution.id} for recovery`, {
+          error,
+        });
       }
     }
   }

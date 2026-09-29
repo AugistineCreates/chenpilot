@@ -1,336 +1,149 @@
-# Performance Regression Testing Suite
+# Performance Regression Testing & Budget Suite
 
-This directory contains automated performance regression tests for the agent planning and execution flows to ensure performance stability across code changes.
+Automated performance benchmarking and regression budget enforcement for critical execution paths across Chen Pilot:
 
-## Overview
+- **Planning Flow**: Intent parsing, Soroban intent extraction, multi-step planning, plan optimization, and plan validation.
+- **Simulation Flow**: Soroban RPC simulation, resource/footprint extraction, `SimulationEngine` processing, and gas estimation.
+- **Decoding Flow**: Primitive & complex nested ScVal decoding, simulation return value parsing, and contract event normalization.
+- **Transaction Construction Flow**: Unsigned Soroban host function transaction building, footprint assembly with cryptographic signing, and multi-operation envelopes.
 
-The performance test suite measures response times and resource usage for critical agent operations:
+---
 
-- **Agent Planning Flow**: Plan creation, validation, and optimization
-- **Agent Execution Flow**: Single-step and multi-step plan execution
-- **Tool Execution**: Individual tool performance
-- **End-to-End Workflows**: Complete user request flows
+## Acceptance Criteria & Architecture
+
+| Requirement                          | Implementation                                                                     | Location                                           |
+| :----------------------------------- | :--------------------------------------------------------------------------------- | :------------------------------------------------- |
+| **Fixed Datasets & Isolated Mocks**  | Deterministic frozen fixtures and mocked dependencies (LLM, RPC, DB)               | `tests/performance/fixtures/benchmarkDatasets.ts`  |
+| **P95 / P99 & Resource Budgets**     | Strict budgets for P95, P99, mean, max latency, CPU time, and heap allocations     | `tests/performance/config/performanceBaselines.ts` |
+| **Statistical Regression Detection** | Z-score statistical significance testing (p < 0.05) against baseline distributions | `tests/performance/utils/PerformanceTestRunner.ts` |
+| **Per-Commit Trend Analysis**        | Retains JSON reports per commit SHA and generates trend markdown tables            | `tests/performance/utils/TrendRecorder.ts`         |
+| **Budget Governance**                | Strict policy requiring documented rationale for threshold modifications           | `tests/performance/BUDGET_CHANGELOG.md`            |
+
+---
 
 ## Directory Structure
 
 ```
 tests/performance/
-├── README.md                           # This file
-├── utils/
-│   └── PerformanceTestRunner.ts       # Core performance testing infrastructure
+├── README.md                           # This documentation
+├── BUDGET_CHANGELOG.md                 # Immutable ledger of budget modifications
+├── fixtures/
+│   └── benchmarkDatasets.ts           # Deterministic datasets for all 4 paths
 ├── config/
-│   └── performanceBaselines.ts        # Performance thresholds and baselines
-├── agentPlanning.perf.test.ts         # Agent planning performance tests
-└── agentExecution.perf.test.ts        # Agent execution performance tests
+│   └── performanceBaselines.ts        # Regression budgets (latency, CPU, memory)
+├── utils/
+│   ├── PerformanceTestRunner.ts       # High-resolution runner with statistical engine
+│   ├── TrendRecorder.ts               # Per-commit JSON persistence & trend markdown
+│   └── BudgetValidator.ts             # Governance verification tool
+├── agentPlanning.perf.test.ts         # Planning path benchmarks
+├── agentExecution.perf.test.ts        # Execution flow benchmarks
+├── simulation.perf.test.ts            # Simulation path benchmarks
+├── decoding.perf.test.ts              # Decoding path benchmarks
+├── transactionConstruction.perf.test.ts# Transaction construction benchmarks
+└── regressionBudgets.perf.test.ts     # Governance & statistical engine tests
 ```
 
-## Running Performance Tests
+---
 
-### Run All Performance Tests
+## Critical Path Regression Budgets
+
+All budgets are defined in `config/performanceBaselines.ts`.
+
+### 1. Planning Flow
+
+| Operation                    | Mean  |  P95  |  P99  | Max CPU | Max Heap Delta |
+| :--------------------------- | :---: | :---: | :---: | :-----: | :------------: |
+| **Simple Plan Creation**     | 25ms  | 50ms  | 100ms |  30ms   |      10MB      |
+| **Soroban Intent Parsing**   | 20ms  | 40ms  | 80ms  |  25ms   |      10MB      |
+| **Complex Multi-Step Plan**  | 40ms  | 80ms  | 150ms |  50ms   |      15MB      |
+| **Plan Optimization**        | 10ms  | 25ms  | 50ms  |  15ms   |      5MB       |
+| **Plan Validation**          | 10ms  | 25ms  | 50ms  |  15ms   |      5MB       |
+| **Concurrent Planning (x3)** | 100ms | 250ms | 400ms |  150ms  |      25MB      |
+
+### 2. Simulation Flow
+
+| Operation                       | Mean |  P95  |  P99  | Max CPU | Max Heap Delta |
+| :------------------------------ | :--: | :---: | :---: | :-----: | :------------: |
+| **Soroban Simple Call**         | 30ms | 60ms  | 100ms |  40ms   |      10MB      |
+| **Soroban Complex + Footprint** | 50ms | 100ms | 180ms |  60ms   |      15MB      |
+| **SimulationEngine Processing** | 40ms | 80ms  | 150ms |  50ms   |      12MB      |
+| **Gas Estimation**              | 15ms | 30ms  | 60ms  |  20ms   |      5MB       |
+
+### 3. Decoding Flow
+
+| Operation                        | Mean | P95  | P99  | Max CPU | Max Heap Delta |
+| :------------------------------- | :--: | :--: | :--: | :-----: | :------------: |
+| **Primitive ScVals Batch**       | 5ms  | 15ms | 30ms |  10ms   |      3MB       |
+| **Complex Nested ScVal**         | 15ms | 35ms | 70ms |  20ms   |      8MB       |
+| **Simulation Return Value**      | 10ms | 25ms | 50ms |  15ms   |      5MB       |
+| **Contract Event Normalization** | 12ms | 30ms | 60ms |  18ms   |      5MB       |
+
+### 4. Transaction Construction Flow
+
+| Operation                     | Mean | P95  |  P99  | Max CPU | Max Heap Delta |
+| :---------------------------- | :--: | :--: | :---: | :-----: | :------------: |
+| **Soroban Unsigned Tx**       | 25ms | 50ms | 90ms  |  30ms   |      8MB       |
+| **Footprint Assembly & Sign** | 35ms | 70ms | 120ms |  45ms   |      12MB      |
+| **Multi-Operation Envelope**  | 30ms | 60ms | 100ms |  35ms   |      10MB      |
+
+---
+
+## Running Benchmarks
+
+### Run Full Performance Suite
 
 ```bash
 npm run test:performance
 ```
 
-### Run Specific Performance Test Suite
+_(Runs Jest under Node with `--expose-gc` and `--runInBand` for precise heap measurements)._
+
+### Run Specific Critical Path Suite
 
 ```bash
-# Agent planning tests
+# Planning
 npm test -- tests/performance/agentPlanning.perf.test.ts
 
-# Agent execution tests
-npm test -- tests/performance/agentExecution.perf.test.ts
+# Simulation
+npm test -- tests/performance/simulation.perf.test.ts
+
+# Decoding
+npm test -- tests/performance/decoding.perf.test.ts
+
+# Transaction Construction
+npm test -- tests/performance/transactionConstruction.perf.test.ts
 ```
 
-### Run with Garbage Collection (Recommended)
-
-For more accurate memory measurements:
+### Record Results & Generate Trend Report
 
 ```bash
-node --expose-gc node_modules/.bin/jest tests/performance
+npm run test:performance:record
 ```
 
-## Performance Baselines
+---
 
-Performance thresholds are defined in `config/performanceBaselines.ts`:
+## Statistical Regression Detection
 
-### Agent Planning
+The runner evaluates sample distributions against regression budgets using:
 
-| Operation    | Mean   | P95    | P99    | Max    |
-| ------------ | ------ | ------ | ------ | ------ |
-| Simple Plan  | 500ms  | 800ms  | 1000ms | 1500ms |
-| Complex Plan | 1500ms | 2500ms | 3000ms | 4000ms |
-| With LLM     | 3000ms | 5000ms | 6000ms | 8000ms |
+- **Percentile Slicing**: P50, P90, P95, P99 calculated over warm sample iterations.
+- **CPU Time Tracking**: High-precision user and system CPU deltas (`process.cpuUsage`).
+- **Memory Tracking**: Peak heap allocation deltas (`process.memoryUsage`).
+- **Z-Score Significance**: Checks whether deviation from budget is statistically significant ($Z > 1.96, p < 0.05$).
 
-### Agent Execution
+---
 
-| Operation   | Mean   | P95    | P99    | Max    |
-| ----------- | ------ | ------ | ------ | ------ |
-| Single Step | 300ms  | 500ms  | 700ms  | 1000ms |
-| Multi-Step  | 1000ms | 1500ms | 2000ms | 3000ms |
-| With Tools  | 2000ms | 3500ms | 4500ms | 6000ms |
+## Budget Modification Governance
 
-### Tool Execution
+Baseline budget values in `config/performanceBaselines.ts` are strictly governed.
 
-| Operation   | Mean   | P95    | P99    | Max    |
-| ----------- | ------ | ------ | ------ | ------ |
-| Lightweight | 100ms  | 200ms  | 300ms  | 500ms  |
-| Standard    | 500ms  | 800ms  | 1000ms | 1500ms |
-| Heavy       | 2000ms | 3000ms | 4000ms | 5000ms |
+When proposing a budget change:
 
-## Test Configuration
-
-Default test configuration in `config/performanceBaselines.ts`:
-
-```typescript
-{
-  defaultIterations: 10,        // Number of test iterations
-  warmupIterations: 2,          // Warmup runs before measurement
-  delayBetweenTests: 500,       // Delay between tests (ms)
-  collectMemoryMetrics: true,   // Collect memory usage data
-  enableGarbageCollection: true // Force GC between tests
-}
-```
-
-## Understanding Test Results
-
-### Statistical Metrics
-
-Each test reports the following metrics:
-
-- **Mean**: Average execution time
-- **Median (P50)**: 50th percentile
-- **P95**: 95th percentile (95% of requests faster than this)
-- **P99**: 99th percentile (99% of requests faster than this)
-- **Min**: Fastest execution time
-- **Max**: Slowest execution time
-- **StdDev**: Standard deviation (consistency measure)
-
-### Test Output Example
-
-```
-================================================================================
-PERFORMANCE TEST REPORT
-================================================================================
-
-Test: Simple Plan Creation
-Iterations: 10
-Status: ✓ PASSED
-
-Statistics:
-  Mean:   425.32ms
-  Median: 418.50ms
-  P95:    512.75ms
-  P99:    545.20ms
-  Min:    385.10ms
-  Max:    558.90ms
-  StdDev: 45.23ms
-
---------------------------------------------------------------------------------
-
-Summary:
-  Total Tests:  15
-  Passed:       14
-  Failed:       1
-  Pass Rate:    93.3%
-
-================================================================================
-```
-
-## Writing New Performance Tests
-
-### Basic Structure
-
-```typescript
-import { performanceTestRunner } from "./utils/PerformanceTestRunner";
-import { PERFORMANCE_BASELINES } from "./config/performanceBaselines";
-
-describe("My Performance Tests", () => {
-  beforeAll(() => {
-    performanceTestRunner.clear();
-  });
-
-  afterAll(() => {
-    const report = performanceTestRunner.generateReport();
-    console.log("\n" + report);
-  });
-
-  it("should perform operation within threshold", async () => {
-    const result = await performanceTestRunner.runTest(
-      "My Operation",
-      async () => {
-        // Your operation to test
-        await myOperation();
-      },
-      {
-        iterations: 10,
-        warmupIterations: 2,
-        threshold: {
-          mean: 500,
-          p95: 800,
-          max: 1000,
-        },
-      }
-    );
-
-    expect(result.passed).toBe(true);
-  });
-});
-```
-
-### Measuring Single Operations
-
-```typescript
-const { result, metrics } = await performanceTestRunner.measureOperation(
-  "Single Operation",
-  async () => {
-    return await myOperation();
-  }
-);
-
-console.log(`Operation took ${metrics.duration}ms`);
-```
-
-## Performance Regression Detection
-
-### Regression Tolerance
-
-Tests fail if performance degrades beyond these thresholds:
-
-- **Mean**: 10% slower than baseline
-- **P95**: 15% slower than baseline
-- **P99**: 20% slower than baseline
-
-### Updating Baselines
-
-When legitimate performance improvements are made:
-
-1. Run performance tests to get new metrics
-2. Update thresholds in `config/performanceBaselines.ts`
-3. Document the change in commit message
-4. Include before/after metrics in PR description
-
-## Best Practices
-
-### Test Design
-
-1. **Isolation**: Mock external dependencies (LLM, database, network)
-2. **Warmup**: Always include warmup iterations to eliminate JIT compilation effects
-3. **Iterations**: Use sufficient iterations (10+) for statistical significance
-4. **Consistency**: Run tests in consistent environment (same machine, no background load)
-
-### Interpreting Results
-
-1. **Focus on P95/P99**: These represent user experience better than mean
-2. **Watch StdDev**: High standard deviation indicates inconsistent performance
-3. **Memory Leaks**: Monitor memory usage across iterations
-4. **Concurrent Tests**: Test concurrent operations to identify contention issues
-
-### CI/CD Integration
-
-Performance tests should run:
-
-- On every PR (with failure threshold)
-- Nightly (with detailed reporting)
-- Before releases (with strict thresholds)
-
-## Troubleshooting
-
-### Tests Failing Intermittently
-
-- Increase warmup iterations
-- Check for background processes
-- Ensure consistent test environment
-- Increase regression tolerance if appropriate
-
-### High Memory Usage
-
-- Check for memory leaks in test code
-- Ensure proper cleanup in `afterEach`/`afterAll`
-- Use `global.gc()` to force garbage collection
-- Monitor heap snapshots for large objects
-
-### Slow Test Execution
-
-- Reduce number of iterations for development
-- Use focused tests (`it.only`) during debugging
-- Mock expensive operations
-- Run tests in parallel when possible
-
-## Metrics Collection
-
-### Memory Metrics
-
-Each test collects:
-
-- **Heap Used**: Memory actively used
-- **Heap Total**: Total heap size
-- **External**: Memory used by C++ objects
-- **Memory Delta**: Change during operation
-
-### Custom Metrics
-
-Add custom metrics to test results:
-
-```typescript
-const result = await performanceTestRunner.runTest(
-  "Custom Metrics Test",
-  async () => {
-    // Your operation
-  },
-  {
-    iterations: 10,
-    threshold: myThreshold,
-  }
-);
-
-// Access metrics
-result.metrics.forEach((m) => {
-  console.log(`Duration: ${m.duration}ms`);
-  console.log(`Memory: ${m.memoryUsage?.heapUsed}bytes`);
-});
-```
-
-## Continuous Monitoring
-
-### Performance Dashboard
-
-Consider integrating with monitoring tools:
-
-- **Grafana**: Visualize performance trends
-- **DataDog**: Track performance metrics over time
-- **New Relic**: Monitor production performance
-
-### Alerting
-
-Set up alerts for:
-
-- Performance regression beyond threshold
-- Memory usage spikes
-- Increased error rates
-- Timeout occurrences
-
-## Contributing
-
-When adding new performance tests:
-
-1. Follow existing test structure
-2. Add appropriate baselines to `performanceBaselines.ts`
-3. Document test purpose and expectations
-4. Include both happy path and edge cases
-5. Test concurrent scenarios when relevant
-
-## References
-
-- [Jest Performance Testing](https://jestjs.io/docs/timer-mocks)
-- [Node.js Performance Hooks](https://nodejs.org/api/perf_hooks.html)
-- [Performance Testing Best Practices](https://martinfowler.com/articles/practical-test-pyramid.html)
-
-## Support
-
-For questions or issues with performance tests:
-
-- Check existing test examples
-- Review performance baseline documentation
-- Consult with the team on performance expectations
-- Open an issue with detailed metrics and environment info
+1. Update `tests/performance/config/performanceBaselines.ts`.
+2. Add an entry to `tests/performance/BUDGET_CHANGELOG.md` detailing:
+   - Issue / PR reference
+   - Author & date
+   - Path & metric modified
+   - Old vs. new values
+   - Technical rationale and before/after benchmark numbers
+3. CI automatically runs `regressionBudgets.perf.test.ts` to ensure changelog completeness and consistency.

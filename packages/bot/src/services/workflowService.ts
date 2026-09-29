@@ -30,6 +30,12 @@ export interface WorkflowResult {
   nextStep?: number;
   isComplete?: boolean;
   data?: Record<string, unknown>;
+  /**
+   * Optional inline keyboard buttons to attach to the reply.
+   * Each inner array represents one row of buttons.
+   * Uses the typed callback format from callbackUtils.
+   */
+  buttons?: Array<Array<{ text: string; callback_data: string }>>;
 }
 
 /**
@@ -223,7 +229,7 @@ export class BotWorkflowManager {
       );
 
       const result = await response.json();
-      return result;
+      return result as { allowed: boolean; reason?: string };
     } catch (error) {
       console.error("Error checking risk policy:", error);
       return { allowed: true }; // Fallback to allowed if service is down

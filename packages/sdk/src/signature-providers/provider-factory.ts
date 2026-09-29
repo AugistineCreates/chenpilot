@@ -1,6 +1,10 @@
 import { ChainId } from "../types";
 import { SignatureProvider } from "./interfaces";
 import {
+  AlbedoSignatureProvider,
+  AlbedoProviderConfig,
+} from "./albedo-provider";
+import {
   SignatureProviderRegistry,
   signatureProviderRegistry,
 } from "./registry";
@@ -13,7 +17,10 @@ import {
   SignatureProviderError,
   UnsupportedChainError,
   ConnectionError,
+  ProviderCreationError,
+  UnsupportedProviderTypeError,
 } from "./errors";
+import { ProviderSelectionPreferences, ProviderType } from "./types";
 
 /**
  * Concrete error class for provider factory operations
@@ -24,31 +31,10 @@ class ProviderFactoryError extends SignatureProviderError {
   }
 }
 
-// Temporary mock for AlbedoSignatureProvider until module export is fixed
-class AlbedoSignatureProvider {
-  constructor(_config?: unknown) {
-    void _config;
-    // Mock implementation
-  }
-}
-
-interface AlbedoProviderConfig extends Record<string, unknown> {
-  // Mock interface - will be replaced with actual implementation
-}
-
-/**
- * Provider type identifiers
- */
-export enum ProviderType {
-  MOCK = "mock",
-  LEDGER = "ledger",
-  ALBEDO = "albedo",
-}
-
 /**
  * Provider configuration union type
  */
-export type ProviderConfig =
+type ProviderConfig =
   | { type: ProviderType.MOCK; config?: MockProviderConfig }
   | { type: ProviderType.LEDGER; config?: LedgerProviderConfig }
   | { type: ProviderType.ALBEDO; config?: AlbedoProviderConfig };
@@ -124,23 +110,7 @@ export class SignatureProviderFactory {
     let provider: SignatureProvider;
 
     try {
-      // Create provider instance based on type
-      switch (providerConfig.type) {
-        case ProviderType.MOCK:
-          provider = this.createMockProvider(providerConfig.config);
-          break;
-        case ProviderType.LEDGER:
-          provider = this.createLedgerProvider(providerConfig.config);
-          break;
-        case ProviderType.ALBEDO:
-          provider = this.createAlbedoProvider(providerConfig.config);
-          break;
-        default:
-          throw new ProviderFactoryError(
-            `Unsupported provider type: ${(providerConfig as unknown as { type: string }).type}`,
-            "UNSUPPORTED_PROVIDER_TYPE"
-          );
-      }
+      provider = this.createProviderInstance(providerConfig);
 
       // Store instance for reuse
       this.providerInstances.set(provider.providerId, provider);
@@ -162,10 +132,7 @@ export class SignatureProviderFactory {
       this.log(`Failed to create provider: ${error}`);
       throw error instanceof SignatureProviderError
         ? error
-        : new ProviderFactoryError(
-            `Provider creation failed: ${error}`,
-            "PROVIDER_CREATION_FAILED"
-          );
+        : new ProviderCreationError(`Provider creation failed: ${error}`);
     }
   }
 
@@ -270,13 +237,9 @@ export class SignatureProviderFactory {
     const discoveries = await this.discoverProviders();
     const availableProviders = discoveries.filter((d) => d.available);
 
-    const configs: ProviderConfig[] = [];
-
-    for (const discovery of availableProviders) {
-      if (this.supportsChain(discovery.type, chainId)) {
-        configs.push({ type: discovery.type } as ProviderConfig);
-      }
-    }
+    const configs: ProviderConfig[] = availableProviders
+      .filter((discovery) => this.supportsChain(discovery.type, chainId))
+      .map((discovery) => ({ type: discovery.type }) as ProviderConfig);
 
     if (configs.length === 0) {
       throw new UnsupportedChainError(chainId);
@@ -296,55 +259,19 @@ export class SignatureProviderFactory {
       requireUserInteraction?: boolean;
     } = {}
   ): Promise<SignatureProvider> {
-    const providers = await this.createProvidersForChain(chainId, {
-      autoConnect: false,
-    });
-
-    if (providers.length === 0) {
+    const registry = this.config.defaultRegistry ?? signatureProviderRegistry;
+    const candidates = registry.resolveProviders(
+      chainId,
+      preferences as ProviderSelectionPreferences
+    );
+    if (!candidates.length) {
       throw new UnsupportedChainError(chainId);
     }
-
-    // Score providers based on preferences
-    const scoredProviders = providers.map((provider) => {
-      let score = 0;
-      const capabilities = provider.getCapabilities();
-
-      // Base score for supporting the chain
-      if (capabilities.supportedChains.includes(chainId)) {
-        score += 10;
-      }
-
-      // Preference bonuses
-      if (
-        preferences.preferHardwareWallet &&
-        provider.providerId.includes("ledger")
-      ) {
-        score += 5;
-      }
-
-      if (
-        preferences.preferBrowserExtension &&
-        provider.providerId.includes("albedo")
-      ) {
-        score += 5;
-      }
-
-      if (
-        preferences.requireUserInteraction ===
-        capabilities.requiresUserInteraction
-      ) {
-        score += 3;
-      }
-
-      // Bonus for higher concurrent signature capacity
-      score += Math.min(capabilities.maxConcurrentSignatures, 5);
-
-      return { provider, score };
-    });
-
-    // Sort by score and return the best
-    scoredProviders.sort((a, b) => b.score - a.score);
-    return scoredProviders[0].provider;
+    const best = candidates[0];
+    return (
+      this.getProvider(best.providerId || "") ??
+      (await this.createProvider({ type: best.providerType }))
+    );
   }
 
   /**
@@ -398,6 +325,23 @@ export class SignatureProviderFactory {
     config?: AlbedoProviderConfig
   ): AlbedoSignatureProvider {
     return new AlbedoSignatureProvider(config);
+  }
+
+  private createProviderInstance(
+    providerConfig: ProviderConfig
+  ): SignatureProvider {
+    switch (providerConfig.type) {
+      case ProviderType.MOCK:
+        return this.createMockProvider(providerConfig.config);
+      case ProviderType.LEDGER:
+        return this.createLedgerProvider(providerConfig.config);
+      case ProviderType.ALBEDO:
+        return this.createAlbedoProvider(providerConfig.config);
+      default:
+        throw new UnsupportedProviderTypeError(
+          (providerConfig as unknown as { type: string }).type
+        );
+    }
   }
 
   private async discoverMockProvider(): Promise<ProviderDiscoveryResult> {

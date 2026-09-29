@@ -52,6 +52,22 @@ const FEATURES: BotFeature[] = [
     command: "/price",
     keywords: ["price", "market", "cost", "value", "rate", "quote"],
   },
+  {
+    name: "Portfolio Summary",
+    description:
+      "View a formatted summary of all your Stellar asset balances and estimated net worth in USD, XLM, or BTC.",
+    command: "/portfolio",
+    keywords: [
+      "portfolio",
+      "net worth",
+      "summary",
+      "holdings",
+      "assets",
+      "total",
+      "wealth",
+      "overview",
+    ],
+  },
 ];
 
 export function searchFeatures(query: string): BotFeature[] {

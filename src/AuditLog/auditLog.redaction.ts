@@ -13,6 +13,7 @@
 
 import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
+import { SecretBuffer } from "../utils/secretBuffer";
 
 // ─── Sensitive Key Names ──────────────────────────────────────────────────────
 
@@ -187,6 +188,11 @@ export function redactPayload(
   parentKey?: string
 ): unknown {
   if (value === null || value === undefined) return value;
+
+  // SecretBuffer instances must never have their contents exposed.
+  if (value instanceof SecretBuffer) {
+    return value.toString();
+  }
 
   // Key-name denylist check
   if (

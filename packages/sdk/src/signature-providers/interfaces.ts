@@ -1,4 +1,5 @@
 import { ChainId } from "../types";
+import { AbortSignalLike } from "../types";
 import {
   SignatureRequest,
   SignatureResult,
@@ -27,7 +28,7 @@ export interface SignatureProvider {
   getAccounts(chainId: ChainId): Promise<SignatureProviderAccount[]>;
 
   // Core signing operations
-  signTransaction(request: SignatureRequest): Promise<SignatureResult>;
+  signTransaction(request: SignatureRequest, signal?: AbortSignalLike): Promise<SignatureResult>;
 
   // Optional message signing (for providers that support it)
   signMessage?(
@@ -69,7 +70,7 @@ export abstract class BaseSignatureProvider implements SignatureProvider {
   abstract connect(): Promise<SignatureProviderConnection>;
   abstract disconnect(): Promise<void>;
   abstract getAccounts(chainId: ChainId): Promise<SignatureProviderAccount[]>;
-  abstract signTransaction(request: SignatureRequest): Promise<SignatureResult>;
+  abstract signTransaction(request: SignatureRequest, signal?: AbortSignalLike): Promise<SignatureResult>;
   abstract getCapabilities(): SignatureProviderCapabilities;
 
   // Common implementation for connection state

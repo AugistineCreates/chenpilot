@@ -1,0 +1,8 @@
+{
+  "user123": [
+    "LLM: [{\"action\":\"test_action\",\"status\":\"success\",\"error\":null}]",
+    "LLM: [{\"action\":\"test_action\",\"status\":\"success\",\"error\":null},{\"action\":\"test_action\",\"status\":\"success\",\"error\":null}]",
+    "LLM: [{\"action\":\"failing_action\",\"status\":\"error\",\"error\":\"Tool failed\",\"payload\":\"{}...\"},{\"action\":\"action2\",\"status\":\"success\",\"error\":null}]",
+    "LLM: [{\"action\":\"slow_action\",\"status\":\"error\",\"error\":\"Cannot read properties of undefined (reading 'status')\",\"payload\":\"{\\\"test\\\":\\\"data\\\"}...\"}]"
+  ]
+}

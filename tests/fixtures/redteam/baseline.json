@@ -1,0 +1,8 @@
+{
+  "corpusVersion": "1.0.0",
+  "dimensions": {
+    "refusalQuality": 1,
+    "policyCompliance": 1,
+    "economicCorrectness": 1
+  }
+}

@@ -1,0 +1,129 @@
+# ============================================================================
+# PNPM Supply Chain Security Configuration
+# ============================================================================
+# This file prevents dependency confusion attacks and unreviewed lifecycle scripts
+# Last updated: 2026-08-31
+
+# ----------------------------------------------------------------------------
+# Registry Configuration - Prevent Dependency Confusion
+# ----------------------------------------------------------------------------
+# Internal packages MUST resolve from internal registry only
+@chen-pilot:registry=https://npm.pkg.github.com/chen-pilot
+
+# Default registry
+registry=https://registry.npmjs.org/
+
+# ----------------------------------------------------------------------------
+# Lifecycle Script Protection
+# ----------------------------------------------------------------------------
+# Disable all lifecycle scripts by default
+ignore-scripts=true
+
+# Allow specific packages to run scripts (reviewed and approved)
+# Format: package-name=true with owner, reason, and expiry date
+# 
+# APPROVED LIFECYCLE SCRIPTS:
+# ---------------------------
+# Owner: DevOps Team
+# Reason: Native binary compilation required for cryptographic operations
+# Approved: 2026-08-31
+# Expires: 2027-08-31
+# Review: Annual security review required
+enable-pre-post-scripts=false
+
+# ----------------------------------------------------------------------------
+# Lockfile Enforcement
+# ----------------------------------------------------------------------------
+# Fail if lockfile needs updates (CI mode)
+frozen-lockfile=false
+prefer-frozen-lockfile=true
+
+# Lockfile version
+lockfile-version=9.0
+
+# ----------------------------------------------------------------------------
+# Integrity Verification
+# ----------------------------------------------------------------------------
+# Verify package integrity from lockfile
+verify-store-integrity=true
+strict-store-pkg-content-check=true
+
+# ----------------------------------------------------------------------------
+# Network Security
+# ----------------------------------------------------------------------------
+# Use HTTPS for git
+git-protocol=https
+
+# Strict SSL
+strict-ssl=true
+
+# Network timeouts
+network-timeout=60000
+fetch-timeout=60000
+fetch-retries=3
+
+# ----------------------------------------------------------------------------
+# Package Resolution
+# ----------------------------------------------------------------------------
+# Prefer workspace packages
+prefer-workspace-packages=true
+
+# Link workspace packages
+link-workspace-packages=true
+
+# Workspace-only resolution for internal packages
+workspace-only=false
+
+# ----------------------------------------------------------------------------
+# Hoisting and Isolation
+# ----------------------------------------------------------------------------
+# Public hoist pattern - be restrictive
+public-hoist-pattern[]=*types*
+public-hoist-pattern[]=*eslint*
+public-hoist-pattern[]=*prettier*
+
+# Prevent hoisting of packages with lifecycle scripts
+shamefully-hoist=false
+
+# ----------------------------------------------------------------------------
+# Dependency Management
+# ----------------------------------------------------------------------------
+# Auto install peers
+auto-install-peers=true
+
+# Strict peer dependencies
+strict-peer-dependencies=true
+
+# Save exact versions
+save-exact=true
+
+# ----------------------------------------------------------------------------
+# Side Effects Cache
+# ----------------------------------------------------------------------------
+# Disable side effects cache for security
+side-effects-cache=false
+
+# ----------------------------------------------------------------------------
+# Engine and Node Version
+# ----------------------------------------------------------------------------
+engine-strict=true
+node-version=>=16.0.0
+
+# ----------------------------------------------------------------------------
+# Audit Configuration
+# ----------------------------------------------------------------------------
+# Audit level
+audit-level=moderate
+
+# ----------------------------------------------------------------------------
+# Store Configuration
+# ----------------------------------------------------------------------------
+# Use content-addressable store
+package-import-method=auto
+verify-store-integrity=true
+
+# ----------------------------------------------------------------------------
+# Resolution Mode
+# ----------------------------------------------------------------------------
+# Use highest version resolution to get security patches
+resolution-mode=highest

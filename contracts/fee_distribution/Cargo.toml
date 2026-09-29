@@ -8,6 +8,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 soroban-sdk = "22.0.0"
+contract_failure = { path = "../contract_failure" }
 
 [dev-dependencies]
 soroban-sdk = { version = "22.0.0", features = ["testutils"] }
+num-bigint = "0.4"
+num-traits = "0.2"
+diff_fuzz_engine = { path = "../diff_fuzz_engine" }

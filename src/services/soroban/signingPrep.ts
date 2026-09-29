@@ -10,7 +10,7 @@
  */
 
 import { StellarSdk, NETWORK_PASSPHRASES, SorobanNetwork } from "./sdkAdapter";
-import { AuthRequiredError, SigningError } from "./errors";
+import { AuthRequiredError, SigningError, NetworkMismatchError } from "./errors";
 import type { SimulationSuccess } from "./sdkAdapter";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -44,6 +44,10 @@ export function requiresSigning(sim: SimulationSuccess): boolean {
  * Throws `AuthRequiredError` when auth entries are present but no signing
  * context is provided.
  *
+ * Throws `NetworkMismatchError` when the transaction envelope was built for a
+ * different network passphrase than the client claims to be on — before any
+ * signature bytes are produced.
+ *
  * Throws `SigningError` when the SDK's `assembleTransaction` helper is
  * unavailable or signing fails.
  */
@@ -52,15 +56,40 @@ export function prepareSignedTransaction(
   sim: SimulationSuccess,
   context: SigningContext
 ): AssembledTransaction {
+  assertNetworkMatches(unsignedTx, context.network);
+
   const keypair = parseKeypair(context.secretKey);
 
-  const assembled = assembleWithSimulation(unsignedTx, sim, context.network);
-  assembled.sign(keypair);
+    return {
+      signedXdr: assembled.toEnvelope().toXDR("base64"),
+      signerPublicKey: keypair.publicKey(),
+    };
+  } finally {
+    secret.destroy();
+  }
+}
 
-  return {
-    signedXdr: assembled.toEnvelope().toXDR("base64"),
-    signerPublicKey: keypair.publicKey(),
-  };
+/**
+ * Guard: refuse to sign when the transaction envelope's network passphrase
+ * disagrees with the client's declared network. This runs BEFORE any signing
+ * step so no signature is ever produced for the wrong environment.
+ */
+function assertNetworkMatches(
+  tx: StellarSdk.Transaction,
+  network: SorobanNetwork
+): void {
+  const expected = NETWORK_PASSPHRASES[network];
+  const transactionPassphrase = tx.networkPassphrase;
+  if (
+    typeof transactionPassphrase === "string" &&
+    transactionPassphrase.length > 0 &&
+    transactionPassphrase !== expected
+  ) {
+    throw new NetworkMismatchError({
+      expectedNetwork: network,
+      transactionNetwork: transactionPassphrase,
+    });
+  }
 }
 
 /**
@@ -78,10 +107,13 @@ export function assertSigningNotRequired(
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-function parseKeypair(secretKey: string): StellarSdk.Keypair {
+function parseKeypair(secret: SecretBuffer): StellarSdk.Keypair {
   try {
-    return StellarSdk.Keypair.fromSecret(secretKey);
+    // Keypair.fromSecret requires a plaintext string — this is the narrowest
+    // possible scope for the string conversion.
+    return secret.consumeString((plainKey) => StellarSdk.Keypair.fromSecret(plainKey));
   } catch (err) {
+    // Do not include the secret key value in the error message.
     throw new SigningError(
       `Invalid secret key: ${err instanceof Error ? err.message : String(err)}`,
       err

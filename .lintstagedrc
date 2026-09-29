@@ -1,0 +1,5 @@
+{
+  "*.{ts,js,mjs}": "eslint --fix",
+  "src/Agents/tools/*.ts": "npm run gen:docs",
+  "*.{ts,js,mjs,json,md}": "prettier --write"
+}

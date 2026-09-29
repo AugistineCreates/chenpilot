@@ -2,10 +2,13 @@ import { AppDataSource } from "../../config/Datasource";
 import { PromptVersion } from "./PromptVersion.entity";
 import { promptVersionService } from "./PromptVersionService";
 import { toolRegistry } from "./ToolRegistry";
+import { assertMutationAllowed, policyFromEnv, type SignedRevision } from "./PromptChangeControl";
 import logger from "../../config/logger";
 
 export class PromptRolloutService {
   private promptRepo = AppDataSource.getRepository(PromptVersion);
+
+  private policy = policyFromEnv();
 
   /**
    * Validate if a prompt version is compatible with the current system state
@@ -36,12 +39,19 @@ export class PromptRolloutService {
   }
 
   /**
-   * Safe activation with automated policy checks
+   * Safe activation with automated policy checks.
+   *
+   * `revision` carries the signed authorship and approval evidence. It is
+   * mandatory in production: `assertMutationAllowed` rejects unversioned
+   * activation of live prompt configuration (Issue #665).
    */
   async activateWithPolicy(
     promptId: string,
-    rollbackVersionId?: string
+    rollbackVersionId?: string,
+    revision?: SignedRevision
   ): Promise<void> {
+    assertMutationAllowed(this.policy, revision);
+
     const validation = await this.validateCompatibility(promptId);
     if (!validation.valid) {
       throw new Error(
@@ -54,12 +64,22 @@ export class PromptRolloutService {
       {
         isActive: true,
         rollbackVersionId,
+        revisionDigest: revision?.digest,
+        author: revision?.author,
+        authorSignature: revision?.signature,
+        approvals: revision?.approvals,
+        changeTicket: revision?.changeTicket,
       }
     );
 
     logger.info("Prompt version activated with rollout policy", {
       promptId,
       rollbackVersionId,
+      revisionId: revision?.id,
+      digest: revision?.digest,
+      author: revision?.author,
+      changeTicket: revision?.changeTicket,
+      environment: this.policy.environment,
     });
   }
 
@@ -100,6 +120,11 @@ export class PromptRolloutService {
     return false;
   }
 
+  /**
+   * Automated safety rollback. It is triggered by policy rather than by an
+   * operator, so it deliberately does not require a new approval quorum —
+   * the original activation already carries the change-control evidence.
+   */
   private async performRollback(promptId: string): Promise<void> {
     const prompt = await this.promptRepo.findOne({ where: { id: promptId } });
     if (!prompt || !prompt.rollbackVersionId) return;
@@ -115,6 +140,12 @@ export class PromptRolloutService {
         { id: prompt.rollbackVersionId },
         { isActive: true }
       );
+    });
+
+    logger.info("Prompt version auto-rolled back under rollout policy", {
+      promptId,
+      rollbackVersionId: prompt.rollbackVersionId,
+      environment: this.policy.environment,
     });
   }
 }

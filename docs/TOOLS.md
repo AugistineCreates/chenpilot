@@ -8,6 +8,8 @@ This document is automatically generated. Do not edit manually.
   - [contact_tool](#contact-tool)
 - [DEFI](#defi)
   - [multi_hop_trade](#multi-hop-trade)
+- [DIAGNOSTICS](#diagnostics)
+  - [reconciliation_tool](#reconciliation-tool)
 - [GENERAL](#general)
   - [get_xlm_liquidity](#get-xlm-liquidity)
 - [META](#meta)
@@ -60,7 +62,32 @@ Manage contacts: create, list, and delete contacts.
 
 ### multi_hop_trade
 
-Evaluate and find optimal multi-hop trading paths across Stellar DEX using multiple intermediate assets
+Evaluate or execute optimal multi-hop trading paths across Stellar DEX.
+
+**Version:** 2.0.0
+
+#### Parameters
+
+| Parameter | Type | Required | Description | Options |
+| --- | --- | --- | --- | --- |
+| operation | string | Yes | evaluate (inspect routes) or execute (submit trade) | `evaluate`, `execute` |
+| fromAsset | string | Yes | Source asset symbol | `XLM`, `USDC`, `USDT` |
+| toAsset | string | Yes | Destination asset symbol | `XLM`, `USDC`, `USDT` |
+| amount | number | Yes | Amount of source asset | - |
+
+#### Examples
+
+- Evaluate best path to swap 100 XLM to USDC
+- Execute multi-hop trade: 500 XLM → USDT with max 3 hops
+- Find routes from USDC to USDT with minEfficiency 0.9
+
+---
+
+## DIAGNOSTICS
+
+### reconciliation_tool
+
+Detect and surface drift between backend records and on-chain reality. Checks transaction status, wallet balances, and contract state for inconsistencies.
 
 **Version:** 1.0.0
 
@@ -68,15 +95,16 @@ Evaluate and find optimal multi-hop trading paths across Stellar DEX using multi
 
 | Parameter | Type | Required | Description | Options |
 | --- | --- | --- | --- | --- |
-| fromAsset | string | Yes | Source asset symbol (e.g., XLM, USDC, USDT) | `XLM`, `USDC`, `USDT` |
-| toAsset | string | Yes | Destination asset symbol (e.g., XLM, USDC, USDT) | `XLM`, `USDC`, `USDT` |
-| amount | number | Yes | Amount of source asset to trade | - |
+| operation | string | Yes | Operation to perform | `run`, `get_reports` |
+| scope | object | No | Reconciliation scope: which checks to run and against which entities | - |
+| limit | number | No | Number of past reports to retrieve (for get_reports) | - |
 
 #### Examples
 
-- Find best path to swap 100 XLM to USDC
-- Evaluate multi-hop routes from USDC to USDT with max 3 hops
-- Compare trading paths for 500 XLM to USDT
+- Run reconciliation to check if my transactions match on-chain
+- Check for balance drift on my wallet
+- Show me recent reconciliation reports
+- Reconcile contract state for contract CXXX
 
 ---
 

@@ -23,6 +23,8 @@ export interface ContractMetadata {
   sourcePath: string;
   capabilities: ContractCapability[];
   bindings: ContractBinding[];
+  specHash?: string; // Hash of the contract interface specification
+  specVersion?: string; // Version of the specification format
 }
 
 export interface ContractRegistrySnapshot {
@@ -196,6 +198,36 @@ export class ContractMetadataRegistry {
 
   private activeEnvironment(): ContractEnvironment {
     return networkConfig.type === "public" ? "mainnet" : networkConfig.type;
+  }
+
+  validateSpecFreshness(
+    key: string,
+    providedSpecHash: string,
+    environment?: ContractEnvironment
+  ): { valid: boolean; error?: string } {
+    const contract = this.getContract(key, environment);
+    if (!contract) {
+      return {
+        valid: false,
+        error: `Contract "${key}" not found in registry`,
+      };
+    }
+
+    if (!contract.specHash) {
+      return {
+        valid: false,
+        error: `Contract "${key}" has no registered specification hash`,
+      };
+    }
+
+    if (contract.specHash !== providedSpecHash) {
+      return {
+        valid: false,
+        error: `Stale interface specification detected for contract "${key}". Expected spec hash "${contract.specHash}" but got "${providedSpecHash}". Update your contract bindings to match the deployed version.`,
+      };
+    }
+
+    return { valid: true };
   }
 }
 

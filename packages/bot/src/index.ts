@@ -4,6 +4,8 @@ import { TelegramAdapter } from "./adapters/telegram";
 import { DiscordAdapter } from "./adapters/discord";
 import { createReleaseWebhookHandler } from "./releaseWebhook";
 import { botWorkflowManager } from "./services/workflowService";
+import { marketDigestScheduler } from "./services/marketDigestScheduler";
+import { registerAllCommands } from "./commands";
 import { MultisigWizard } from "./multisigWizard";
 import { SwapWizard } from "./swapWizard";
 
@@ -11,6 +13,9 @@ dotenv.config();
 
 async function bootstrap() {
   console.log("🤖 Starting Chen Pilot Bot Services...");
+
+  // ── Register all shared command handlers ──────────────────────────────────
+  registerAllCommands();
 
   // Register workflows
   botWorkflowManager.registerWorkflow(new MultisigWizard());
@@ -20,6 +25,17 @@ async function bootstrap() {
   const discordBot = new DiscordAdapter(process.env.DISCORD_BOT_TOKEN || "");
 
   await Promise.all([tgBot.init(), discordBot.init()]);
+
+  // Register market digest targets and start the shared scheduler.
+  // Each adapter returns null when its target channel/chat is not configured,
+  // so unregistered platforms are silently skipped.
+  const discordTarget = discordBot.createDigestTarget();
+  if (discordTarget) marketDigestScheduler.addTarget(discordTarget);
+
+  const telegramTarget = tgBot.createDigestTarget();
+  if (telegramTarget) marketDigestScheduler.addTarget(telegramTarget);
+
+  marketDigestScheduler.start();
 
   // #147: Mount GitHub release webhook if announcement targets are configured
   const discordAnnouncementChannelId =

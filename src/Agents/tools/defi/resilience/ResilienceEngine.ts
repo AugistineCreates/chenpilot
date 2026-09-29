@@ -33,7 +33,7 @@ export class ResilienceEngine {
    */
   async execute<T, S extends z.ZodTypeAny>(
     key: string,
-    fn: () => Promise<any>,
+    fn: () => Promise<T>,
     schema?: S,
     config?: ResilienceConfig
   ): Promise<z.infer<S> | T> {

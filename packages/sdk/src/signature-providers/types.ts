@@ -1,4 +1,8 @@
 import { ChainId } from "../types";
+import { ProviderType, ProviderConfig } from "./provider-factory";
+
+// Re-exported (canonical definitions live in ./provider-factory)
+export { ProviderType, ProviderConfig };
 
 // Base transaction types for different chains
 export interface BitcoinTransaction {
@@ -83,6 +87,9 @@ export interface SignatureProviderCapabilities {
   requiresUserInteraction: boolean;
   supportsMessageSigning: boolean;
   maxConcurrentSignatures: number;
+  signingModes?: Array<"transaction" | "message" | "batch" | "offline">;
+  supportsSubmission?: boolean;
+  supportsHealthCheck?: boolean;
   metadata?: Record<string, unknown>;
 }
 
@@ -95,13 +102,6 @@ export interface SignatureProviderMetadata {
   website?: string;
 }
 
-// Provider types enum
-export enum ProviderType {
-  MOCK = "mock",
-  LEDGER = "ledger",
-  ALBEDO = "albedo",
-}
-
 // SDK Configuration
 export interface SignatureProviderSDKConfig {
   defaultProviders?: ProviderType[];
@@ -110,11 +110,95 @@ export interface SignatureProviderSDKConfig {
   enableLogging?: boolean;
   connectionTimeout?: number;
   maxRetries?: number;
-  registry?: Record<string, unknown>; // SignatureProviderRegistry type
+  errorRecovery?: {
+    enabled: boolean;
+    maxRetries: number;
+    retryDelay: number;
+  };
+  registry?: {
+    autoRegister?: boolean;
+    validateProviders?: boolean;
+    [key: string]: unknown;
+  };
 }
 
-// Provider configuration for factory
-export interface ProviderConfig {
-  type: ProviderType;
-  config?: Record<string, unknown>;
+export interface SignatureProviderContext {
+  registry: unknown;
+  factory: unknown;
+  coordinator: unknown;
+  errorRecovery: unknown;
+}
+
+export interface ProviderHealthCheck {
+  providerId: string;
+  healthy: boolean;
+  connected: boolean;
+  lastChecked: Date;
+  capabilities: SignatureProviderCapabilities;
+  errors?: Error[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface BatchOperationResult<T> {
+  successful: T[];
+  failed: Array<{ error: Error; input?: unknown }>;
+  totalCount: number;
+  successCount: number;
+  failureCount: number;
+  duration: number;
+}
+
+export interface ProviderMetrics {
+  providerId: string;
+  connectionCount: number;
+  signatureCount: number;
+  errorCount: number;
+  averageSigningTime: number;
+  lastActivity: Date;
+  uptime: number;
+}
+
+export interface ProviderSelectionPreferences {
+  preferHardwareWallet?: boolean;
+  preferBrowserExtension?: boolean;
+  requireUserInteraction?: boolean;
+  requireMessageSigning?: boolean;
+  minConcurrentSignatures?: number;
+  preferredProviderIds?: string[];
+}
+
+export interface ProviderResolutionRequest {
+  chainId: ChainId;
+  operation?: "transaction" | "message" | "submission";
+  preferences?: ProviderSelectionPreferences;
+  fallbackToMock?: boolean;
+}
+
+export interface ProviderResolutionResult {
+  providerType: ProviderType;
+  providerId?: string;
+  score: number;
+  capabilities: SignatureProviderCapabilities;
+  reason: string[];
+}
+
+export interface TransactionWorkflowRequest {
+  chainId: ChainId;
+  transaction: ChainTransaction["transaction"];
+  accountAddress: string;
+  providerPreferences?: ProviderSelectionPreferences;
+  submit?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TransactionWorkflowResult {
+  providerId: string;
+  chainId: ChainId;
+  signature: SignatureResult;
+  submitted?: {
+    success: boolean;
+    transactionId?: string;
+    rawResult?: unknown;
+  };
+  metadata?: Record<string, unknown>;
 }

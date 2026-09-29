@@ -1,4 +1,5 @@
 import { ValueObject, validateAssetCode } from '../common';
+import * as StellarSdk from '@stellar/stellar-sdk';
 
 export type AssetType = 'native' | 'credit_alphanum4' | 'credit_alphanum12';
 
@@ -37,6 +38,28 @@ export class Asset extends ValueObject<AssetProps> {
       decimals: 7,
       name: 'Stellar Lumens',
     });
+  }
+
+  static fromStellarAsset(stellarAsset: StellarSdk.Asset): Asset {
+    if (stellarAsset.isNative()) {
+      return Asset.native();
+    }
+    const code = stellarAsset.getCode();
+    const issuer = stellarAsset.getIssuer();
+    const type: AssetType = code.length <= 4 ? 'credit_alphanum4' : 'credit_alphanum12';
+    return Asset.create({
+      code,
+      issuer,
+      type,
+      decimals: 7, // Default for Stellar assets
+    });
+  }
+
+  toStellarAsset(): StellarSdk.Asset {
+    if (this.type === 'native') {
+      return StellarSdk.Asset.native();
+    }
+    return new StellarSdk.Asset(this.code, this.issuer!);
   }
 
   get code(): string {

@@ -4,6 +4,10 @@ import { promptGenerator } from "./registry/PromptGenerator";
 import { toolAutoDiscovery } from "./registry/ToolAutoDiscovery";
 import logger from "../config/logger";
 import { WorkflowStep } from "./types";
+import {
+  verifyQuoteDigest,
+  QuoteCommitmentPayload,
+} from "../domain/quotes/quoteCommitment";
 
 let initialized = false;
 
@@ -211,6 +215,47 @@ function validateSwapIntent(
       );
     }
   }
+
+  // ── Quote commitment validation ─────────────────────────────────────
+  if (payload.approvedDigest && typeof payload.approvedDigest === "string") {
+    // Deadline check
+    const deadline = payload.deadline as number | undefined;
+    if (deadline && typeof deadline === "number") {
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (nowSec > deadline) {
+        errors.push({
+          field: "deadline",
+          message: `Quote commitment expired at ${new Date(deadline * 1000).toISOString()}. Request a new quote.`,
+          code: "QUOTE_EXPIRED",
+        });
+      }
+    } else {
+      errors.push({
+        field: "deadline",
+        message: "Deadline is required when approvedDigest is present",
+        code: "MISSING_DEADLINE",
+      });
+    }
+
+    // Digest verification — requires the full commitment payload fields
+    const commitment = payload.quoteCommitment as
+      | QuoteCommitmentPayload
+      | undefined;
+    if (commitment) {
+      const digestValid = verifyQuoteDigest(
+        payload.approvedDigest as string,
+        commitment
+      );
+      if (!digestValid) {
+        errors.push({
+          field: "approvedDigest",
+          message:
+            "Quote digest mismatch — execution parameters have drifted since approval. Obtain a new quote.",
+          code: "QUOTE_DRIFT",
+        });
+      }
+    }
+  }
 }
 
 function validateLiquidityIntent(
@@ -360,5 +405,47 @@ function validateRepayWithdrawIntent(
     warnings.push(
       "No debt/position ID specified. Ensure the correct debt is being repaid."
     );
+  }
+
+  // Preflight partial withdrawals against remaining collateral (YieldBlox).
+  // When the caller supplies collateral context, reject the withdrawal if it
+  // would drop the remaining collateral below what open borrows require.
+  if (action === "withdraw") {
+    const suppliedCollateral = payload.suppliedCollateralUSD;
+    const borrowedValue = payload.borrowedValueUSD;
+    const collateralFactor = payload.collateralFactor;
+    const withdrawAmount = payload.withdrawAmountUSD ?? payload.amount;
+
+    if (
+      typeof suppliedCollateral === "number" &&
+      typeof borrowedValue === "number" &&
+      typeof collateralFactor === "number" &&
+      typeof withdrawAmount === "number"
+    ) {
+      // Minimum collateral needed to cover outstanding borrows:
+      //   requiredCollateral = borrowedValue / collateralFactor
+      const requiredCollateral =
+        collateralFactor > 0 ? borrowedValue / collateralFactor : Infinity;
+      const remainingCollateral = suppliedCollateral - withdrawAmount;
+
+      if (remainingCollateral < requiredCollateral) {
+        errors.push({
+          field: "amount",
+          message:
+            `Withdrawal of ${withdrawAmount} USD would leave ${remainingCollateral.toFixed(2)} USD collateral, ` +
+            `below the ${requiredCollateral.toFixed(2)} USD required by YieldBlox for outstanding borrows ` +
+            `(collateral factor: ${collateralFactor}).`,
+          code: "INSUFFICIENT_COLLATERAL_AFTER_WITHDRAW",
+        });
+      }
+    } else if (
+      suppliedCollateral !== undefined ||
+      borrowedValue !== undefined ||
+      collateralFactor !== undefined
+    ) {
+      warnings.push(
+        "Partial collateral context provided. Supply suppliedCollateralUSD, borrowedValueUSD, and collateralFactor to enable preflight collateral checks."
+      );
+    }
   }
 }

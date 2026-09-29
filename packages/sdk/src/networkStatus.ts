@@ -11,6 +11,7 @@ import type {
   ProtocolVersion,
   NetworkStatus,
 } from "./types";
+import { combineSignals, isAbortError, throwIfAborted } from "./abort";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -49,10 +50,9 @@ export async function checkNetworkHealth(
   const rpcUrl = config.rpcUrl || DEFAULT_RPC_URLS[config.network];
   const startTime = Date.now();
 
+  const combined = combineSignals(config.timeout, config.signal);
   try {
-    const signal = config.timeout
-      ? AbortSignal.timeout(config.timeout)
-      : undefined;
+    throwIfAborted(combined.signal);
     const response = await fetch(rpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -62,7 +62,7 @@ export async function checkNetworkHealth(
         method: "getLatestLedger",
         params: [],
       }),
-      signal,
+      signal: combined.signal as AbortSignal | undefined,
     });
 
     const responseTimeMs = Date.now() - startTime;
@@ -96,12 +96,19 @@ export async function checkNetworkHealth(
       latestLedger: data.result?.sequence || 0,
     };
   } catch (error) {
+    // Cancellation is an explicit caller intent — surface it rather than
+    // masking it as an unhealthy network report.
+    if (isAbortError(error)) {
+      throw error;
+    }
     return {
       isHealthy: false,
       responseTimeMs: Date.now() - startTime,
       latestLedger: 0,
       error: error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    combined.cleanup();
   }
 }
 
@@ -123,52 +130,55 @@ export async function checkLedgerLatency(
 ): Promise<LedgerLatency> {
   const rpcUrl = config.rpcUrl || DEFAULT_RPC_URLS[config.network];
 
-  const signal = config.timeout
-    ? AbortSignal.timeout(config.timeout)
-    : undefined;
-  const response = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "getLatestLedger",
-      params: [],
-    }),
-    signal,
-  });
+  const combined = combineSignals(config.timeout, config.signal);
+  try {
+    throwIfAborted(combined.signal);
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getLatestLedger",
+        params: [],
+      }),
+      signal: combined.signal as AbortSignal | undefined,
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ledger: ${response.statusText}`);
-  }
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ledger: ${response.statusText}`);
+    }
 
-  const data = (await response.json()) as {
-    error?: { message?: string };
-    result?: {
-      sequence?: number;
-      protocolVersion?: number;
-      closeTime?: number;
+    const data = (await response.json()) as {
+      error?: { message?: string };
+      result?: {
+        sequence?: number;
+        protocolVersion?: number;
+        closeTime?: number;
+      };
     };
-  };
 
-  if (data.error) {
-    throw new Error(data.error.message || "RPC error");
+    if (data.error) {
+      throw new Error(data.error.message || "RPC error");
+    }
+
+    const currentLedger = data.result?.sequence || 0;
+
+    // Get ledger close time from the result
+    // The RPC returns timestamps in Unix seconds
+    const ledgerCloseTime = data.result?.closeTime || 0;
+    const currentTime = Math.floor(Date.now() / 1000);
+    const timeSinceLastLedger = currentTime - ledgerCloseTime;
+
+    return {
+      currentLedger,
+      timeSinceLastLedgerSec: timeSinceLastLedger,
+      averageLedgerTimeSec: EXPECTED_LEDGER_TIME_SEC,
+      isNormal: timeSinceLastLedger <= LATENCY_THRESHOLD_SEC,
+    };
+  } finally {
+    combined.cleanup();
   }
-
-  const currentLedger = data.result?.sequence || 0;
-
-  // Get ledger close time from the result
-  // The RPC returns timestamps in Unix seconds
-  const ledgerCloseTime = data.result?.closeTime || 0;
-  const currentTime = Math.floor(Date.now() / 1000);
-  const timeSinceLastLedger = currentTime - ledgerCloseTime;
-
-  return {
-    currentLedger,
-    timeSinceLastLedgerSec: timeSinceLastLedger,
-    averageLedgerTimeSec: EXPECTED_LEDGER_TIME_SEC,
-    isNormal: timeSinceLastLedger <= LATENCY_THRESHOLD_SEC,
-  };
 }
 
 /**
@@ -189,26 +199,33 @@ export async function getProtocolVersion(
 ): Promise<ProtocolVersion> {
   const horizonUrl = config.horizonUrl || DEFAULT_HORIZON_URLS[config.network];
 
-  const signal = config.timeout
-    ? AbortSignal.timeout(config.timeout)
-    : undefined;
-  const response = await fetch(`${horizonUrl}/`, { signal });
+  const combined = combineSignals(config.timeout, config.signal);
+  try {
+    throwIfAborted(combined.signal);
+    const response = await fetch(`${horizonUrl}/`, {
+      signal: combined.signal as AbortSignal | undefined,
+    });
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch protocol version: ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch protocol version: ${response.statusText}`
+      );
+    }
+
+    const data = (await response.json()) as {
+      current_protocol_version?: number;
+      core_version?: string;
+      network_passphrase?: string;
+    };
+
+    return {
+      version: data.current_protocol_version || 0,
+      coreVersion: data.core_version || "unknown",
+      networkPassphrase: data.network_passphrase || "unknown",
+    };
+  } finally {
+    combined.cleanup();
   }
-
-  const data = (await response.json()) as {
-    current_protocol_version?: number;
-    core_version?: string;
-    network_passphrase?: string;
-  };
-
-  return {
-    version: data.current_protocol_version || 0,
-    coreVersion: data.core_version || "unknown",
-    networkPassphrase: data.network_passphrase || "unknown",
-  };
 }
 
 /**

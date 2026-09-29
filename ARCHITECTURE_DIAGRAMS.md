@@ -90,3 +90,9 @@ This sequence diagram focuses on the interactions between:
 - **Agents** (`AgentPlanner`, `PlanExecutor`, `AgentLLM`)
 - **Tools & ToolRegistry**
 - **External Services** (blockchains / DeFi protocols)
+
+---
+
+## Smart Contract Cross-Reference
+
+See [`contracts/relayer_slashing/README.md`](contracts/relayer_slashing/README.md) for the relayer-slashing mechanism that penalizes misbehaving relayers in the cross-chain protocol.

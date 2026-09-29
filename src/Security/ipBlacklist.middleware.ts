@@ -17,14 +17,14 @@ export const ipBlacklistMiddleware = async (
 ): Promise<void> => {
   try {
     const normalizedIP = normalizeIp(extractClientIp(req));
-    (req as any).clientIP = normalizedIP;
+    req.clientIP = normalizedIP;
 
     const decision = await defaultAbusePreventionService.evaluate({
       surface: "api",
       action: "*",
       subject: {
         ipAddress: normalizedIP,
-        userId: (req as any).user?.userId || req.body?.userId,
+        userId: req.user?.userId || req.body?.userId,
       },
       metadata: {
         path: req.path,

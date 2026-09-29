@@ -15,6 +15,9 @@ interface DeletePayload {
   id: string;
 }
 
+/**
+ * Tool for managing contacts: create, list, and delete saved addresses
+ */
 export class ContactTool extends BaseTool {
   metadata: ToolMetadata = {
     name: "contact_tool",
@@ -46,6 +49,12 @@ export class ContactTool extends BaseTool {
 
   private contactService = container.resolve(ContactService);
 
+  /**
+   * Execute a contact operation
+   * @param payload - The operation payload containing operation type and data
+   * @param userId - The user requesting the operation
+   * @returns ToolResult with contact operation outcome
+   */
   async execute(
     payload: Record<string, unknown>,
     userId: string
@@ -72,6 +81,12 @@ export class ContactTool extends BaseTool {
     }
   }
 
+  /**
+   * Create a new contact
+   * @param data - Contact data with name, address, and token type
+   * @param userId - The user creating the contact
+   * @returns ToolResult with created contact info
+   */
   private async createContact(
     data: CreatePayload,
     userId: string
@@ -92,11 +107,22 @@ export class ContactTool extends BaseTool {
     return this.createSuccessResult("contact_created", { created });
   }
 
+  /**
+   * List all contacts for the user
+   * @param userId - The user requesting contact list
+   * @returns ToolResult with contacts array
+   */
   private async listContacts(userId: string): Promise<ToolResult> {
     const contacts = await this.contactService.getAllContacts();
     return this.createSuccessResult("contacts_list", { contacts });
   }
 
+  /**
+   * Delete a contact by ID
+   * @param data - Payload containing the contact ID to delete
+   * @param userId - The user requesting deletion
+   * @returns ToolResult confirming deletion
+   */
   private async deleteContact(
     data: DeletePayload,
     userId: string

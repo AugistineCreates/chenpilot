@@ -1,9 +1,10 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
+import { safeScValToNative, SafeXdrDecoder } from "../utils/xdr";
 
 export interface DecodedEvent {
   id: string;
   contractId: string;
-  topic: string[];
+  topic: unknown[];
   value: unknown;
   ledger: number;
   ledgerClosedAt: string;
@@ -36,11 +37,24 @@ export class EventIndexingService {
         ],
       });
 
-      // 2. Decode XDR events into native JS types
+      // 2. Decode XDR events into native JS types safely
       const decodedEvents: DecodedEvent[] = response.events.map((event) => {
         // Topic is an array of ScVals, usually [EventName, ...Data]
-        const topics = event.topic.map((t) => StellarSdk.scValToNative(t));
-        const value = StellarSdk.scValToNative(event.value);
+        const topics = event.topic.map((t) => {
+          if (typeof t === "string" || Buffer.isBuffer(t) || t instanceof Uint8Array) {
+            return SafeXdrDecoder.decodeScVal(t);
+          }
+          if (t instanceof StellarSdk.xdr.ScVal) {
+            return safeScValToNative(t);
+          }
+          return StellarSdk.scValToNative(t);
+        });
+        const value =
+          typeof event.value === "string" || Buffer.isBuffer(event.value) || event.value instanceof Uint8Array
+            ? SafeXdrDecoder.decodeScVal(event.value)
+            : event.value instanceof StellarSdk.xdr.ScVal
+              ? safeScValToNative(event.value)
+              : StellarSdk.scValToNative(event.value);
 
         return {
           id: event.id,

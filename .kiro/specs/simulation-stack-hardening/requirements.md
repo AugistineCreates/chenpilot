@@ -16,6 +16,8 @@ The current simulation stack provides basic capabilities for local testing with 
 - **Failure_Scenario**: A defined set of conditions and behaviors that model specific failure modes (network errors, gas exhaustion, contract reverts, etc.)
 - **Deterministic_Mode**: A simulation mode where identical inputs always produce identical outputs, including timing and random values
 - **Simulation_Seed**: A numeric value used to initialize pseudo-random number generators for deterministic behavior
+- **Authoritative_Registry**: A verified external or internal registry that maps asset tickers, issuers, contract addresses, networks, adapter capabilities, and protocol capabilities to canonical identifiers and metadata
+- **Approval_Data**: The set of registry-derived provenance and freshness metadata attached to a resolved entity before it is approved for simulation or execution
 - **State_Snapshot**: A point-in-time capture of all simulation state that can be restored later
 - **Fidelity_Validator**: A component that compares simulation results against real network behavior to measure accuracy
 - **Dry_Run**: A complete simulation of an operation without executing it on the live network
@@ -190,3 +192,17 @@ The current simulation stack provides basic capabilities for local testing with 
 5. THE Execution_Trace SHALL use efficient data structures to minimize memory overhead
 6. THE Simulation_Engine SHALL provide performance metrics including operation throughput and average latency
 7. WHEN performance degrades below thresholds, THE Simulation_Engine SHALL log warnings and suggest optimization actions
+
+### Requirement 13: Authoritative Entity Resolution and Registry Validation
+
+**User Story:** As an operator, I want every executable entity referenced in an operation to be resolved through authoritative registries, so that hallucinated tickers, issuers, contract addresses, networks, adapter capabilities, and protocol capabilities are rejected before simulation or execution.
+
+#### Acceptance Criteria
+
+1. THE Simulation_Engine SHALL resolve every executable entity (asset ticker, issuer, contract address, network, adapter capability, and protocol capability) through an Authoritative_Registry before allowing it to reach simulation or execution
+2. WHEN an entity name does not resolve to an entry in an Authoritative_Registry, THE Simulation_Engine SHALL reject the operation with an unresolved-entity error and SHALL NOT include it in any Execution_Trace as executable
+3. WHEN an entity name resolves to multiple entries in an Authoritative_Registry, THE Simulation_Engine SHALL treat the symbol as ambiguous and SHALL require explicit user selection before proceeding
+4. THE Simulation_Engine SHALL bind the canonical registry identifier for each resolved entity, rather than the user-supplied name, into the simulation plan and Execution_Trace
+5. THE Approval_Data for each resolved entity SHALL include registry provenance (source registry, entry ID, canonical symbol, issuer/contract metadata) and registry freshness (last verified timestamp, registry version)
+6. WHEN registry freshness exceeds a configurable threshold, THE Simulation_Engine SHALL re-resolve the entity and SHALL warn if the resolved identifier changes
+7. THE adversarial test suite SHALL cover look-alike symbols (including ticker homoglyphs, mixed-case confusions, and zero-width characters) and fabricated addresses to verify rejection by the entity resolution layer

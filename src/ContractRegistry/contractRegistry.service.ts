@@ -19,7 +19,7 @@ export class ContractRegistryService {
       await this.repo.update(existing.id, contract);
       return this.repo.findOneOrFail({ where: { id: existing.id } });
     }
-    const newEntity = this.repo.create(contract as any);
+    const newEntity = this.repo.create(contract);
     return this.repo.save(newEntity);
   }
 

@@ -1,0 +1,258 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "version": "1.0.0",
+  "description": "Golden vectors for canonical serialization across runtimes",
+  "vectors": [
+    {
+      "id": "vec-001",
+      "name": "simple-object-key-order",
+      "description": "Object keys must be sorted lexicographically",
+      "input": {
+        "z": 1,
+        "a": 2,
+        "m": 3
+      },
+      "expected": "{\"a\":2,\"m\":3,\"z\":1}",
+      "category": "field-order"
+    },
+    {
+      "id": "vec-002",
+      "name": "nested-object-key-order",
+      "description": "Nested object keys must also be sorted",
+      "input": {
+        "outer": {
+          "z": 1,
+          "a": 2
+        }
+      },
+      "expected": "{\"outer\":{\"a\":2,\"z\":1}}",
+      "category": "field-order"
+    },
+    {
+      "id": "vec-003",
+      "name": "array-order-preserved",
+      "description": "Array order must be preserved (order is meaningful)",
+      "input": [3, 1, 2],
+      "expected": "[3,1,2]",
+      "category": "field-order"
+    },
+    {
+      "id": "vec-004",
+      "name": "undefined-values-omitted",
+      "description": "Undefined values must be omitted from serialization",
+      "input": {
+        "a": 1,
+        "c": 3
+      },
+      "expected": "{\"a\":1,\"c\":3}",
+      "category": "optional-values",
+      "_note": "input intentionally has no 'b' key to simulate undefined omission"
+    },
+    {
+      "id": "vec-005",
+      "name": "null-preserved",
+      "description": "Null values must be preserved (distinct from undefined)",
+      "input": {
+        "a": 1,
+        "b": null,
+        "c": 3
+      },
+      "expected": "{\"a\":1,\"b\":null,\"c\":3}",
+      "category": "optional-values"
+    },
+    {
+      "id": "vec-006",
+      "name": "unicode-normalization-nfc",
+      "description": "Unicode strings should be normalized to NFC form",
+      "input": {
+        "name": "\u00e9\u00e8\u00ea"
+      },
+      "expected": "{\"name\":\"\u00e9\u00e8\u00ea\"}",
+      "category": "unicode"
+    },
+    {
+      "id": "vec-007",
+      "name": "unicode-combining-characters",
+      "description": "Combining characters must be handled consistently",
+      "input": {
+        "name": "e\u0301"
+      },
+      "expected": "{\"name\":\"\u00e9\"}",
+      "category": "unicode"
+    },
+    {
+      "id": "vec-008",
+      "name": "integer-values",
+      "description": "Integer values must be serialized without decimal points",
+      "input": {
+        "count": 42,
+        "zero": 0,
+        "negative": -100
+      },
+      "expected": "{\"count\":42,\"negative\":-100,\"zero\":0}",
+      "category": "integers"
+    },
+    {
+      "id": "vec-009",
+      "name": "decimal-values",
+      "description": "Decimal values must preserve precision",
+      "input": {
+        "price": 19.99,
+        "rate": 0.001,
+        "scientific": 1.5e10
+      },
+      "expected": "{\"price\":19.99,\"rate\":0.001,\"scientific\":15000000000}",
+      "category": "decimals"
+    },
+    {
+      "id": "vec-010",
+      "name": "string-values",
+      "description": "String values must be JSON-encoded with proper escaping",
+      "input": {
+        "simple": "hello",
+        "withQuotes": "say \"hello\"",
+        "withNewline": "line1\nline2"
+      },
+      "expected": "{\"simple\":\"hello\",\"withNewline\":\"line1\\nline2\",\"withQuotes\":\"say \\\"hello\\\"\"}",
+      "category": "strings"
+    },
+    {
+      "id": "vec-011",
+      "name": "boolean-values",
+      "description": "Boolean values must be serialized as true/false",
+      "input": {
+        "enabled": true,
+        "disabled": false
+      },
+      "expected": "{\"disabled\":false,\"enabled\":true}",
+      "category": "primitives"
+    },
+    {
+      "id": "vec-012",
+      "name": "deeply-nested-objects",
+      "description": "Deeply nested objects must have all levels sorted",
+      "input": {
+        "level1": {
+          "level2": {
+            "level3": {
+              "z": 1,
+              "a": 2
+            }
+          }
+        }
+      },
+      "expected": "{\"level1\":{\"level2\":{\"level3\":{\"a\":2,\"z\":1}}}}",
+      "category": "field-order"
+    },
+    {
+      "id": "vec-013",
+      "name": "mixed-array-elements",
+      "description": "Arrays can contain mixed types",
+      "input": [1, "two", true, null, {"a": 1}],
+      "expected": "[1,\"two\",true,null,{\"a\":1}]",
+      "category": "mixed-types"
+    },
+    {
+      "id": "vec-014",
+      "name": "empty-objects-and-arrays",
+      "description": "Empty objects and arrays must be serialized correctly",
+      "input": {
+        "emptyObj": {},
+        "emptyArr": []
+      },
+      "expected": "{\"emptyArr\":[],\"emptyObj\":{}}",
+      "category": "edge-cases"
+    },
+    {
+      "id": "vec-015",
+      "name": "special-float-values",
+      "description": "Special float values must be handled",
+      "input": {
+        "max": 1.7976931348623157e+308,
+        "min": 5e-324,
+        "zero": 0
+      },
+      "expected": "{\"max\":1.7976931348623157e+308,\"min\":5e-324,\"zero\":0}",
+      "category": "decimals"
+    },
+    {
+      "id": "vec-016",
+      "name": "plan-hash-canonical",
+      "description": "Execution plan must produce deterministic hash",
+      "input": {
+        "version": "1.0.0",
+        "planId": "plan_123",
+        "steps": [
+          {
+            "stepNumber": 1,
+            "action": "swap",
+            "payload": {"from": "BTC", "to": "XLM"},
+            "description": "Swap BTC to XLM",
+            "dependencies": []
+          }
+        ],
+        "totalSteps": 1,
+        "riskLevel": "low",
+        "summary": "Simple swap"
+      },
+      "expected": "{\"planId\":\"plan_123\",\"riskLevel\":\"low\",\"steps\":[{\"action\":\"swap\",\"dependencies\":[],\"description\":\"Swap BTC to XLM\",\"payload\":{\"from\":\"BTC\",\"to\":\"XLM\"},\"stepNumber\":1}],\"summary\":\"Simple swap\",\"totalSteps\":1,\"version\":\"1.0.0\"}",
+      "category": "plan-verification"
+    },
+    {
+      "id": "vec-017",
+      "name": "idempotency-key-canonical",
+      "description": "Idempotency key must be deterministic",
+      "input": {
+        "operation": "deposit",
+        "protocol": "aave",
+        "userAddress": "0x123",
+        "asset": "USDC",
+        "amount": "1000"
+      },
+      "expected": "{\"amount\":\"1000\",\"asset\":\"USDC\",\"operation\":\"deposit\",\"protocol\":\"aave\",\"userAddress\":\"0x123\"}",
+      "category": "idempotency"
+    },
+    {
+      "id": "vec-018",
+      "name": "offline-signing-artifact-canonical",
+      "description": "Offline signing artifact must be deterministic",
+      "input": {
+        "transactionXdr": "AAAAAgAAAABase64Xdr",
+        "networkPassphrase": "Test SDF Network ; September 2015",
+        "sourceAccount": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+        "expectedSigners": [
+          "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H",
+          "GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGSNFHEYVXM3XOJMDS674JZ"
+        ],
+        "summary": ["Create trustline USDC", "Attach memo"],
+        "threshold": 2
+      },
+      "expected": "{\"expectedSigners\":[\"GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H\",\"GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGSNFHEYVXM3XOJMDS674JZ\"],\"networkPassphrase\":\"Test SDF Network ; September 2015\",\"sourceAccount\":\"GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN\",\"summary\":[\"Create trustline USDC\",\"Attach memo\"],\"threshold\":2,\"transactionXdr\":\"AAAAAgAAAABase64Xdr\"}",
+      "category": "offline-signing"
+    },
+    {
+      "id": "vec-019",
+      "name": "base64url-encoding",
+      "description": "Base64URL encoding must use URL-safe characters",
+      "input": "Hello, World! 🌍",
+      "expected": "SGVsbG8sIFdvcmxkISDwn4yN",
+      "category": "encoding"
+    },
+    {
+      "id": "vec-020",
+      "name": "multi-hop-swap-idempotency",
+      "description": "Multi-hop swap idempotency key must be deterministic",
+      "input": {
+        "sourceChain": "bitcoin",
+        "destinationChain": "stellar",
+        "sourceAsset": "BTC",
+        "destinationAsset": "USDC",
+        "amount": "0.5",
+        "destinationAddress": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+        "hops": ["wbtc-eth", "eth-usdc", "usdc-xlm"]
+      },
+      "expected": "{\"amount\":\"0.5\",\"destinationAddress\":\"GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN\",\"destinationAsset\":\"USDC\",\"destinationChain\":\"stellar\",\"hops\":[\"wbtc-eth\",\"eth-usdc\",\"usdc-xlm\"],\"sourceAsset\":\"BTC\",\"sourceChain\":\"bitcoin\"}",
+      "category": "idempotency"
+    }
+  ]
+}

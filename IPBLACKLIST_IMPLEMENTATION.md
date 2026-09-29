@@ -55,7 +55,8 @@ A comprehensive IP blacklist security middleware system has been implemented to 
 **Features:**
 
 - IP extraction from multiple sources
-- IPv6 normalization
+- RFC-compliant IPv6 normalization (handles compressed, expanded, and IPv4-mapped forms)
+- Prevents IPv6 bypass attempts through representation variants
 - Port stripping
 - Whitespace handling
 - User-agent and path logging
@@ -299,14 +300,50 @@ npm test -- src/Security/__tests__/ipBlacklist.service.test.ts
 npm test -- src/Security/__tests__ --coverage
 ```
 
+## IPv6 Support
+
+### Supported Address Formats
+
+The IP blacklist system fully supports IPv6 with RFC-compliant address normalization:
+
+- **Compressed IPv6**: `2001:db8::1` → normalized to canonical form
+- **Expanded IPv6**: `2001:0db8:0000:0000:0000:0000:0000:0001` → normalized
+- **IPv4-Mapped IPv6**: `::ffff:192.0.2.1` → converted to IPv4 form `192.0.2.1`
+- **IPv6 Localhost**: `::1`
+- **Link-Local Addresses**: `fe80::1`
+- **Multicast Addresses**: `ff00::1`
+
+### Bypass Prevention
+
+The normalization system prevents bypass attempts using different representations:
+
+- Different compressed forms of the same address are recognized as identical
+- IPv4 and its IPv4-mapped IPv6 equivalent (`::ffff:x.x.x.x`) are treated as the same IP
+- Case-insensitive comparison (uppercase/lowercase IPv6 addresses)
+
+### Implementation Details
+
+Uses `ipaddr.js` library for RFC-compliant IPv6 parsing and normalization. All addresses are normalized before storage and lookup to ensure consistent blacklist enforcement across different request representations.
+
+### Testing
+
+Comprehensive IPv6 test suite in `src/Security/__tests__/ipBlacklist.ipv6.test.ts` covers:
+- IPv4-mapped IPv6 address handling
+- Compressed address forms
+- Expanded address forms
+- Special addresses (localhost, link-local, multicast)
+- Case sensitivity
+- Bypass prevention scenarios
+
 ## Security Considerations
 
 1. **Fail-Open**: Middleware continues on database errors to prevent DoS
 2. **Input Validation**: All API inputs validated
 3. **Authentication**: All management endpoints require admin access
 4. **Audit Logging**: All operations logged with user context
-5. **IP Normalization**: Prevents bypass attempts
+5. **IP Normalization**: RFC-compliant IPv6 and IPv4 normalization prevents bypass attempts
 6. **Error Messages**: Generic error messages to prevent information leakage
+7. **IPv6 Coverage**: Full support for IPv6 addresses including address mapping equivalents
 
 ## Next Steps
 

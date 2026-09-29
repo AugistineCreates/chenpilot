@@ -1,11 +1,15 @@
-// chenpilot/src/Agents/planner/PlanExecutor.ts
 import { toolRegistry } from "../registry/ToolRegistry";
 import { ToolResult } from "../registry/ToolMetadata";
 import { ExecutionPlan, PlanStep } from "./AgentPlanner";
 import { HashedPlan, planHashService } from "./planHash";
+import { policyEnforcer } from "../policy/PolicyEnforcer";
 import { durableExecutor } from "./DurableExecutor";
-import { ExecutionStatus } from "./DurableExecution.entity";
+import { compensationService } from "./CompensationService";
+import { FailureState } from "../types";
+import { capabilityManager } from "../capability/CapabilityManager";
+import { CapabilityGrant } from "../capability/types";
 import logger from "../../config/logger";
+import { QuoteExpiredError } from "../../domain/quotes/errors";
 
 export interface ExecutionResult {
   planId: string;
@@ -23,6 +27,7 @@ export interface StepResult {
   action: string;
   status: "success" | "failed" | "skipped";
   result?: ToolResult;
+  subPlanResult?: ExecutionResult;
   error?: string;
   duration: number;
   timestamp: string;
@@ -38,6 +43,14 @@ export interface ExecutionOptions {
   publicKey?: string;
   strictMode?: boolean;
   durable?: boolean;
+  /** Capability grant to enforce for this execution */
+  capabilityGrant?: CapabilityGrant | string;
+  /** Sub-plan ID if this execution is a delegated sub-plan */
+  subPlanId?: string;
+  /** If true, every tool execution strictly requires a valid capability grant */
+  requireGrant?: boolean;
+  /** Specialist agent name */
+  targetAgent?: string;
 }
 
 export class PlanExecutor {
@@ -48,19 +61,27 @@ export class PlanExecutor {
     userId: string,
     options: ExecutionOptions = {}
   ): Promise<ExecutionResult> {
+    if (!plan || !plan.steps || !Array.isArray(plan.steps)) {
+      throw new Error("Invalid plan: steps must be an array");
+    }
+
     const startTime = Date.now();
-    
+    const shouldVerifyHash =
+      options.verifyHash !== undefined
+        ? options.verifyHash
+        : (plan as HashedPlan).planHash !== undefined;
+
     logger.info("Starting plan execution", {
       planId: plan.planId,
       userId,
       totalSteps: plan.totalSteps,
       dryRun: options.dryRun || false,
       hashVerification: options.verifyHash || false,
-      durable: options.durable || true,
+      durable: options.durable || false,
     });
 
-    // Verify plan hash before execution if enabled
-    if (options.verifyHash !== false) {
+    // Verify plan hash before execution if enabled or in strict mode
+    if (shouldVerifyHash || options.strictMode) {
       const verificationResult = this.verifyPlanIntegrity(
         plan as HashedPlan,
         options
@@ -72,8 +93,8 @@ export class PlanExecutor {
       }
     }
 
-    // Use durable execution by default unless dryRun is requested
-    if (options.durable !== false && !options.dryRun) {
+    // Use durable execution if explicitly requested and not in dryRun mode
+    if (options.durable === true && !options.dryRun) {
       const execution = await durableExecutor.startExecution(plan, userId);
       return {
         planId: plan.planId,
@@ -97,7 +118,12 @@ export class PlanExecutor {
           throw new Error(`Execution timeout after ${elapsed}ms`);
         }
 
-        const stepResult = await this.executeStep(step, userId, options);
+        const stepResult = await this.executeStep(
+          step,
+          userId,
+          plan.planId,
+          options
+        );
         stepResults.push(stepResult);
 
         if (stepResult.status === "success") {
@@ -145,9 +171,38 @@ export class PlanExecutor {
     }
   }
 
+  /**
+   * Execute a delegated sub-plan by strictly attenuating the parent capability grant
+   */
+  async executeSubPlan(
+    subPlan: ExecutionPlan,
+    parentGrant: CapabilityGrant | string,
+    userId: string,
+    options: ExecutionOptions = {}
+  ): Promise<ExecutionResult> {
+    const parent =
+      typeof parentGrant === "string"
+        ? capabilityManager.deserializeGrant(parentGrant)
+        : parentGrant;
+
+    // Attenuate parent grant for the delegated sub-plan
+    const subPlanGrant = capabilityManager.attenuateGrant({
+      parentGrant: parent,
+      subPlanId: subPlan.planId,
+      targetAgent: options.targetAgent,
+    });
+
+    return await this.executePlan(subPlan, userId, {
+      ...options,
+      capabilityGrant: subPlanGrant,
+      subPlanId: subPlan.planId,
+    });
+  }
+
   private async executeStep(
     step: PlanStep,
     userId: string,
+    planId: string,
     options: ExecutionOptions
   ): Promise<StepResult> {
     const startTime = Date.now();
@@ -173,10 +228,106 @@ export class PlanExecutor {
         };
       }
 
+      const activeGrant = step.capabilityGrant || options.capabilityGrant;
+      const targetAgent = step.delegatedAgent || options.targetAgent;
+
+      // Delegated sub-plan execution path
+      if (step.subPlan) {
+        logger.info("Executing delegated sub-plan for step", {
+          stepNumber: step.stepNumber,
+          subPlanId: step.subPlan.planId,
+          planId,
+          targetAgent,
+        });
+
+        let subPlanGrant: CapabilityGrant | undefined;
+        if (activeGrant) {
+          const parent =
+            typeof activeGrant === "string"
+              ? capabilityManager.deserializeGrant(activeGrant)
+              : activeGrant;
+
+          subPlanGrant = capabilityManager.attenuateGrant({
+            parentGrant: parent,
+            subPlanId: step.subPlan.planId,
+            stepNumber: step.stepNumber,
+            targetAgent,
+          });
+        }
+
+        const subPlanResult = await this.executePlan(step.subPlan, userId, {
+          ...options,
+          capabilityGrant: subPlanGrant,
+          subPlanId: step.subPlan.planId,
+          targetAgent,
+        });
+
+        return {
+          stepNumber: step.stepNumber,
+          action: step.action,
+          status: subPlanResult.status === "success" ? "success" : "failed",
+          subPlanResult,
+          error: subPlanResult.error,
+          duration: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      // Hard policy gate — LLM output is untrusted; every step must pass before execution
+      const policy = await policyEnforcer.enforce({
+        userId,
+        action: step.action,
+        payload: step.payload,
+        grant: activeGrant,
+        planId,
+        subPlanId: options.subPlanId,
+        stepNumber: step.stepNumber,
+        targetAgent,
+      });
+      if (!policy.allowed) {
+        return {
+          stepNumber: step.stepNumber,
+          action: step.action,
+          status: "failed",
+          error: `Policy denied: ${policy.reason}`,
+          duration: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      // Quote commitment deadline gate — fail-closed before tool dispatch
+      const stepDeadline = step.payload?.deadline as number | undefined;
+      if (stepDeadline && Math.floor(Date.now() / 1000) > stepDeadline) {
+        const err = new QuoteExpiredError(stepDeadline);
+        logger.warn("Step rejected: quote commitment expired", {
+          stepNumber: step.stepNumber,
+          action: step.action,
+          deadline: new Date(stepDeadline * 1000).toISOString(),
+        });
+        return {
+          stepNumber: step.stepNumber,
+          action: step.action,
+          status: "failed",
+          error: err.message,
+          duration: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
       const result = await toolRegistry.executeTool(
         step.action,
         step.payload,
-        userId
+        userId,
+        {
+          grant: activeGrant,
+          context: {
+            planId,
+            subPlanId: options.subPlanId,
+            stepNumber: step.stepNumber,
+            targetAgent,
+          },
+          requireGrant: options.requireGrant,
+        }
       );
 
       return {
@@ -190,6 +341,11 @@ export class PlanExecutor {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
+      logger.error("Step execution failed", {
+        stepNumber: step.stepNumber,
+        action: step.action,
+        error: errorMessage,
+      });
 
       return {
         stepNumber: step.stepNumber,
@@ -206,6 +362,7 @@ export class PlanExecutor {
     completedSteps: number,
     totalSteps: number
   ): "success" | "partial" | "failed" {
+    if (totalSteps === 0) return "failed";
     if (completedSteps === totalSteps) return "success";
     if (completedSteps > 0) return "partial";
     return "failed";
@@ -230,7 +387,7 @@ export class PlanExecutor {
     // Verify hash matches plan content
     const hashValid = planHashService.verifyPlanHash(plan);
     if (!hashValid) {
-      errors.push("Plan hash mismatch! Plan may have been tampered with.");
+      errors.push("Plan hash mismatch: plan hash mismatch detected");
       logger.error("Plan hash verification failed", {
         planId: plan.planId,
         expectedHash: plan.planHash,
@@ -253,6 +410,8 @@ export class PlanExecutor {
           signedBy: plan.signedBy,
         });
       }
+    } else if (options.publicKey && !plan.signature) {
+      errors.push("Invalid plan signature: plan is missing required signature");
     } else if (plan.signature && !options.publicKey) {
       warnings.push(
         "Plan has signature but no public key provided for verification"
@@ -263,6 +422,10 @@ export class PlanExecutor {
     if (options.strictMode) {
       if (plan.steps.length === 0) {
         errors.push("Plan has no steps");
+      }
+
+      if (plan.steps.some((s) => s.stepNumber <= 0)) {
+        errors.push("Step numbers must be positive integers starting from 1");
       }
 
       const stepNumbers = plan.steps.map((s) => s.stepNumber);
@@ -287,11 +450,38 @@ export class PlanExecutor {
   async rollback(
     plan: ExecutionPlan,
     executionResult: ExecutionResult
-  ): Promise<void> {
+  ): Promise<FailureState> {
     logger.info("Starting rollback", {
       planId: plan.planId,
       completedSteps: executionResult.completedSteps,
     });
+
+    if (executionResult.completedSteps === 0) {
+      logger.info("No completed steps to compensate", { planId: plan.planId });
+      return FailureState.RECOVERED;
+    }
+
+    // Build compensation plans for all completed steps
+    const compensationPlans = compensationService.buildCompensationPlans(
+      plan.steps.slice(0, executionResult.completedSteps)
+    );
+
+    logger.info("Compensation plans generated", {
+      planId: plan.planId,
+      plansCount: compensationPlans.length,
+      reversed: compensationPlans.map((p) => p.type),
+    });
+
+    // If we have an executionId from the result, delegate to CompensationService
+    if (executionResult.executionId) {
+      return compensationService.resumeCompensation(executionResult.executionId);
+    }
+
+    // Fallback: log that compensation was requested but no execution to compensate
+    logger.warn("Rollback requested but no executionId available", {
+      planId: plan.planId,
+    });
+    return FailureState.MANUAL_REVIEW;
   }
 }
 

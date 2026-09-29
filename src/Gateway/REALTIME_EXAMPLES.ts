@@ -351,7 +351,7 @@ export function exampleClientUsage() {
  * Example: Emitting updates when webhook events are received
  */
 export async function exampleWebhookIntegration(
-  webhookPayload: any,
+  webhookPayload: { type: string; data: Record<string, unknown> },
   userId: string
 ) {
   // When webhook is received, emit real-time update

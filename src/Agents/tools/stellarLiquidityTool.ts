@@ -47,6 +47,11 @@ interface LiquidityError {
 // ==============================
 //
 
+/**
+ * Validate liquidity input parameters
+ * @param input - The input containing assetCode and assetIssuer
+ * @throws Error if input is invalid
+ */
 function validateInput(input: StellarLiquidityInput) {
   if (!input.assetCode || input.assetCode.length > 12) {
     throw new Error("Invalid assetCode");
@@ -63,6 +68,11 @@ function validateInput(input: StellarLiquidityInput) {
 // ==============================
 //
 
+/**
+ * Fetch orderbook data from Stellar Horizon for an XLM trading pair
+ * @param input - The liquidity input with asset code and issuer
+ * @returns Orderbook with bids and asks
+ */
 async function fetchOrderBook(
   input: StellarLiquidityInput
 ): Promise<HorizonOrderBookResponse> {
@@ -87,6 +97,12 @@ async function fetchOrderBook(
 // ==============================
 //
 
+/**
+ * Compute liquidity metrics from orderbook data including spread, depth, and volume
+ * @param data - The orderbook response
+ * @param input - The original liquidity input
+ * @returns Computed liquidity metrics or error
+ */
 function computeLiquidityMetrics(
   data: HorizonOrderBookResponse,
   input: StellarLiquidityInput

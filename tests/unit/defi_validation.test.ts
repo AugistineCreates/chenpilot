@@ -1,5 +1,7 @@
+import { describe, it, expect, jest, beforeEach } from "@jest/globals";
 import { validateDeFiIntent } from "../../src/Agents/validationService";
 import { WorkflowStep } from "../../src/Agents/types";
+import { YieldBloxAdapter } from "../../src/Agents/tools/defi/YieldBloxAdapter";
 
 describe("validateDeFiIntent", () => {
   describe("Swap Intent Validation", () => {
@@ -695,6 +697,72 @@ describe("validateDeFiIntent", () => {
         })
       );
     });
+
+    it("should reject partial withdrawal that would breach YieldBlox collateral requirement", () => {
+      // suppliedCollateral=1000, borrowedValue=600, collateralFactor=0.75
+      // requiredCollateral = 600 / 0.75 = 800
+      // withdrawAmountUSD=300 → remaining=700 < 800 → reject
+      const intent: WorkflowStep = {
+        action: "withdraw",
+        payload: {
+          token: "USDC",
+          amount: 300,
+          suppliedCollateralUSD: 1000,
+          borrowedValueUSD: 600,
+          collateralFactor: 0.75,
+          withdrawAmountUSD: 300,
+        },
+      };
+
+      const result = validateDeFiIntent(intent);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContainEqual(
+        expect.objectContaining({
+          field: "amount",
+          code: "INSUFFICIENT_COLLATERAL_AFTER_WITHDRAW",
+        })
+      );
+    });
+
+    it("should allow partial withdrawal that leaves sufficient collateral", () => {
+      // requiredCollateral = 600 / 0.75 = 800; withdrawAmountUSD=100 → remaining=900 > 800
+      const intent: WorkflowStep = {
+        action: "withdraw",
+        payload: {
+          token: "USDC",
+          amount: 100,
+          suppliedCollateralUSD: 1000,
+          borrowedValueUSD: 600,
+          collateralFactor: 0.75,
+          withdrawAmountUSD: 100,
+        },
+      };
+
+      const result = validateDeFiIntent(intent);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("should warn when partial collateral context is provided but incomplete", () => {
+      const intent: WorkflowStep = {
+        action: "withdraw",
+        payload: {
+          token: "USDC",
+          amount: 100,
+          suppliedCollateralUSD: 1000,
+          // borrowedValueUSD and collateralFactor missing
+        },
+      };
+
+      const result = validateDeFiIntent(intent);
+
+      expect(result.isValid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining("Supply suppliedCollateralUSD")
+      );
+    });
   });
 
   describe("Invalid Action Validation", () => {
@@ -716,5 +784,94 @@ describe("validateDeFiIntent", () => {
         })
       );
     });
+  });
+});
+
+describe("YieldBloxAdapter — lending position mapping", () => {
+  let adapter: YieldBloxAdapter;
+
+  beforeEach(() => {
+    adapter = new YieldBloxAdapter();
+    // @ts-expect-error — reach into protected config to enable lending/borrowing
+    adapter.config = {
+      ...adapter.config,
+      capabilities: { lending: true, borrowing: true, swap: false, liquidity: false },
+    };
+  });
+
+  it("maps collateral and accruedInterest from a lending position", async () => {
+    // @ts-expect-error — stub protected method
+    adapter.fetchWithSchema = jest.fn().mockResolvedValue({
+      positions: [
+        {
+          token: "USDC",
+          supplied: "1000",
+          valueUSD: 1000,
+          supplyAPY: 0.05,
+          collateral: "XLM",
+          accruedInterest: "12.34",
+        },
+      ],
+    });
+
+    const result = await adapter.getLendingPositions("GADDR");
+
+    expect(result.success).toBe(true);
+    const pos = result.data![0];
+    expect(pos.token).toBe("USDC");
+    expect(pos.amount).toBe("1000");
+    expect(pos.collateral).toBe("XLM");
+    expect(pos.accruedInterest).toBe("12.34");
+  });
+
+  it("omits collateral and accruedInterest when absent from lending response", async () => {
+    // @ts-expect-error
+    adapter.fetchWithSchema = jest.fn().mockResolvedValue({
+      positions: [{ token: "USDC", supplied: "500", valueUSD: 500, supplyAPY: 0.04 }],
+    });
+
+    const result = await adapter.getLendingPositions("GADDR");
+
+    expect(result.success).toBe(true);
+    const pos = result.data![0];
+    expect(pos.collateral).toBeUndefined();
+    expect(pos.accruedInterest).toBeUndefined();
+  });
+
+  it("maps collateral and accruedInterest from a borrowing position", async () => {
+    // @ts-expect-error
+    adapter.fetchWithSchema = jest.fn().mockResolvedValue({
+      positions: [
+        {
+          token: "USDC",
+          borrowed: "500",
+          valueUSD: 500,
+          borrowAPY: 0.08,
+          collateral: "XLM",
+          accruedInterest: "3.21",
+        },
+      ],
+    });
+
+    const result = await adapter.getBorrowingPositions("GADDR");
+
+    expect(result.success).toBe(true);
+    const pos = result.data![0];
+    expect(pos.collateral).toBe("XLM");
+    expect(pos.accruedInterest).toBe("3.21");
+  });
+
+  it("omits collateral and accruedInterest when absent from borrowing response", async () => {
+    // @ts-expect-error
+    adapter.fetchWithSchema = jest.fn().mockResolvedValue({
+      positions: [{ token: "USDC", borrowed: "200", valueUSD: 200, borrowAPY: 0.07 }],
+    });
+
+    const result = await adapter.getBorrowingPositions("GADDR");
+
+    expect(result.success).toBe(true);
+    const pos = result.data![0];
+    expect(pos.collateral).toBeUndefined();
+    expect(pos.accruedInterest).toBeUndefined();
   });
 });

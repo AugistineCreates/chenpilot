@@ -14,6 +14,8 @@ import {
   SignatureProviderErrorRecovery,
   signatureProviderErrorRecovery,
   ProviderType,
+  ProviderConfig,
+  TransactionWorkflowEngine,
 } from "./index";
 import {
   SignatureProviderSDKConfig,
@@ -31,6 +33,7 @@ export class SignatureProviderSDK {
   private registry: SignatureProviderRegistry;
   private factory: SignatureProviderFactory;
   private coordinator: MultiSignatureCoordinator;
+  private workflowEngine: TransactionWorkflowEngine;
   private errorRecovery: SignatureProviderErrorRecovery;
   private metrics: Map<string, ProviderMetrics> = new Map();
   private healthChecks: Map<string, ProviderHealthCheck> = new Map();
@@ -42,6 +45,8 @@ export class SignatureProviderSDK {
       autoDiscovery: config.autoDiscovery ?? true,
       enableMetrics: config.enableMetrics ?? false,
       enableLogging: config.enableLogging ?? false,
+      connectionTimeout: config.connectionTimeout ?? 5000,
+      maxRetries: config.maxRetries ?? 3,
       errorRecovery: {
         enabled: config.errorRecovery?.enabled ?? true,
         maxRetries: config.errorRecovery?.maxRetries ?? 3,
@@ -57,6 +62,7 @@ export class SignatureProviderSDK {
     this.factory = signatureProviderFactory;
     this.coordinator = new MultiSignatureCoordinator();
     this.errorRecovery = signatureProviderErrorRecovery;
+    this.workflowEngine = new TransactionWorkflowEngine(this.registry, this.factory);
   }
 
   /**
@@ -585,7 +591,11 @@ export class SignatureProviderSDKBuilder {
     maxRetries?: number;
     retryDelay?: number;
   }): this {
-    this.config.errorRecovery = { ...this.config.errorRecovery, ...config };
+    this.config.errorRecovery = {
+      enabled: config.enabled ?? this.config.errorRecovery?.enabled ?? true,
+      maxRetries: config.maxRetries ?? this.config.errorRecovery?.maxRetries ?? 3,
+      retryDelay: config.retryDelay ?? this.config.errorRecovery?.retryDelay ?? 1000,
+    };
     return this;
   }
 

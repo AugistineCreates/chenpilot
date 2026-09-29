@@ -66,7 +66,11 @@ export class WebhookIdempotencyService {
       return true;
     } catch (error) {
       // Unique constraint violation means duplicate
-      if (error instanceof Error && error.message.includes("duplicate")) {
+      const pgError = error as { code?: string; message?: string };
+      if (
+        pgError.code === "23505" ||
+        (error instanceof Error && error.message.includes("duplicate"))
+      ) {
         return false;
       }
       throw error;

@@ -18,20 +18,6 @@ const LIQUIDITY_POOL_KEYWORDS = [
   "pool apr",
 ];
 
-const SOROBAN_KEYWORDS = [
-  "soroban",
-  "contract",
-  "invoke",
-  "call",
-  "stake",
-  "unstake",
-  "lend",
-  "borrow",
-  "staking",
-  "defi",
-  "lending",
-];
-
 const METHOD_KEYWORDS = ["stake", "unstake", "lend", "borrow"];
 
 export function parseSorobanIntent(input: string): WorkflowPlan | null {
@@ -73,7 +59,8 @@ export function parseSorobanIntent(input: string): WorkflowPlan | null {
     }
   }
 
-  const hasKeyword = SOROBAN_KEYWORDS.some((k) => text.includes(k));
+  const hasKeyword =
+    text.includes("soroban") || text.includes("soroban_invoke");
   const contractIdMatch = input.match(/\bC[A-Z0-9]{10,}\b/);
 
   if (!hasKeyword && !contractIdMatch) {

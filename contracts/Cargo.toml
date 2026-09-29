@@ -1,5 +1,9 @@
 [workspace]
 members = [
+    "diff_fuzz_engine",
+    "contract_failure",
+    "storage_policy",
+    "pause_state",
     "btc_relay",
     "btc_relay_crypto",
     "core_vault",
@@ -10,12 +14,27 @@ members = [
     "lending_liquidation",
     "liquidity_vault",
     "multi_hop_swap",
+    "oracle_aggregator",
     "por_validator",
+    "protocol_conservation",
     "rbac",
     "relayer_slashing",
     "strategy_registry",
+    "strategy_boundary",
+    "unified_auth",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+telemetry = { path = "telemetry" }
+opentelemetry = { version = "0.24", features = ["metrics", "trace"] }
+opentelemetry_sdk = { version = "0.24", features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.16" }
+
+[workspace.metadata.cardinality]
+# Per-metric-family budgets. Keys are metric family names.
+# `*` is the wildcard default.
+"*" = { max_unique_series = 100, max_label_count = 5, max_label_value_length = 64 }
 
 [profile.release]
 opt-level = "z"

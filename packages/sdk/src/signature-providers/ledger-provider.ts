@@ -1,4 +1,5 @@
 import { ChainId } from "../types";
+import { AbortSignalLike } from "../types";
 import { BaseSignatureProvider } from "./interfaces";
 import {
   SignatureRequest,
@@ -333,7 +334,7 @@ export class LedgerSignatureProvider extends BaseSignatureProvider {
     }
   }
 
-  async signTransaction(request: SignatureRequest): Promise<SignatureResult> {
+  async signTransaction(request: SignatureRequest, signal?: AbortSignalLike): Promise<SignatureResult> {
     this.log("Signing transaction:", request);
 
     if (!this.isConnected() || !this.transport) {
@@ -344,13 +345,13 @@ export class LedgerSignatureProvider extends BaseSignatureProvider {
 
     try {
       // Ensure correct app is open
-      await this.ensureAppOpen(chainId);
+      await this.ensureAppOpen(chainId, signal);
 
       // Validate transaction
       this.validateTransaction(request.transactionData);
 
       // Sign based on chain
-      const signature = await this.signTransactionForChain(request);
+      const signature = await this.signTransactionForChain(request, signal);
       const publicKey = await this.getPublicKeyForAccount(
         request.accountAddress,
         chainId
@@ -476,7 +477,7 @@ export class LedgerSignatureProvider extends BaseSignatureProvider {
     }
   }
 
-  private async ensureAppOpen(chainId: ChainId): Promise<void> {
+  private async ensureAppOpen(chainId: ChainId, signal?: AbortSignalLike): Promise<void> {
     const requiredApp = this.config.requiredApps?.[chainId];
     if (!requiredApp) {
       throw new UnsupportedChainError(chainId, this.providerId);
@@ -652,7 +653,8 @@ export class LedgerSignatureProvider extends BaseSignatureProvider {
   }
 
   private async signTransactionForChain(
-    request: SignatureRequest
+    request: SignatureRequest,
+    signal?: AbortSignalLike
   ): Promise<string> {
     if (!this.transport) {
       throw new Error("Transport not available");

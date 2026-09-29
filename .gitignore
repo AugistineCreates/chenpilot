@@ -1,14 +1,15 @@
-node_modules
-dist
+node_modules/
 .env
 .env.local
+.env
+redteam-report.json
 src/Auth/accounts.json
-logs/
-coverage/
 
-.agent/
-.agents/
-issue.md
-COMMIT.md
-contracts/target
-target
+# Dependencies and build output
+dist/
+coverage/
+logs/
+contracts/target/
+*.tsbuildinfo
+*.log
+.DS_Store

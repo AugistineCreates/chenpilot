@@ -44,6 +44,7 @@ export {
   AuthRequiredError,
   DecodeError,
   SigningError,
+  NetworkMismatchError,
   InvocationError,
 } from "./soroban/errors";
 

@@ -1,4 +1,5 @@
 import { ChainId } from "../types";
+import { AbortSignalLike } from "../types";
 import { BaseSignatureProvider } from "./interfaces";
 import {
   SignatureRequest,
@@ -19,6 +20,7 @@ import {
   NetworkError,
   SigningError,
 } from "./errors";
+import { abortableSleep } from "../abort";
 
 /**
  * Configuration options for MockSignatureProvider behavior
@@ -176,10 +178,10 @@ export class MockSignatureProvider extends BaseSignatureProvider {
     return accounts;
   }
 
-  async signTransaction(request: SignatureRequest): Promise<SignatureResult> {
+  async signTransaction(request: SignatureRequest, signal?: AbortSignalLike): Promise<SignatureResult> {
     this.log("Signing transaction:", request);
 
-    await this.simulateDelay(this.config.signingDelay);
+    await this.simulateDelay(this.config.signingDelay, signal);
     await this.simulateNetworkConditions();
 
     // Simulate user rejection
@@ -561,9 +563,9 @@ export class MockSignatureProvider extends BaseSignatureProvider {
     return `mock_msg_sig_${hash.substring(0, 16)}`;
   }
 
-  private async simulateDelay(ms?: number): Promise<void> {
+  private async simulateDelay(ms?: number, signal?: AbortSignalLike): Promise<void> {
     if (ms && ms > 0) {
-      await new Promise((resolve) => setTimeout(resolve, ms));
+      await abortableSleep(ms, signal);
     }
   }
 

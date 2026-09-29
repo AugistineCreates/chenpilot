@@ -1,0 +1,29 @@
+{
+  "contract": "liquidity_vault",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Config",
+      "storage_tier": "Instance",
+      "value_type": "Config",
+      "sample_value": {
+        "admin": "GADMIN0000000000000000000000000000000000000000000000000000",
+        "token_a": "CTOKENA000000000000000000000000000000000000000000000000000",
+        "token_b": "CTOKENB000000000000000000000000000000000000000000000000000",
+        "fee_bps": 30
+      }
+    },
+    {
+      "key_variant": "PoolState",
+      "storage_tier": "Instance",
+      "value_type": "PoolState",
+      "sample_value": {
+        "reserve_a": 5000000000000,
+        "reserve_b": 5000000000000,
+        "total_shares": 1000000000,
+        "last_update": 5000000
+      }
+    }
+  ]
+}

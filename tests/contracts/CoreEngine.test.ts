@@ -37,9 +37,13 @@ describe("CoreEngine Emergency Logic", function () {
       const { coreEngine, emergencyAccount } = await loadFixture(
         deployCoreEngineFixture
       );
-      await expect(coreEngine.connect(emergencyAccount).pause())
-        .to.emit(coreEngine, "EmergencyPaused")
-        .withArgs(emergencyAccount.address);
+      const receipt = await (await coreEngine.connect(emergencyAccount).pause()).wait();
+      const event = receipt.logs.find(
+        (l: { fragment?: { name?: string } }) => l.fragment?.name === "EmergencyPaused"
+      );
+      expect(event).to.not.be.undefined;
+      expect(event!.args[0]).to.equal(1);
+      expect(event!.args[1]).to.equal(emergencyAccount.address);
       expect(await coreEngine.isEmergencyPaused()).to.be.true;
     });
 
@@ -59,9 +63,13 @@ describe("CoreEngine Emergency Logic", function () {
         deployCoreEngineFixture
       );
       await coreEngine.connect(emergencyAccount).pause();
-      await expect(coreEngine.connect(emergencyAccount).unpause())
-        .to.emit(coreEngine, "EmergencyUnpaused")
-        .withArgs(emergencyAccount.address);
+      const receipt = await (await coreEngine.connect(emergencyAccount).unpause()).wait();
+      const event = receipt.logs.find(
+        (l: { fragment?: { name?: string } }) => l.fragment?.name === "EmergencyUnpaused"
+      );
+      expect(event).to.not.be.undefined;
+      expect(event!.args[0]).to.equal(1);
+      expect(event!.args[1]).to.equal(emergencyAccount.address);
       expect(await coreEngine.isEmergencyPaused()).to.be.false;
     });
   });
@@ -115,9 +123,16 @@ describe("CoreEngine Emergency Logic", function () {
 
       // Withdraw principal
       const initialBalance = await token.balanceOf(user.address);
-      await expect(coreEngine.connect(user).emergencyWithdraw(tokenAddress))
-        .to.emit(coreEngine, "EmergencyWithdrawn")
-        .withArgs(user.address, tokenAddress, depositAmount);
+      const receipt = await (await coreEngine.connect(user).emergencyWithdraw(tokenAddress)).wait();
+      const event = receipt.logs.find(
+        (l: { fragment?: { name?: string } }) => l.fragment?.name === "EmergencyWithdrawn"
+      );
+      expect(event).to.not.be.undefined;
+      expect(event!.args[0]).to.equal(1);
+      expect(event!.args[1]).to.equal(user.address);
+      expect(event!.args[2]).to.equal(user.address);
+      expect(event!.args[3]).to.equal(tokenAddress);
+      expect(event!.args[4]).to.equal(depositAmount);
 
       expect(await token.balanceOf(user.address)).to.equal(
         initialBalance + depositAmount

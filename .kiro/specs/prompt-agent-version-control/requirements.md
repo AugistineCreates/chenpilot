@@ -310,3 +310,18 @@ This document specifies requirements for evolving the existing basic prompt vers
 3. THE Version_Control_System SHALL allow gradually migrating existing versions to use new features
 4. THE Version_Control_System SHALL maintain backward compatibility with existing API endpoints
 5. THE Version_Control_System SHALL support both legacy weight-based routing and new policy-based routing simultaneously
+
+### Requirement 21: Authoritative Entity Resolution and Registry Provenance
+
+**User Story:** As a platform operator, I want every executable entity referenced by a prompt, agent, contract, or adapter to be resolved through authoritative registries, so that hallucinated or ambiguous values can never reach simulation or execution.
+
+#### Acceptance Criteria
+
+1. THE Version_Control_System SHALL resolve every executable entity through authoritative registries before allowing simulation or execution
+2. THE Version_Control_System SHALL treat asset tickers, issuers, contract addresses, networks, adapter capabilities, and protocol capabilities as executable entities
+3. WHEN an executable entity is referenced in a plan, THE Version_Control_System SHALL bind the resolved identifier from the authoritative registry into the plan
+4. IF an executable entity cannot be resolved, THEN THE Version_Control_System SHALL reject the plan and prevent simulation or execution
+5. WHEN an executable entity symbol is ambiguous, THE Version_Control_System SHALL require explicit user selection before continuing
+6. THE Version_Control_System SHALL include registry provenance and freshness metadata in all approval data for resolved executable entities
+7. THE Version_Control_System SHALL reject any executable entity whose authoritative registry record is expired or stale
+8. THE Version_Control_System SHALL include adversarial tests covering look-alike symbols and fabricated addresses in its validation suite

@@ -1,0 +1,324 @@
+{
+  "contract": "unified_auth",
+  "source": "contracts/unified_auth/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.622Z",
+  "ttl_constants": {},
+  "data_key_variants": [
+    {
+      "key_variant": "SuperAdmin",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "HasRole",
+      "value_type": "unknown",
+      "storage_tier": "unknown",
+      "key_payload": "Address, UnifiedRole"
+    },
+    {
+      "key_variant": "RegisteredContract",
+      "value_type": "unknown",
+      "storage_tier": "unknown",
+      "key_payload": "ContractId"
+    },
+    {
+      "key_variant": "EmergencyState",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "ContractAddress",
+      "value_type": "unknown",
+      "storage_tier": "unknown",
+      "key_payload": "ContractId"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "EmergencyState",
+      "fields": [
+        {
+          "name": "is_emergency",
+          "rust_type": "bool"
+        },
+        {
+          "name": "triggered_by",
+          "rust_type": "Address"
+        },
+        {
+          "name": "triggered_at",
+          "rust_type": "u64"
+        },
+        {
+          "name": "reason",
+          "rust_type": "EmergencyReason"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "super_admin",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtRoleGranted",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "to",
+          "rust_type": "Address"
+        },
+        {
+          "name": "role",
+          "rust_type": "UnifiedRole"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtRoleRevoked",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "from",
+          "rust_type": "Address"
+        },
+        {
+          "name": "role",
+          "rust_type": "UnifiedRole"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtAdminTransferred",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "old_admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "new_admin",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtEmergencyTriggered",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "reason",
+          "rust_type": "EmergencyReason"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtEmergencyEnded",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtContractRegistered",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "contract_id",
+          "rust_type": "ContractId"
+        },
+        {
+          "name": "contract_address",
+          "rust_type": "Address"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtContractUnregistered",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "contract_id",
+          "rust_type": "ContractId"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "UnifiedRole",
+      "fields": [],
+      "variants": [
+        {
+          "name": "SuperAdmin"
+        },
+        {
+          "name": "EmergencyAdmin"
+        },
+        {
+          "name": "VaultAdmin"
+        },
+        {
+          "name": "UpgradeAdmin"
+        },
+        {
+          "name": "StrategyAdmin"
+        },
+        {
+          "name": "RoleAdmin"
+        },
+        {
+          "name": "OracleProvider"
+        },
+        {
+          "name": "AgentOperator"
+        },
+        {
+          "name": "StrategyOperator"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "ContractId",
+      "fields": [],
+      "variants": [
+        {
+          "name": "CoreVault"
+        },
+        {
+          "name": "Rbac"
+        },
+        {
+          "name": "StrategyRegistry"
+        },
+        {
+          "name": "StrategyBoundary"
+        },
+        {
+          "name": "LiquidityVault"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "EmergencyReason",
+      "fields": [],
+      "variants": [
+        {
+          "name": "ExploitDetected"
+        },
+        {
+          "name": "OracleFailure"
+        },
+        {
+          "name": "BackendOffline"
+        },
+        {
+          "name": "GovernanceDecision"
+        }
+      ]
+    }
+  ]
+}

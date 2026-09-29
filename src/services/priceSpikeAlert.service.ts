@@ -2,6 +2,7 @@ import logger from "../config/logger";
 import priceCacheService from "./priceCache.service";
 import { agentLLM } from "../Agents/agent";
 import { BotUpdateHelper } from "../Gateway/realtimeIntegration";
+import { createBudget, budgetedFetch, BudgetExhaustedError } from "../utils/budget";
 
 // Spike threshold — alert when price moves more than this % in one interval
 const SPIKE_THRESHOLD_PCT = 5;
@@ -21,15 +22,26 @@ interface NewsItem {
   published_at: string;
 }
 
+const NEWS_BUDGET = createBudget({
+  deadlineMs: 8000,
+  attempts: 2,
+  bytes: 512 * 1024,
+  downstreamCalls: 5,
+  path: "priceSpike.news",
+});
+
 // Fetch recent crypto news from CryptoPanic (free, no key needed for basic feed)
 async function fetchNews(asset: string): Promise<NewsItem[]> {
   try {
     const url = `https://cryptopanic.com/api/v1/posts/?auth_token=free&currencies=${asset}&kind=news&public=true`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await budgetedFetch(NEWS_BUDGET, url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return [];
     const data = (await res.json()) as { results?: NewsItem[] };
     return (data.results ?? []).slice(0, MAX_NEWS_ITEMS);
-  } catch {
+  } catch (error) {
+    if (error instanceof BudgetExhaustedError) {
+      logger.warn("News fetch budget exhausted", { asset, resource: error.resource });
+    }
     return [];
   }
 }

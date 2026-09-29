@@ -3,6 +3,8 @@ import {
   RateLimitCheckResult,
   RateLimiterStatus,
 } from "./types";
+import type { AbortSignalLike } from "./types";
+import { abortableSleep } from "./abort";
 
 /**
  * Token bucket rate limiter.
@@ -80,18 +82,18 @@ export class RateLimiter {
    * Useful as a guard before making API calls.
    *
    * @param endpoint - Optional endpoint identifier for per-endpoint limiting
+   * @param signal - Optional signal to cancel the wait. The pending delay is
+   *                 interrupted and the promise rejects with `AbortError`.
    * @example
    * ```typescript
    * await limiter.acquire("getTransaction");
    * // Safe to make RPC call now
    * ```
    */
-  async acquire(endpoint?: string): Promise<void> {
+  async acquire(endpoint?: string, signal?: AbortSignalLike): Promise<void> {
     let result = this.checkLimit(endpoint);
     while (!result.allowed) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, result.retryAfterMs + 1)
-      );
+      await abortableSleep(result.retryAfterMs + 1, signal);
       result = this.checkLimit(endpoint);
     }
   }

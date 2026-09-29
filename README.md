@@ -1,13 +1,14 @@
 # Chen Pilot — Autonomous AI Agent for Multi-Chain DeFi
-
 Chen Pilot is a sophisticated AI-driven gateway that enables seamless interaction with blockchain networks and DeFi protocols through natural language. It provides a unified, professional interface for managing Bitcoin assets, Stellar operations, cross-chain liquidity swaps, and lending protocols.
 
 ---
 
 ## Prerequisites
 
-- Node.js 18+
-- PostgreSQL database
+- **Node.js 18+** — required by TypeScript 5.7+, ESLint 9.x
+- **PostgreSQL 14+** — required by TypeORM 0.3.x with pg 8.x
+- **Redis 6+** — required for the distributed trade-locking system (`src/services/lock`); **not optional**
+- **pnpm 8+** — required for monorepo workspace management
 - Environment variables configured (see Configuration section)
 
 ---
@@ -316,12 +317,94 @@ REDIS_DB=0
 
 ---
 
+## Health Endpoints
+
+Chen Pilot exposes two operations-facing probes with different purposes:
+
+- `GET /health` is a liveness probe. It returns HTTP `200` with a lightweight
+  `{ status, timestamp }` payload while the process is up.
+- `GET /ready` is a readiness probe. It returns a full dependency report and
+  uses HTTP `503` when a critical dependency is down.
+
+The current readiness report includes:
+
+- `database`
+- `redis`
+- `horizon`
+- `sorobanRpc`
+- `email`
+- `llm`
+
+Each dependency includes `status`, `latencyMs`, and optional `error` or
+`detail` fields. `database` and `redis` are treated as critical. Redis and
+Soroban RPC connectivity are therefore visible directly in the readiness
+payload, rather than being collapsed into a single boolean.
+
+For contributor-facing operational detail, see
+`docs/SYSTEMS_HANDBOOK.md#health-and-readiness-endpoints`.
+
+## WebSocket Flow Control and Slow-Consumer Eviction
+
+The Gateway realtime API uses bounded per-socket buffers. Each connected
+client has a fixed `maxBufferSize` (default 1000 events) and a per-subscription
+cursor. When a client stops reading, the socket buffer fills and the Gateway:
+
+- Pauses event delivery to that socket.
+- Marks the consumer as stalled after `stallTimeoutMs` (default 30s).
+- Disconnects stalled consumers with a `4408` close code and `slow-consumer`
+  reason.
+- Retains the last delivered cursor so the client can resume after reconnect.
+
+Event classes are documented as either critical or lossy:
+
+- Critical events (transaction status, user balance updates, execution
+  results) are retained in Redis Streams and replayed from the validated
+  cursor after reconnect.
+- Lossy events (ticker prices, order book snapshots, non-critical
+  notifications) are delivered best-effort; a stalled consumer may miss them
+  and must resubscribe for the latest snapshot.
+
+Reconnect resumes from a validated cursor:
+
+- The client sends `{ cursor }` in the subscribe frame.
+- The Gateway validates that the cursor belongs to the authenticated user's
+  session before replay.
+- Replay is bounded by `maxReplayEventsPerSocket`; older events require a
+  fresh snapshot.
+
+Load tests cover fan-out, disconnect storms, and stalled consumers under
+`test/load/realtime-flow-control.load.ts`.
+
+## Rate Limiting In Multi-Instance Deployments
+
+Gateway rate limiting is configured in
+`src/Gateway/middleware/rateLimiter.service.ts`.
+
+- The primary `express-rate-limit` store is Redis-backed via `rate-limit-redis`
+  and `getRedisClient()`.
+- This allows request counters to be shared across multiple API instances when
+  they point at the same Redis deployment.
+- If Redis-backed limiter creation fails, the service currently falls back to
+  the default in-memory store. That keeps one node serving traffic, but it no
+  longer enforces a shared limit across a horizontally scaled fleet.
+
+Operators should treat the in-memory fallback as a degraded mode and restore
+Redis connectivity before relying on cluster-wide request ceilings.
+
+---
+
 ## Contributing
 
 - Fork the repository
 - Create a feature branch
 - Make your changes
 - Ensure pre-commit and commit message checks pass
+- Run `npm audit fix` and commit the lockfile if the dependency audit check
+  fails.
+- Run `npx prettier --write "src/Agents/**"` if the Prettier CI check fails.
+- Run `npx eslint src/Agents/sandbox/ src/Agents/registry/ src/Agents/planner/ --max-warnings 0`
+  if the ESLint CI check fails; resolve all reported `prefer-const` and
+  `@typescript-eslint/no-unused-vars` errors before submitting.
 - Add tests if applicable
 - Submit a pull request
 
@@ -338,7 +421,7 @@ This project is licensed under the ISC License.
 For technical support and community inquiries:
 
 - Create an issue in the repository
-- Monitor the API health and status endpoints
+- Monitor `/health` for liveness and `/ready` for dependency-level readiness
 - Review the logs for error details
 
 ---

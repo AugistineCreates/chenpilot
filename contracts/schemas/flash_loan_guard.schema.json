@@ -1,0 +1,461 @@
+{
+  "contract": "flash_loan_guard",
+  "source": "contracts/flash_loan_guard/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.548Z",
+  "ttl_constants": {
+    "PRICE_SNAPSHOT_TTL_LEDGERS": 172800
+  },
+  "data_key_variants": [
+    {
+      "key_variant": "Config",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "LastSnapshotLedger",
+      "value_type": "unknown",
+      "storage_tier": "unknown"
+    },
+    {
+      "key_variant": "PriceSnapshot",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "OracleFreshness",
+      "value_type": "unknown",
+      "storage_tier": "unknown"
+    },
+    {
+      "key_variant": "PriceSequenceHistory",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "CircuitBreaker",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "Config",
+      "fields": [
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "guarded_asset",
+          "rust_type": "Address"
+        },
+        {
+          "name": "max_intra_ledger_deviation_bps",
+          "rust_type": "i128"
+        },
+        {
+          "name": "min_ledger_gap",
+          "rust_type": "u32"
+        },
+        {
+          "name": "max_oracle_staleness_seconds",
+          "rust_type": "u64"
+        },
+        {
+          "name": "max_consecutive_price_change_bps",
+          "rust_type": "i128"
+        },
+        {
+          "name": "max_oracle_update_gap_seconds",
+          "rust_type": "u64"
+        },
+        {
+          "name": "circuit_breaker_threshold_bps",
+          "rust_type": "i128"
+        },
+        {
+          "name": "circuit_breaker_window_seconds",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "PriceSnapshot",
+      "fields": [
+        {
+          "name": "price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "oracle_timestamp",
+          "rust_type": "u64"
+        },
+        {
+          "name": "oracle_sequence",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "CircuitBreakerState",
+      "fields": [
+        {
+          "name": "triggered",
+          "rust_type": "bool"
+        },
+        {
+          "name": "trigger_ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "trigger_timestamp",
+          "rust_type": "u64"
+        },
+        {
+          "name": "consecutive_violations",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "guarded_asset",
+          "rust_type": "Address"
+        },
+        {
+          "name": "max_intra_ledger_deviation_bps",
+          "rust_type": "i128"
+        },
+        {
+          "name": "min_ledger_gap",
+          "rust_type": "u32"
+        },
+        {
+          "name": "max_oracle_staleness_seconds",
+          "rust_type": "u64"
+        },
+        {
+          "name": "max_consecutive_price_change_bps",
+          "rust_type": "i128"
+        },
+        {
+          "name": "max_oracle_update_gap_seconds",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtCfgUpd",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "guarded_asset",
+          "rust_type": "Address"
+        },
+        {
+          "name": "max_intra_ledger_deviation_bps",
+          "rust_type": "i128"
+        },
+        {
+          "name": "min_ledger_gap",
+          "rust_type": "u32"
+        },
+        {
+          "name": "max_oracle_staleness_seconds",
+          "rust_type": "u64"
+        },
+        {
+          "name": "max_consecutive_price_change_bps",
+          "rust_type": "i128"
+        },
+        {
+          "name": "max_oracle_update_gap_seconds",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtSnapshot",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "oracle_timestamp",
+          "rust_type": "u64"
+        },
+        {
+          "name": "oracle_sequence",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtStalePrc",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle_timestamp",
+          "rust_type": "u64"
+        },
+        {
+          "name": "current_time",
+          "rust_type": "u64"
+        },
+        {
+          "name": "max_staleness",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtSeqAttk",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "prev_seq",
+          "rust_type": "u64"
+        },
+        {
+          "name": "new_seq",
+          "rust_type": "u64"
+        },
+        {
+          "name": "price_diff",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtStaleUpd",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "prev_timestamp",
+          "rust_type": "u64"
+        },
+        {
+          "name": "current_time",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtPriceSafe",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "snap_price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "current_price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "deviation_bps",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtStaleChk",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "snap_timestamp",
+          "rust_type": "u64"
+        },
+        {
+          "name": "current_time",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtTimEdge",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "snap_ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "current_ledger",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtFlashBlk",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "snap_price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "current_price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "deviation_bps",
+          "rust_type": "i128"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "contract": "lending_liquidation",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Config",
+      "storage_tier": "Instance",
+      "value_type": "Config",
+      "sample_value": {
+        "admin": "GADMIN0000000000000000000000000000000000000000000000000000",
+        "oracle": "CORACLE000000000000000000000000000000000000000000000000000",
+        "collateral_token": "CCOLLAT000000000000000000000000000000000000000000000000000",
+        "debt_token": "CDEBT00000000000000000000000000000000000000000000000000000",
+        "min_health_factor": 12000,
+        "liquidation_bonus_bps": 500,
+        "ltv_bps": 8000
+      }
+    },
+    {
+      "key_variant": "Position",
+      "key_payload": "Address",
+      "storage_tier": "Persistent",
+      "value_type": "Position",
+      "sample_value": {
+        "collateral_amount": 10000000000,
+        "debt_amount": 7500000000
+      }
+    }
+  ]
+}

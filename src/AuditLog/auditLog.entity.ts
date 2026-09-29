@@ -73,6 +73,19 @@ export enum AuditAction {
   BOT_COMMAND_VALIDATE = "bot_command_validate",
   BOT_COMMAND_BALANCE = "bot_command_balance",
   BOT_COMMAND_SWAP = "bot_command_swap",
+  BOT_COMMAND_PORTFOLIO = "bot_command_portfolio",
+
+  // Bot identity linking
+  BOT_IDENTITY_LINKED = "bot_identity_linked",
+  BOT_IDENTITY_UNLINKED = "bot_identity_unlinked",
+  BOT_LINK_TOKEN_GENERATED = "bot_link_token_generated",
+  BOT_LINK_TOKEN_VERIFIED = "bot_link_token_verified",
+
+  // Wallet ownership challenges
+  WALLET_CHALLENGE_ISSUED = "wallet_challenge_issued",
+  WALLET_CHALLENGE_VERIFIED = "wallet_challenge_verified",
+  WALLET_CHALLENGE_REPLAY = "wallet_challenge_replay",
+  WALLET_CHALLENGE_SIGNATURE_FAILED = "wallet_challenge_signature_failed",
 }
 
 export enum AuditSeverity {

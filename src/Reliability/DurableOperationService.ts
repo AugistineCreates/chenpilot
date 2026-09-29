@@ -2,8 +2,9 @@ import { AppDataSource } from "../config/Datasource";
 import { DurableOperation, OperationStatus } from "./DurableOperation.entity";
 import logger from "../config/logger";
 import { Repository, LessThanOrEqual, IsNull, Or } from "typeorm";
+import { loadShedder, TrafficClass } from "./AdaptiveLoadShedder";
 
-export type OperationHandler = (payload: any) => Promise<any>;
+export type OperationHandler<T = unknown> = (payload: unknown) => Promise<T>;
 
 export class DurableOperationService {
   private repository: Repository<DurableOperation>;
@@ -17,7 +18,7 @@ export class DurableOperationService {
   /**
    * Register a handler for a specific category of operations
    */
-  registerHandler(category: string, handler: OperationHandler): void {
+  registerHandler(category: string, handler: OperationHandler<unknown>): void {
     this.handlers.set(category, handler);
     logger.info(`Registered handler for durable operation category: ${category}`);
   }
@@ -25,13 +26,13 @@ export class DurableOperationService {
   /**
    * Execute an operation with idempotency
    */
-  async execute<T = any>(options: {
+  async execute<T = unknown>(options: {
     category: string;
     idempotentKey?: string;
-    payload: any;
+    payload: unknown;
     maxRetries?: number;
     scheduledAt?: Date;
-    conditions?: Record<string, any>;
+    conditions?: Record<string, unknown>;
   }): Promise<T | null> {
     const { category, idempotentKey, payload, maxRetries, scheduledAt, conditions } = options;
 
@@ -92,14 +93,21 @@ export class DurableOperationService {
     operation.status = OperationStatus.RUNNING;
     await this.repository.save(operation);
 
+    // Observe execution latency against the load shedder so admission control
+    // reacts to real dependency slowdowns instead of static guesses.
+    const startedAt = Date.now();
     try {
       const result = await handler(operation.payload);
+      loadShedder.observeDependencyLatency(Date.now() - startedAt);
+      loadShedder.observeSuccess();
       operation.status = OperationStatus.COMPLETED;
       operation.result = result;
       operation.completedAt = new Date();
       await this.repository.save(operation);
       logger.info(`Successfully completed durable operation ${id}`, { category: operation.category });
     } catch (error) {
+      loadShedder.observeDependencyLatency(Date.now() - startedAt);
+      loadShedder.observeError();
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       operation.retries++;
       operation.errorMessage = errorMessage;
@@ -157,21 +165,40 @@ export class DurableOperationService {
         const isReady = await this.evaluateConditions(op.conditions);
         if (!isReady) continue;
       }
-      
-      this.runOperation(op.id).catch(err => {
-        logger.error(`Error in background processor for operation ${op.id}`, { error: err });
-      });
+
+      // Adaptive load shedding: retries / recovery work are reserved capacity
+      // and are always admitted; brand-new execution work is shed when the
+      // system is overloaded so critical paths never saturate. Rejected work is
+      // simply deferred to the next background tick rather than dropped.
+      const admissionClass = op.nextRetryAt ? TrafficClass.RECOVERY : TrafficClass.EXECUTION;
+      const decision = loadShedder.admit(admissionClass, pending.length);
+      if (!decision.allowed) {
+        logger.debug(
+          `Shedding operation ${op.id} (${admissionClass}): ${decision.reason}, retry in ${decision.retryAfterMs}ms`,
+        );
+        continue;
+      }
+
+      this.runOperation(op.id)
+        .finally(() => loadShedder.release(admissionClass))
+        .catch(err => {
+          logger.error(`Error in background processor for operation ${op.id}`, { error: err });
+        });
     }
   }
 
-  private async evaluateConditions(conditions: Record<string, any>): Promise<boolean> {
+  private async evaluateConditions(conditions: Record<string, unknown>): Promise<boolean> {
     // This can be expanded to check network fees, congestion, etc.
     if (conditions.strategy === "fee_based") {
       // Placeholder for actual fee check
       return true; 
     }
     if (conditions.strategy === "congestion_based") {
-      return true;
+      // Reflect the real admission-control state: when shedding, congestion is
+      // high and the operation is deferred to a later tick (or admission is
+      // requested directly for critical classes).
+      const klass = conditions.class === TrafficClass.RECOVERY ? TrafficClass.RECOVERY : TrafficClass.EXECUTION;
+      return loadShedder.admit(klass).allowed;
     }
     return true; 
   }

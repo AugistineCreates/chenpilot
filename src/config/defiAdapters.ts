@@ -54,6 +54,17 @@ export interface DeFiAdapterConfig {
     maxAttempts: number;
     backoffMs: number;
   };
+  /**
+   * Default-deny egress manifest. Adapters may only reach the hosts below
+   * over the listed protocols; the egress layer additionally blocks
+   * loopback/link-local/private/metadata/IPv6-mapped addresses and
+   * re-validates every redirect and every resolved IP.
+   */
+  egress?: {
+    allowedHosts: string[];
+    allowedProtocols: string[];
+    maxConcurrentRequests?: number;
+  };
 }
 
 /**
@@ -161,6 +172,7 @@ function createAdapterConfig(
         defaults.retry?.backoffMs ?? 1000
       ),
     },
+    egress: defaults.egress,
   };
 }
 
@@ -197,6 +209,11 @@ const DEFAULT_ADAPTERS: Record<DeFiProtocol, Partial<DeFiAdapterConfig>> = {
       maxAttempts: 3,
       backoffMs: 1000,
     },
+    egress: {
+      allowedHosts: ["api.equilibre.io"],
+      allowedProtocols: ["https:"],
+      maxConcurrentRequests: 4,
+    },
   },
   yieldblox: {
     id: "yieldblox",
@@ -226,6 +243,11 @@ const DEFAULT_ADAPTERS: Record<DeFiProtocol, Partial<DeFiAdapterConfig>> = {
     retry: {
       maxAttempts: 3,
       backoffMs: 1000,
+    },
+    egress: {
+      allowedHosts: ["api.yieldblox.io"],
+      allowedProtocols: ["https:"],
+      maxConcurrentRequests: 4,
     },
   },
 };

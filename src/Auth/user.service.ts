@@ -4,6 +4,7 @@ import { User } from "./user.entity";
 import AppDataSource from "../config/Datasource";
 import { generateStellarKeypair } from "./stellar.service";
 import { encrypt, decrypt } from "../utils/encryption";
+import { SecretBuffer } from "../utils/secretBuffer";
 import { ConflictError, BadError } from "../utils/error";
 
 interface CreateUserPayload {
@@ -79,13 +80,46 @@ export default class UserService {
     return this.userRepository.findOne({ where: { name } });
   }
 
-  async getDecryptedPrivateKey(userId: string): Promise<string | null> {
+  /**
+   * Returns the decrypted private key wrapped in a SecretBuffer.
+   * Callers MUST call `destroy()` on the returned buffer when done.
+   *
+   * @deprecated Prefer `withDecryptedPrivateKey()` for safe lifecycle management.
+   */
+  async getDecryptedPrivateKey(userId: string): Promise<SecretBuffer | null> {
     const user = await this.userRepository.findOne({
       where: { id: userId },
       select: ["encryptedPrivateKey"],
     });
 
     if (!user || !user.encryptedPrivateKey) return null;
-    return decrypt(user.encryptedPrivateKey);
+    const plaintext = decrypt(user.encryptedPrivateKey);
+    return SecretBuffer.fromString(plaintext, `user-key:${userId}`);
+  }
+
+  /**
+   * Safely consume the decrypted private key with automatic zeroization.
+   *
+   * @example
+   * ```ts
+   * const txHash = await user.withDecryptedPrivateKey(userId, async (secret) => {
+   *   return secret.consumeString(async (plainKey) => {
+   *     const kp = Keypair.fromSecret(plainKey);
+   *     // …sign transaction…
+   *   });
+   * });
+   * ```
+   */
+  async withDecryptedPrivateKey<T>(
+    userId: string,
+    fn: (secret: SecretBuffer) => Promise<T> | T,
+  ): Promise<T | null> {
+    const secret = await this.getDecryptedPrivateKey(userId);
+    if (!secret) return null;
+    try {
+      return await fn(secret);
+    } finally {
+      secret.destroy();
+    }
   }
 }

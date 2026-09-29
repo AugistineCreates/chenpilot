@@ -51,6 +51,18 @@ export class AgentExecutionMetrics {
   @Column({ type: "integer", nullable: true })
   tokensUsed?: number;
 
+  @Column({ type: "integer", nullable: true })
+  inputTokens?: number;
+
+  @Column({ type: "integer", nullable: true })
+  outputTokens?: number;
+
+  @Column({ type: "decimal", precision: 18, scale: 8, nullable: true })
+  estimatedCostUsd?: number;
+
+  @Column({ type: "boolean", default: false })
+  tokenUsageAnomalous!: boolean;
+
   @Column({ type: "integer", default: 0 })
   stepsCompleted!: number;
 

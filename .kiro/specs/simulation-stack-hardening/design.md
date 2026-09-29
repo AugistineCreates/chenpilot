@@ -13,6 +13,7 @@ The Simulation Stack Hardening feature transforms the existing simulation infras
 5. **High Fidelity**: Ensure simulation results closely match real network behavior
 6. **Performance**: Maintain sub-200ms execution times for complex operations
 7. **Production Readiness**: Provide validation, safety checks, and serialization for production use
+8. **Entity Integrity**: Resolve all assets, contracts, and protocol capabilities through authoritative registries, reject hallucinated or ambiguous entities, require explicit user selection for ambiguous symbols, and include registry provenance/freshness in approval data.
 
 ### Key Architectural Principles
 
@@ -49,6 +50,7 @@ graph TB
 
     SE --> CV[ConfigValidator]
     SE --> PG[PreviewGenerator]
+    SE --> ER[EntityResolver]
 ```
 
 ### Component Responsibilities
@@ -73,6 +75,7 @@ graph TB
 | `JSONSerializer`                 | Trace and snapshot serialization                   | New          |
 | `ConfigValidator`                | Configuration validation and safety checks         | New          |
 | `PreviewGenerator`               | Human-readable execution previews                  | New          |
+| `EntityResolver`                 | Resolve assets, contracts, and protocols via authoritative registries; reject hallucinated or ambiguous entities; require explicit user selection for ambiguous symbols; include registry provenance/freshness in approval data | New          |
 
 ## Components and Interfaces
 

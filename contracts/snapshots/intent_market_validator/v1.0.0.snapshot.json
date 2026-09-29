@@ -1,0 +1,15 @@
+{
+  "contract": "intent_market_validator",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "Config",
+      "storage_tier": "Instance",
+      "value_type": "ValidationConfig",
+      "sample_value": {
+        "threshold_bps": 50
+      }
+    }
+  ]
+}

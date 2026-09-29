@@ -4,6 +4,7 @@ import { toolRegistry } from "../registry/ToolRegistry";
 import { ToolResult } from "../registry/ToolMetadata";
 import { memoryStore } from "../memory/memory";
 import { responseAgent } from "./responseagent";
+import { policyEnforcer } from "../policy/PolicyEnforcer";
 import logger from "../../config/logger";
 import { withTimeout, TimeoutError } from "../../utils/timeout";
 import config from "../../config/config";
@@ -93,6 +94,24 @@ export class ExecutionAgent {
           userId,
           remainingTime,
         });
+
+        // Hard policy gate — LLM output is untrusted; every step must pass before execution
+        const policy = await policyEnforcer.enforce({
+          userId,
+          action: step.action,
+          payload: step.payload,
+        });
+        if (!policy.allowed) {
+          logger.warn("Policy denied step in workflow", { userId, action: step.action, reason: policy.reason });
+          results.push({
+            action: step.action,
+            status: "error",
+            error: `Policy denied: ${policy.reason}`,
+            data: { payload: step.payload },
+          });
+          continue;
+        }
+
         const result = await toolRegistry.executeTool(
           step.action,
           step.payload,

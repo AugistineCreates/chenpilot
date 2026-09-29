@@ -1,4 +1,4 @@
-_// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
@@ -11,9 +11,10 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
  */
 abstract contract EmergencyControl is AccessControl, Pausable {
     bytes32 public constant EMERGENCY_ROLE = keccak256("EMERGENCY_ROLE");
+    uint256 public constant EVENT_VERSION = 1;
 
-    event EmergencyPaused(address indexed account);
-    event EmergencyUnpaused(address indexed account);
+    event EmergencyPaused(uint256 indexed version, address indexed actor, uint256 timestamp);
+    event EmergencyUnpaused(uint256 indexed version, address indexed actor, uint256 timestamp);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -25,7 +26,7 @@ abstract contract EmergencyControl is AccessControl, Pausable {
      */
     function pause() external onlyRole(EMERGENCY_ROLE) {
         _pause();
-        emit EmergencyPaused(msg.sender);
+        emit EmergencyPaused(EVENT_VERSION, msg.sender, block.timestamp);
     }
 
     /**
@@ -33,7 +34,7 @@ abstract contract EmergencyControl is AccessControl, Pausable {
      */
     function unpause() external onlyRole(EMERGENCY_ROLE) {
         _unpause();
-        emit EmergencyUnpaused(msg.sender);
+        emit EmergencyUnpaused(EVENT_VERSION, msg.sender, block.timestamp);
     }
 
     /**

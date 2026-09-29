@@ -9,8 +9,7 @@ import { PlanExecutor } from "../PlanExecutor";
 import { HashedPlan, planHashService } from "../planHash";
 import { agentLLM } from "../../agent";
 import { toolRegistry } from "../../registry/ToolRegistry";
-// import logger from "../../../config/logger";
-// import { RiskLevel } from "../../../Auth/userPreferences.entity";
+import { RiskLevel } from "../../admin/workflow.types";
 
 jest.mock("../../agent");
 jest.mock("../../registry/ToolRegistry");
@@ -24,7 +23,19 @@ describe("AgentPlanner + PlanExecutor Integration - Multi-Agent Flows", () => {
   beforeEach(() => {
     planner = new AgentPlanner();
     executor = new PlanExecutor();
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    (toolRegistry.getTool as jest.Mock).mockReturnValue({
+      metadata: { name: "mockTool", category: "test", version: "1.0.0", riskLevel: "low", capabilities: [] },
+      execute: jest.fn().mockResolvedValue({ status: "success", action: "mock" }),
+    });
+    (toolRegistry.executeTool as jest.Mock).mockResolvedValue({
+      status: "success",
+      action: "mock",
+      data: { result: "mock_data" },
+    });
+    (planHashService.generatePlanHash as jest.Mock).mockReturnValue("plan-hash-123");
+    (planHashService.verifyPlanHash as jest.Mock).mockReturnValue(true);
+    (planHashService.verifySignature as jest.Mock).mockReturnValue(true);
   });
 
   // ============================================================

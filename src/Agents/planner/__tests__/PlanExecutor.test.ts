@@ -44,7 +44,19 @@ describe("PlanExecutor - Edge Cases and Multi-Agent Flows", () => {
 
   beforeEach(() => {
     executor = new PlanExecutor();
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    (toolRegistry.getTool as jest.Mock).mockReturnValue({
+      metadata: { name: "mockTool", category: "test", version: "1.0.0", riskLevel: "low", capabilities: [] },
+      execute: jest.fn().mockResolvedValue({ status: "success", action: "mock" }),
+    });
+    (toolRegistry.executeTool as jest.Mock).mockResolvedValue({
+      status: "success",
+      action: "mock",
+      data: { result: "mock_data" },
+    });
+    (planHashService.generatePlanHash as jest.Mock).mockReturnValue("test-hash-123");
+    (planHashService.verifyPlanHash as jest.Mock).mockReturnValue(true);
+    (planHashService.verifySignature as jest.Mock).mockReturnValue(true);
   });
 
   // ============================================================

@@ -267,9 +267,7 @@ class MyCustomTool extends BaseTool {
   metadata = {
     name: "my_custom_tool",
     description: "Custom tool implementation",
-    parameters: {
-      /* ... */
-    },
+    parameters: {/* ... */},
     examples: ["Example 1"],
     category: "custom",
     version: "1.0.0",

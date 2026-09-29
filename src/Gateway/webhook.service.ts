@@ -2,6 +2,9 @@ import { Request } from "express";
 import crypto from "crypto";
 import AppDataSource from "../config/Datasource";
 import { User } from "../Auth/user.entity";
+import logger from "../config/logger";
+import { jobQueueService } from "../jobs/jobQueue.service";
+import { webhookIdempotencyService } from "./webhookIdempotency.service";
 
 /**
  * Stellar Horizon Webhook Payload Types
@@ -41,7 +44,6 @@ export interface WebhookResult {
 export class StellarWebhookService {
   private readonly WEBHOOK_SECRET: string;
   private readonly userRepository = AppDataSource.getRepository(User);
-  private readonly processedWebhooks = new Map<string, number>();
 
   constructor() {
     this.WEBHOOK_SECRET = process.env.STELLAR_WEBHOOK_SECRET || "";
@@ -156,31 +158,6 @@ export class StellarWebhookService {
   }
 
   /**
-   * Check for idempotency - prevent duplicate webhook processing
-   */
-  private isDuplicateWebhook(webhookId: string): boolean {
-    const now = Date.now();
-    const lastProcessed = this.processedWebhooks.get(webhookId);
-
-    // If already processed within the last 5 minutes, treat as duplicate
-    if (lastProcessed && now - lastProcessed < 5 * 60 * 1000) {
-      return true;
-    }
-
-    // Mark as processed
-    this.processedWebhooks.set(webhookId, now);
-
-    // Clean up old entries (older than 10 minutes)
-    for (const [id, timestamp] of this.processedWebhooks.entries()) {
-      if (now - timestamp > 10 * 60 * 1000) {
-        this.processedWebhooks.delete(id);
-      }
-    }
-
-    return false;
-  }
-
-  /**
    * Find user by Stellar address
    */
   private async findUserByAddress(address: string): Promise<User | null> {
@@ -207,33 +184,6 @@ export class StellarWebhookService {
     user.isFunded = true;
     user.updatedAt = new Date();
     return await this.userRepository.save(user);
-  }
-
-  /**
-   * Trigger auto-deployment for a funded user
-   * This is a placeholder - implement your actual deployment logic here
-   */
-  private async triggerAutoDeployment(user: User): Promise<boolean> {
-    try {
-      console.log(`Triggering auto-deployment for user: ${user.id}`);
-
-      // TODO: Implement your actual deployment logic here
-      // This could involve:
-      // - Calling a deployment service
-      // - Triggering a smart contract deployment
-      // - Sending a notification to another service
-      // - Queuing a deployment job
-
-      // For now, we'll just mark the user as deployed
-      user.isDeployed = true;
-      await this.userRepository.save(user);
-
-      console.log(`Auto-deployment completed for user: ${user.id}`);
-      return true;
-    } catch (error) {
-      console.error("Error triggering auto-deployment:", error);
-      return false;
-    }
   }
 
   /**
@@ -282,7 +232,16 @@ export class StellarWebhookService {
       const payload: StellarWebhookPayload = rawBody;
 
       // Check for idempotency
-      if (this.isDuplicateWebhook(payload.id)) {
+      const isNewWebhook = await webhookIdempotencyService.checkAndMark(
+        payload.id,
+        "stellar_funding",
+        {
+          transactionHash: payload.data.transaction_hash,
+          account: payload.data.account,
+        },
+      );
+
+      if (!isNewWebhook) {
         return {
           success: true,
           message: "Webhook already processed (idempotent)",
@@ -315,17 +274,36 @@ export class StellarWebhookService {
         payload.data.transaction_hash
       );
 
-      // Trigger auto-deployment
-      const deploymentTriggered = await this.triggerAutoDeployment(updatedUser);
+      await jobQueueService.enqueueWithContext({
+        queue: "side-effects",
+        jobType: "funding.auto_deploy",
+        userId: updatedUser.id,
+        correlationId: payload.data.transaction_hash,
+        maxAttempts: 5,
+        payload: {
+          userId: updatedUser.id,
+          transactionHash: payload.data.transaction_hash,
+          amount: payload.data.amount,
+          stellarAccount: payload.data.account,
+        },
+      });
+
+      logger.info("Queued funding auto-deployment", {
+        userId: updatedUser.id,
+        webhookId: payload.id,
+        transactionHash: payload.data.transaction_hash,
+      });
 
       return {
         success: true,
         message: "Funding webhook processed successfully",
         userId: updatedUser.id,
-        deploymentTriggered,
+        deploymentTriggered: true,
       };
     } catch (error) {
-      console.error("Error processing funding webhook:", error);
+      logger.error("Error processing funding webhook", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return {
         success: false,
         message:

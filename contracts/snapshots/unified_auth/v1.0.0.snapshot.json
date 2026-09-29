@@ -1,0 +1,38 @@
+{
+  "contract": "unified_auth",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "SuperAdmin",
+      "storage_tier": "Instance",
+      "value_type": "Address",
+      "sample_value": "GADMIN0000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "key_variant": "HasRole",
+      "key_payload": "Address, UnifiedRole",
+      "storage_tier": "Persistent",
+      "value_type": "bool",
+      "sample_value": true
+    },
+    {
+      "key_variant": "RegisteredContract",
+      "key_payload": "ContractId",
+      "storage_tier": "Instance",
+      "value_type": "Address",
+      "sample_value": "CVAULT00000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "key_variant": "EmergencyState",
+      "storage_tier": "Instance",
+      "value_type": "EmergencyState",
+      "sample_value": {
+        "is_emergency": false,
+        "triggered_by": "GADMIN0000000000000000000000000000000000000000000000000000",
+        "triggered_at": 0,
+        "reason": "GovernanceDecision"
+      }
+    }
+  ]
+}

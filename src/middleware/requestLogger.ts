@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import logger from "../config/logger";
+import { SecretBuffer } from "../utils/secretBuffer";
 
 // Sensitive fields to exclude from request/response logging
 const SENSITIVE_FIELDS = [
@@ -17,6 +18,11 @@ const SENSITIVE_FIELDS = [
 function sanitizeObject(obj: unknown): unknown {
   if (obj === null || obj === undefined) {
     return obj;
+  }
+
+  // SecretBuffer instances must never have their contents exposed.
+  if (obj instanceof SecretBuffer) {
+    return obj.toString();
   }
 
   if (Array.isArray(obj)) {

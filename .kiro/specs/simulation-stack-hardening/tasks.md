@@ -2,7 +2,7 @@
 
 ## Overview
 
-This implementation plan transforms the existing simulation infrastructure into a production-grade pre-execution environment. The plan follows a 7-phase approach building from core determinism through advanced features, with each phase delivering working, tested components. The implementation uses TypeScript and includes comprehensive property-based testing using fast-check to validate the 52 correctness properties defined in the design.
+This implementation plan transforms the existing simulation infrastructure into a production-grade pre-execution environment. The plan follows an 8-phase approach building from core determinism through advanced features, with each phase delivering working, tested components. The implementation uses TypeScript and includes comprehensive property-based testing using fast-check to validate the 52 correctness properties defined in the design.
 
 ## Tasks
 
@@ -535,7 +535,64 @@ This implementation plan transforms the existing simulation infrastructure into 
     - Example showing fidelity tracking
     - Demonstrate alert configuration
 
-- [ ] 28. Final checkpoint - Production readiness
+### Phase 8: Entity Resolution and Registry Provenance
+
+- [ ] 28. Implement entity resolution infrastructure
+  - [ ] 28.1 Create registry type definitions
+    - Define RegistryProvider interface with name, entityType, lookup, verify
+    - Define ResolvedEntity interface with canonicalId, registry, metadata
+    - Define EntityQuery interface with symbol, issuer, network, address
+    - Define EntityResolutionResult interface with resolved, candidates, ambiguous, errors
+    - _Requirements: 13.1, 13.2_
+  - [ ] 28.2 Implement authoritative registry adapters
+    - Add ticker registry adapter for asset symbols and issuers
+    - Add contract address registry adapter for deployed contracts
+    - Add network registry adapter for chain identifiers
+    - Add adapter capability registry for supported protocol capabilities
+    - _Requirements: 13.1, 13.3_
+  - [ ] 28.3 Implement entity resolution service
+    - Resolve every executable entity through registered authoritative registries
+    - Return canonical identifiers for tickers, issuers, contract addresses, networks, and adapters
+    - Collect registry provenance and freshness metadata for each resolution
+    - Bind resolved canonical identifiers into simulation and execution plans
+    - _Requirements: 13.1, 13.2, 13.3, 13.4_
+  - [ ] 28.4 Implement rejection and disambiguation flow
+    - Reject unresolved names before simulation or execution starts
+    - Reject fabricated contract addresses that fail registry verification
+    - Detect ambiguous symbols and require explicit user selection
+    - Include registry provenance and freshness in approval data
+    - _Requirements: 13.4, 13.5, 13.6_
+  - [ ] 28.5 Write adversarial tests
+    - Test look-alike ticker symbols are not silently accepted
+    - Test fabricated contract addresses are rejected
+    - Test unauthorized protocol capabilities are rejected
+    - Test ambiguous symbols require explicit user selection
+    - Test registry provenance and freshness are included in approval data
+    - _Requirements: 13.4, 13.5, 13.6_
+
+- [ ] 29. Integrate entity resolution into simulation and execution pipeline
+  - [ ] 29.1 Extend SimulationConfig with EntityResolutionConfig
+    - Add entityResolution field to SimulationConfig
+    - Create EntityResolutionConfig interface with requiredRegistries, allowUnresolved, freshnessMaxAge
+    - _Requirements: 13.1_
+  - [ ] 29.2 Add entity resolution gate before simulation
+    - Run entity resolution on all executable entities at plan creation
+    - Prevent simulation start if any entity is unresolved
+    - Bind resolved identifiers into the plan
+    - _Requirements: 13.4_
+  - [ ] 29.3 Add entity resolution gate before execution
+    - Re-verify entity resolution at execution time to prevent stale approvals
+    - Check registry freshness and reject stale approvals
+    - Include provenance in approval payloads
+    - _Requirements: 13.4, 13.6_
+  - [ ] 29.4 Write integration tests for rejection gates
+    - Test unresolved names cannot reach simulation
+    - Test unresolved names cannot reach execution
+    - Test ambiguous symbols require explicit user selection
+    - Test stale registry freshness blocks execution
+    - _Requirements: 13.4, 13.5, 13.6_
+
+- [ ] 30. Final checkpoint - Production readiness
   - Ensure all tests pass, verify performance targets met, confirm documentation complete, ask the user if questions arise.
 
 ## Notes

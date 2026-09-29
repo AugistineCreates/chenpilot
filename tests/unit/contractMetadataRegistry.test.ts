@@ -45,4 +45,82 @@ describe("ContractMetadataRegistry", () => {
     expect(binding?.enabled).toBe(false);
     expect(binding?.address).toBeUndefined();
   });
+
+  describe("validateSpecFreshness", () => {
+    it("rejects stale specification hash", () => {
+      const registry = new ContractMetadataRegistry([
+        {
+          key: "test_contract",
+          displayName: "Test Contract",
+          version: "1.0.0",
+          sourcePath: "contracts/test",
+          envAddressKey: "TEST_CONTRACT_ID",
+          capabilities: [],
+          specHash: "abc123correcthash",
+        } as any,
+      ]);
+
+      const result = registry.validateSpecFreshness(
+        "test_contract",
+        "xyz789wronghash"
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("Stale interface specification");
+      expect(result.error).toContain("abc123correcthash");
+      expect(result.error).toContain("xyz789wronghash");
+    });
+
+    it("accepts matching specification hash", () => {
+      const registry = new ContractMetadataRegistry([
+        {
+          key: "test_contract",
+          displayName: "Test Contract",
+          version: "1.0.0",
+          sourcePath: "contracts/test",
+          envAddressKey: "TEST_CONTRACT_ID",
+          capabilities: [],
+          specHash: "abc123correcthash",
+        } as any,
+      ]);
+
+      const result = registry.validateSpecFreshness(
+        "test_contract",
+        "abc123correcthash"
+      );
+
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it("rejects unknown contract key", () => {
+      const registry = new ContractMetadataRegistry();
+
+      const result = registry.validateSpecFreshness(
+        "nonexistent_contract",
+        "anyhash"
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("not found in registry");
+    });
+
+    it("rejects contract with no registered spec hash", () => {
+      const registry = new ContractMetadataRegistry([
+        {
+          key: "test_contract",
+          displayName: "Test Contract",
+          version: "1.0.0",
+          sourcePath: "contracts/test",
+          envAddressKey: "TEST_CONTRACT_ID",
+          capabilities: [],
+        } as any,
+      ]);
+
+      const result = registry.validateSpecFreshness("test_contract", "anyhash");
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("no registered specification hash");
+    });
+  });
 });

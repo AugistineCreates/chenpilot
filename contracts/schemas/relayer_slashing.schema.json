@@ -1,0 +1,268 @@
+{
+  "contract": "relayer_slashing",
+  "source": "contracts/relayer_slashing/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.608Z",
+  "ttl_constants": {},
+  "data_key_variants": [
+    {
+      "key_variant": "Config",
+      "value_type": "Config",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "Relayer",
+      "value_type": "RelayerInfo",
+      "storage_tier": "Persistent",
+      "key_payload": "Address"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "RelayerInfo",
+      "fields": [
+        {
+          "name": "stake_amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "status",
+          "rust_type": "RelayerStatus"
+        },
+        {
+          "name": "unstake_requested_at",
+          "rust_type": "u64"
+        },
+        {
+          "name": "dispute_count",
+          "rust_type": "u32"
+        },
+        {
+          "name": "last_transition_at",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "Config",
+      "fields": [
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "staking_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "treasury",
+          "rust_type": "Address"
+        },
+        {
+          "name": "slashing_bps",
+          "rust_type": "u32"
+        },
+        {
+          "name": "unbonding_period",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "staking_token",
+          "rust_type": "Address"
+        },
+        {
+          "name": "treasury",
+          "rust_type": "Address"
+        },
+        {
+          "name": "slashing_bps",
+          "rust_type": "u32"
+        },
+        {
+          "name": "unbonding_period",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtStake",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "relayer",
+          "rust_type": "Address"
+        },
+        {
+          "name": "stake_amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtUnstake",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "relayer",
+          "rust_type": "Address"
+        },
+        {
+          "name": "requested_at",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtDispute",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "relayer",
+          "rust_type": "Address"
+        },
+        {
+          "name": "dispute_count",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtSlashed",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "relayer",
+          "rust_type": "Address"
+        },
+        {
+          "name": "slash_amount",
+          "rust_type": "i128"
+        },
+        {
+          "name": "new_stake",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtWithdraw",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "relayer",
+          "rust_type": "Address"
+        },
+        {
+          "name": "withdrawn_amount",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "enum",
+      "name": "RelayerStatus",
+      "fields": [],
+      "variants": [
+        {
+          "name": "Active"
+        },
+        {
+          "name": "UnstakeRequested"
+        },
+        {
+          "name": "InDispute"
+        },
+        {
+          "name": "Slashed"
+        },
+        {
+          "name": "Withdrawn"
+        }
+      ]
+    }
+  ]
+}

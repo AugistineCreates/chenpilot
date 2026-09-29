@@ -1,4 +1,5 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
+import { safeScValToNative, SafeXdrDecoder } from "../../utils/xdr";
 
 // ─── Canonical event types ────────────────────────────────────────────────────
 
@@ -64,6 +65,12 @@ export class EventNormalizer {
   ): NormalizedEvent {
     const topics = raw.topic.map((t) => {
       try {
+        if (typeof t === "string" || Buffer.isBuffer(t) || t instanceof Uint8Array) {
+          return SafeXdrDecoder.decodeScVal(t);
+        }
+        if (t instanceof StellarSdk.xdr.ScVal) {
+          return safeScValToNative(t);
+        }
         return StellarSdk.scValToNative(t);
       } catch {
         return t;
@@ -72,7 +79,13 @@ export class EventNormalizer {
 
     let payload: unknown;
     try {
-      payload = StellarSdk.scValToNative(raw.value);
+      if (typeof raw.value === "string" || Buffer.isBuffer(raw.value) || raw.value instanceof Uint8Array) {
+        payload = SafeXdrDecoder.decodeScVal(raw.value);
+      } else if (raw.value instanceof StellarSdk.xdr.ScVal) {
+        payload = safeScValToNative(raw.value);
+      } else {
+        payload = StellarSdk.scValToNative(raw.value);
+      }
     } catch {
       payload = raw.value;
     }

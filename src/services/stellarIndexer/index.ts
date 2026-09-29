@@ -14,3 +14,11 @@ export { EventDispatcher, eventDispatcher } from "./eventDispatcher";
 export type { EventHandler } from "./eventDispatcher";
 export { ReplayPipeline } from "./replayPipeline";
 export type { ReplayOptions, ReplayResult } from "./replayPipeline";
+export * from "./gapTypes";
+export * from "./gapQuarantineStore";
+export * from "./contiguousCursorStore";
+export * from "./reconciliationGate";
+export * from "./deduplicatingDispatcher";
+export * from "./gapAwareEventIndexer";
+export * from "./gapRecoveryPipeline";
+

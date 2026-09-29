@@ -46,6 +46,32 @@ export class PromptVersion {
     canaryWeight?: number;
   };
 
+  /**
+   * Change-control evidence (Issue #665). Every active revision must carry an
+   * immutable author and the signed approvals that authorised it.
+   */
+  @Column({ type: "varchar", nullable: true })
+  author?: string;
+
+  @Column({ type: "varchar", nullable: true })
+  authorSignature?: string;
+
+  @Column({ type: "varchar", nullable: true })
+  revisionDigest?: string;
+
+  @Column({ type: "jsonb", nullable: true })
+  approvals?: {
+    approver: string;
+    approvedAt: string;
+    signature: string;
+  }[];
+
+  @Column({ type: "varchar", nullable: true })
+  changeTicket?: string;
+
+  @Column({ type: "timestamp", nullable: true })
+  emergencyExpiresAt?: Date;
+
   @CreateDateColumn()
   createdAt!: Date;
 

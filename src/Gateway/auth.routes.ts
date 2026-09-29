@@ -1,22 +1,13 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { rateLimit } from "express-rate-limit";
 import { authService } from "../Auth/auth.service";
+import RateLimiterService from "./middleware/rateLimiter.service";
 import { BadError } from "../utils/error";
 import logger from "../config/logger";
 
 const router = Router();
 
-// Rate limiter for auth endpoints (stricter than general)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 5,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many attempts. Please try again later.",
-  },
-});
+// Redis-backed rate limiter for auth endpoints (stricter than general)
+const authLimiter = RateLimiterService.createAuthLimiter();
 
 /**
  * POST /auth/forgot-password

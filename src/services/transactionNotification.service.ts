@@ -169,7 +169,7 @@ export class TransactionNotificationService {
       } catch (error) {
         // Transaction not found yet - continue monitoring
         // Could be pending or not yet submitted
-        if ((error as any).response?.status === 404) {
+        if (error instanceof Error && "response" in error && (error as { response: { status: number } }).response?.status === 404) {
           continue;
         }
         logger.error(`Error checking transaction ${hash}:`, error);

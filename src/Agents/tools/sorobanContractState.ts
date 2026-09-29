@@ -73,8 +73,7 @@ const DEFI_STATE_QUERIES = {
 };
 
 /**
- * Tool for querying Soroban smart contract state
- * Designed for DeFi decision making by agents
+ * Tool for querying the state of a Soroban smart contract for DeFi decision making
  */
 export class SorobanContractStateTool extends BaseTool<ContractStatePayload> {
   metadata: ToolMetadata = {
@@ -128,6 +127,12 @@ export class SorobanContractStateTool extends BaseTool<ContractStatePayload> {
     permissions: [],
   };
 
+  /**
+   * Execute a contract state query
+   * @param payload - The payload with contract ID, state keys, and optional methods
+   * @param userId - The user requesting state
+   * @returns ToolResult with contract state data
+   */
   async execute(
     payload: ContractStatePayload,
     userId: string
@@ -252,7 +257,13 @@ export class SorobanContractStateTool extends BaseTool<ContractStatePayload> {
   }
 
   /**
-   * Query a single contract method
+   * Query a single contract method and return its result
+   * @param contractId - The Soroban contract ID
+   * @param method - The method name to call
+   * @param network - The Soroban network to use
+   * @param rpcUrl - Optional override RPC URL
+   * @param args - Optional method arguments
+   * @returns The method result
    */
   private async queryContractMethod(
     contractId: string,
@@ -274,7 +285,9 @@ export class SorobanContractStateTool extends BaseTool<ContractStatePayload> {
   }
 
   /**
-   * Map state key to common contract method name
+   * Map a human-readable state key to a common contract method name
+   * @param stateKey - The state key (e.g., 'reserves', 'totalSupply')
+   * @returns The mapped method name or the original key
    */
   private mapStateKeyToMethod(stateKey: string): string | null {
     const mapping: Record<string, string> = {
@@ -303,8 +316,11 @@ export class SorobanContractStateTool extends BaseTool<ContractStatePayload> {
   }
 
   /**
-   * Query common DeFi contract state
-   * Tries common methods and returns what's available
+   * Query common DeFi contract methods and populate state with available results
+   * @param contractId - The Soroban contract ID
+   * @param network - The Soroban network
+   * @param state - The state object to populate
+   * @param rpcUrl - Optional override RPC URL
    */
   private async queryCommonDeFiState(
     contractId: string,
@@ -345,7 +361,11 @@ export class SorobanContractStateTool extends BaseTool<ContractStatePayload> {
   }
 
   /**
-   * Query contract metadata
+   * Query contract metadata including admin and version
+   * @param contractId - The Soroban contract ID
+   * @param network - The Soroban network
+   * @param rpcUrl - Optional override RPC URL
+   * @returns Contract metadata object
    */
   private async queryContractMetadata(
     contractId: string,
@@ -382,7 +402,12 @@ export class SorobanContractStateTool extends BaseTool<ContractStatePayload> {
   }
 
   /**
-   * Helper method to query specific DeFi protocol state
+   * Query state for a specific DeFi protocol type using predefined method mappings
+   * @param contractId - The Soroban contract ID
+   * @param protocolType - The protocol type (pool, lending, token, staking)
+   * @param network - The Soroban network
+   * @param rpcUrl - Optional override RPC URL
+   * @returns State key-value pairs for the protocol
    */
   async queryDeFiProtocol(
     contractId: string,

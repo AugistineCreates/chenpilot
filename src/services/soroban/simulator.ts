@@ -26,6 +26,11 @@ import {
   SimulationError,
   SimulationErrorResponse,
 } from "./errors";
+import {
+  CircuitBreaker,
+  withRetry,
+} from "../../utils/resilience";
+import logger from "../../config/logger";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -58,11 +63,34 @@ export interface SimulationResult {
   estimates?: SimulationEstimates;
   /** Auth entries required for this call */
   authEntries: unknown[];
+  /** Invocation binding metadata */
+  invocation: {
+    contractId: string;
+    method: string;
+    network: SorobanNetwork;
+    timestamp: string;
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const DUMMY_SOURCE = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+
+const sorobanCircuitBreaker = new CircuitBreaker({
+  name: "SorobanRPC",
+  failureThreshold: 5,
+  recoveryTimeout: 30000,
+  successThreshold: 2,
+  timeoutMs: 30000,
+});
+
+export function getSorobanCircuitBreakerMetrics() {
+  return sorobanCircuitBreaker.getMetrics();
+}
+
+export function resetSorobanCircuitBreaker() {
+  sorobanCircuitBreaker.reset();
+}
 
 function normalizeArgs(args?: unknown[]): unknown[] {
   if (!args?.length) return [];
@@ -123,13 +151,22 @@ export async function simulate(
 
   let raw: unknown;
   try {
-    raw = await server.simulateTransaction(
-      tx as unknown as StellarSdk.Transaction
+    raw = await sorobanCircuitBreaker.execute(() =>
+      withRetry(
+        async () =>
+          server.simulateTransaction(tx as unknown as StellarSdk.Transaction),
+        {
+          maxAttempts: 3,
+          initialDelayMs: 1000,
+          maxDelayMs: 5000,
+          backoffMultiplier: 2,
+        },
+      ),
     );
   } catch (err) {
     throw new SimulationError(
       `RPC simulateTransaction call failed: ${err instanceof Error ? err.message : String(err)}`,
-      err
+      err,
     );
   }
 
@@ -163,5 +200,15 @@ export async function simulate(
     ? (success.result!.auth as unknown[])
     : [];
 
-  return { raw: success, estimates, authEntries };
+  return {
+    raw: success,
+    estimates,
+    authEntries,
+    invocation: {
+      contractId: params.contractId,
+      method: params.method,
+      network: params.network,
+      timestamp: new Date().toISOString(),
+    },
+  };
 }

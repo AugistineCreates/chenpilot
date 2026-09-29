@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+# "rlib" added so btc_relay's tests can `use btc_relay_crypto::...` as a
+# path dependency (Cargo can't link a cdylib-only crate as a Rust library
+# dependency — see the caveats note in the PR that added this). Doesn't
+# change the deployable Wasm artifact; cdylib is still built.
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = "22.0.0"

@@ -1,0 +1,357 @@
+name: Supply Chain Security
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+  schedule:
+    # Run daily at 2 AM UTC to catch newly disclosed vulnerabilities
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  verify-supply-chain:
+    name: Verify Supply Chain Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      
+      - name: Verify configuration files exist
+        run: |
+          echo "Checking for supply chain security configuration files..."
+          
+          if [ ! -f ".npmrc" ]; then
+            echo "❌ .npmrc not found"
+            exit 1
+          fi
+          
+          if [ ! -f "INSTALL_SCRIPT_ALLOWLIST.md" ]; then
+            echo "❌ INSTALL_SCRIPT_ALLOWLIST.md not found"
+            exit 1
+          fi
+          
+          echo "✅ All required configuration files present"
+      
+      - name: Verify registry configuration
+        run: |
+          echo "Verifying internal package registry configuration..."
+          
+          # Check that internal packages don't use public npm
+          if grep -q "@chen-pilot:registry=https://registry.npmjs.org" .npmrc; then
+            echo "❌ CRITICAL: Internal packages configured to use public npm registry!"
+            echo "   This creates a dependency confusion attack vector."
+            exit 1
+          fi
+          
+          if grep -q "@chen-pilot:registry" .npmrc; then
+            REGISTRY=$(grep "@chen-pilot:registry" .npmrc | cut -d'=' -f2)
+            echo "✅ Internal packages use dedicated registry: $REGISTRY"
+          else
+            echo "❌ Internal package registry not configured"
+            exit 1
+          fi
+      
+      - name: Verify install scripts are disabled
+        run: |
+          echo "Verifying install scripts are disabled by default..."
+          
+          if ! grep -q "ignore-scripts=true" .npmrc; then
+            echo "❌ Install scripts are NOT disabled in .npmrc"
+            exit 1
+          fi
+          
+          if [ -f ".pnpmrc" ] && ! grep -q "ignore-scripts=true" .pnpmrc; then
+            echo "❌ Install scripts are NOT disabled in .pnpmrc"
+            exit 1
+          fi
+          
+          echo "✅ Install scripts are disabled by default"
+      
+      - name: Verify lockfile exists and is committed
+        run: |
+          echo "Verifying lockfile presence..."
+          
+          LOCKFILE_FOUND=false
+          
+          if [ -f "package-lock.json" ]; then
+            echo "✅ package-lock.json found"
+            LOCKFILE_FOUND=true
+          fi
+          
+          if [ -f "pnpm-lock.yaml" ]; then
+            echo "✅ pnpm-lock.yaml found"
+            LOCKFILE_FOUND=true
+          fi
+          
+          if [ "$LOCKFILE_FOUND" = false ]; then
+            echo "❌ No lockfile found"
+            exit 1
+          fi
+      
+      - name: Run supply chain verification script
+        run: |
+          chmod +x scripts/verify-supply-chain.sh
+          ./scripts/verify-supply-chain.sh
+      
+      - name: Check lockfile is in sync
+        run: |
+          echo "Verifying lockfile is in sync with package.json..."
+          
+          # Install dependencies with frozen lockfile
+          pnpm install --frozen-lockfile --ignore-scripts
+          
+          # Check if any files changed
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "❌ Lockfile is out of sync with package.json"
+            git status
+            git diff
+            exit 1
+          fi
+          
+          echo "✅ Lockfile is in sync"
+      
+      - name: Verify package integrity
+        run: |
+          echo "Verifying package integrity from lockfile..."
+          
+          # Count packages with integrity hashes
+          if [ -f "package-lock.json" ]; then
+            TOTAL=$(jq '[.. | select(type == "object" and has("resolved"))] | length' package-lock.json)
+            WITH_INTEGRITY=$(jq '[.. | select(type == "object" and has("integrity"))] | length' package-lock.json)
+            
+            PERCENTAGE=$((WITH_INTEGRITY * 100 / TOTAL))
+            
+            echo "Packages with integrity: $WITH_INTEGRITY / $TOTAL ($PERCENTAGE%)"
+            
+            if [ $PERCENTAGE -lt 95 ]; then
+              echo "❌ Less than 95% of packages have integrity hashes"
+              exit 1
+            fi
+            
+            echo "✅ Package integrity verification passed"
+          fi
+      
+      - name: Audit dependencies for vulnerabilities
+        run: |
+          echo "Running dependency security audit..."
+          
+          # Run audit and capture output
+          pnpm audit --audit-level=moderate || {
+            AUDIT_EXIT_CODE=$?
+            echo "❌ Security vulnerabilities found"
+            exit $AUDIT_EXIT_CODE
+          }
+          
+          echo "✅ No moderate or higher vulnerabilities found"
+      
+      - name: Check for packages with install scripts
+        run: |
+          echo "Checking for packages with install scripts..."
+          
+          # Extract packages with install scripts
+          if [ -f "package-lock.json" ]; then
+            PACKAGES_WITH_SCRIPTS=$(jq -r '
+              .. | 
+              select(type == "object" and has("scripts")) | 
+              select(.scripts | has("preinstall", "install", "postinstall")) | 
+              .name // empty
+            ' package-lock.json | sort -u)
+            
+            if [ -n "$PACKAGES_WITH_SCRIPTS" ]; then
+              echo "Found packages with install scripts:"
+              echo "$PACKAGES_WITH_SCRIPTS"
+              
+              # Check if they are in the allowlist
+              UNAPPROVED=""
+              while IFS= read -r pkg; do
+                if ! grep -q "$pkg" INSTALL_SCRIPT_ALLOWLIST.md; then
+                  UNAPPROVED="$UNAPPROVED\n  - $pkg"
+                fi
+              done <<< "$PACKAGES_WITH_SCRIPTS"
+              
+              if [ -n "$UNAPPROVED" ]; then
+                echo ""
+                echo "❌ The following packages have install scripts but are NOT in the allowlist:"
+                echo -e "$UNAPPROVED"
+                echo ""
+                echo "Please review these packages and add them to INSTALL_SCRIPT_ALLOWLIST.md"
+                echo "or find alternatives without install scripts."
+                exit 1
+              fi
+              
+              echo "✅ All packages with install scripts are in the allowlist"
+            else
+              echo "✅ No packages with install scripts found"
+            fi
+          fi
+      
+      - name: Verify no undeclared network access
+        run: |
+          echo "Checking for undeclared network access in package scripts..."
+          
+          # Check package.json for network-related commands
+          NETWORK_PATTERNS="curl|wget|nc |telnet|ftp|ssh |scp "
+          
+          if grep -E "$NETWORK_PATTERNS" package.json | grep -v "^[[:space:]]*#" | grep -v "^[[:space:]]*//" | grep -q .; then
+            echo "⚠️  Warning: Network commands found in package.json scripts"
+            grep -E "$NETWORK_PATTERNS" package.json | grep -v "^[[:space:]]*#" | grep -v "^[[:space:]]*//"
+          else
+            echo "✅ No undeclared network access detected"
+          fi
+      
+      - name: Check for expired allowlist entries
+        run: |
+          echo "Checking for expired install script allowlist entries..."
+          
+          TODAY=$(date +%Y-%m-%d)
+          
+          # Extract expiry dates from allowlist
+          if grep -E "Expires: [0-9]{4}-[0-9]{2}-[0-9]{2}" INSTALL_SCRIPT_ALLOWLIST.md > /dev/null; then
+            EXPIRED=""
+            
+            while IFS= read -r line; do
+              if [[ $line =~ Expires:\ ([0-9]{4}-[0-9]{2}-[0-9]{2}) ]]; then
+                EXPIRY_DATE="${BASH_REMATCH[1]}"
+                
+                if [[ "$EXPIRY_DATE" < "$TODAY" ]]; then
+                  EXPIRED="$EXPIRED\n  - Entry expired on $EXPIRY_DATE"
+                fi
+              fi
+            done < INSTALL_SCRIPT_ALLOWLIST.md
+            
+            if [ -n "$EXPIRED" ]; then
+              echo "❌ The following allowlist entries have expired:"
+              echo -e "$EXPIRED"
+              echo ""
+              echo "Please review and update INSTALL_SCRIPT_ALLOWLIST.md"
+              exit 1
+            fi
+          fi
+          
+          echo "✅ No expired allowlist entries"
+      
+      - name: Verify SSL and security settings
+        run: |
+          echo "Verifying SSL and security settings..."
+          
+          if ! grep -q "strict-ssl=true" .npmrc; then
+            echo "❌ Strict SSL is not enabled"
+            exit 1
+          fi
+          
+          if ! grep -q "git-protocol=https" .npmrc; then
+            echo "⚠️  Warning: Git protocol not set to HTTPS"
+          fi
+          
+          echo "✅ Security settings verified"
+      
+      - name: Generate supply chain report
+        if: always()
+        run: |
+          echo "# Supply Chain Security Report" > supply-chain-report.md
+          echo "" >> supply-chain-report.md
+          echo "**Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> supply-chain-report.md
+          echo "**Commit:** ${{ github.sha }}" >> supply-chain-report.md
+          echo "" >> supply-chain-report.md
+          
+          echo "## Configuration Status" >> supply-chain-report.md
+          echo "" >> supply-chain-report.md
+          
+          # Registry config
+          if grep -q "@chen-pilot:registry" .npmrc; then
+            REGISTRY=$(grep "@chen-pilot:registry" .npmrc | cut -d'=' -f2)
+            echo "- ✅ Internal registry configured: \`$REGISTRY\`" >> supply-chain-report.md
+          else
+            echo "- ❌ Internal registry NOT configured" >> supply-chain-report.md
+          fi
+          
+          # Scripts disabled
+          if grep -q "ignore-scripts=true" .npmrc; then
+            echo "- ✅ Install scripts disabled" >> supply-chain-report.md
+          else
+            echo "- ❌ Install scripts NOT disabled" >> supply-chain-report.md
+          fi
+          
+          # Lockfile
+          if [ -f "pnpm-lock.yaml" ]; then
+            echo "- ✅ Lockfile present (pnpm-lock.yaml)" >> supply-chain-report.md
+          elif [ -f "package-lock.json" ]; then
+            echo "- ✅ Lockfile present (package-lock.json)" >> supply-chain-report.md
+          else
+            echo "- ❌ No lockfile found" >> supply-chain-report.md
+          fi
+          
+          echo "" >> supply-chain-report.md
+          echo "## Audit Results" >> supply-chain-report.md
+          echo "" >> supply-chain-report.md
+          echo '```' >> supply-chain-report.md
+          pnpm audit --audit-level=low || echo "Vulnerabilities detected" >> supply-chain-report.md
+          echo '```' >> supply-chain-report.md
+      
+      - name: Upload supply chain report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supply-chain-report
+          path: supply-chain-report.md
+          retention-days: 90
+      
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let report = '## 🔒 Supply Chain Security Check\n\n';
+            
+            if (fs.existsSync('supply-chain-report.md')) {
+              report += fs.readFileSync('supply-chain-report.md', 'utf8');
+            } else {
+              report += '⚠️ Report generation failed. Please check workflow logs.';
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-2.0, GPL-3.0
+          comment-summary-in-pr: true

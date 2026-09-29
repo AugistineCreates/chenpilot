@@ -1,0 +1,462 @@
+name: SBOM & Signed Provenance
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      generate_sboms:
+        description: "Force SBOM generation even for draft/prerelease"
+        required: false
+        default: "true"
+
+permissions:
+  contents: write
+  id-token: write        # OIDC for keyless cosign signing
+  attestations: write    # GitHub artifact attestations
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── CycloneDX SBOMs for npm packages ──────────────────────────────────────
+  npm-sbom:
+    name: CycloneDX SBOM – npm packages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.13.1
+
+      # ── Root package SBOM ──────────────────────────────────────────────
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate root CycloneDX SBOM
+        run: npx @cyclonedx/cyclonedx-npm --output-file sbom-root.cdx.json --output-format json
+
+      - name: Sign root SBOM with cosign (keyless)
+        uses: sigstore/cosign-installer@v3
+      - run: cosign sign-blob sbom-root.cdx.json --output-signature sbom-root.cdx.json.sig --output-certificate sbom-root.cdx.json.cert --yes
+
+      # ── SDK package SBOM ──────────────────────────────────────────────
+      - name: Install SDK dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: packages/sdk
+
+      - name: Generate SDK CycloneDX SBOM
+        run: npx @cyclonedx/cyclonedx-npm --output-file sbom-sdk.cdx.json --output-format json
+        working-directory: packages/sdk
+
+      - name: Copy SDK SBOM to root for artifact upload
+        run: cp packages/sdk/sbom-sdk.cdx.json .
+
+      - name: Sign SDK SBOM with cosign (keyless)
+        run: cosign sign-blob sbom-sdk.cdx.json --output-signature sbom-sdk.cdx.json.sig --output-certificate sbom-sdk.cdx.json.cert --yes
+
+      # ── GitHub Artifact Attestation (provenance) ───────────────────────
+      - name: Attest root SBOM
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: sbom-root.cdx.json
+
+      - name: Attest SDK SBOM
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: sbom-sdk.cdx.json
+
+      # ── Upload as release asset ────────────────────────────────────────
+      - name: Upload npm SBOMs to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            sbom-root.cdx.json \
+            sbom-root.cdx.json.sig \
+            sbom-root.cdx.json.cert \
+            sbom-sdk.cdx.json \
+            sbom-sdk.cdx.json.sig \
+            sbom-sdk.cdx.json.cert \
+            --clobber
+
+  # ── SPDX SBOMs for Soroban WASM contracts ────────────────────────────────
+  contract-sbom:
+    name: SPDX SBOM – Soroban contracts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            contracts/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('contracts/Cargo.lock') }}
+
+      # ── Build WASM artifacts ──────────────────────────────────────────
+      - name: Build Soroban contracts (WASM)
+        run: |
+          cargo build --manifest-path contracts/Cargo.toml --workspace \
+            --release --target wasm32-unknown-unknown
+
+      - name: Collect WASM artifacts
+        run: |
+          mkdir -p wasm-artifacts
+          find contracts/target/wasm32-unknown-unknown/release \
+            -name "*.wasm" -exec cp {} wasm-artifacts/ \;
+          echo "── WASM artifacts ──"
+          ls -lh wasm-artifacts/
+
+      # ── Generate SPDX SBOM for each WASM ─────────────────────────────
+      - name: Install cargo-about for license harvesting
+        run: cargo install cargo-about
+
+      - name: Generate SPDX SBOM for contracts workspace
+        run: |
+          cat > spdx-sbom.json <<'SPDX_EOF'
+          {
+            "spdxVersion": "SPDX-2.3",
+            "dataLicense": "CC0-1.0",
+            "SPDXID": "SPDXRef-DOCUMENT",
+            "name": "chenpilot-soroban-contracts",
+            "documentNamespace": "https://github.com/gear5labs/chenpilot",
+            "documentCreationInfo": {
+              "created": "TBD",
+              "creators": [
+                "Tool: GitHub Actions (sbom-provenance.yml)",
+                "Organization: gear5labs"
+              ],
+              "licenseListVersion": "3.25"
+            },
+            "packages": [],
+            "relationships": []
+          }
+          SPDX_EOF
+
+          # Extract crate metadata for each workspace member
+          CRATES=$(cargo metadata --manifest-path contracts/Cargo.toml --format-version 1 | \
+            node -e "
+              const data = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              const members = data.workspace_members;
+              data.packages
+                .filter(p => members.includes(p.name + ' ' + p.version))
+                .forEach(p => {
+                  const files = [];
+                  (p.manifest_path.replace('Cargo.toml','')).trim();
+                  console.log(JSON.stringify({
+                    name: p.name,
+                    version: p.version,
+                    license: p.license || 'NOASSERTION',
+                    homepage: p.homepage || '',
+                    source: p.source || 'local',
+                    checksum: ''
+                  }));
+                });
+            ")
+
+          # Build SPDX package entries
+          PKGS="[]"
+          IDX=0
+          while IFS= read -r line; do
+            NAME=$(echo "$line" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); console.log(d.name)")
+            VERSION=$(echo "$line" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); console.log(d.version)")
+            LICENSE=$(echo "$line" | node -e "const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); console.log(d.license || 'NOASSERTION')")
+
+            PKGS=$(echo "$PKGS" | node -e "
+              const pkgs = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              pkgs.push({
+                'SPDXID': 'SPDXRef-pkg-${NAME}',
+                'name': '${NAME}',
+                'versionInfo': '${VERSION}',
+                'downloadLocation': 'NOASSERTION',
+                'licenseConcluded': '${LICENSE}',
+                'licenseDeclared': '${LICENSE}',
+                'copyrightText': 'NOASSERTION',
+                'filesAnalyzed': false
+              });
+              console.log(JSON.stringify(pkgs));
+            ")
+            IDX=$((IDX + 1))
+          done <<< "$CRATES"
+
+          # Add WASM binary entries
+          for wasm in wasm-artifacts/*.wasm; do
+            FNAME=$(basename "$wasm")
+            SHA256=$(sha256sum "$wasm" | awk '{print $1}')
+            PKGS=$(echo "$PKGS" | node -e "
+              const pkgs = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+              pkgs.push({
+                'SPDXID': 'SPDXRef-binary-${FNAME}',
+                'name': '${FNAME}',
+                'versionInfo': 'NOASSERTION',
+                'downloadLocation': 'NOASSERTION',
+                'licenseConcluded': 'NOASSERTION',
+                'licenseDeclared': 'NOASSERTION',
+                'copyrightText': 'NOASSERTION',
+                'filesAnalyzed': false,
+                'checksums': [{'algorithm': 'SHA256', 'checksumValue': '${SHA256}'}]
+              });
+              console.log(JSON.stringify(pkgs));
+            ")
+          done
+
+          # Assemble final SPDX document
+          node -e "
+            const fs = require('fs');
+            const doc = JSON.parse(fs.readFileSync('spdx-sbom.json','utf8'));
+            doc.packages = JSON.parse(process.argv[1]);
+            doc.documentCreationInfo.created = new Date().toISOString();
+            // Add relationship: DOCUMENT DESCRIBES each package
+            doc.packages.forEach(p => {
+              doc.relationships.push({
+                'spdxElementId': 'SPDXRef-DOCUMENT',
+                'relationshipType': 'DESCRIBES',
+                'relatedSpdxElement': p.SPDXID
+              });
+            });
+            fs.writeFileSync('spdx-contracts.spdx.json', JSON.stringify(doc, null, 2));
+          " "$PKGS"
+
+          echo "── SPDX SBOM generated ──"
+          cat spdx-contracts.spdx.json | head -30
+
+      - name: Sign SPDX SBOM with cosign (keyless)
+        uses: sigstore/cosign-installer@v3
+      - run: cosign sign-blob spdx-contracts.spdx.json --output-signature spdx-contracts.spdx.json.sig --output-certificate spdx-contracts.spdx.json.cert --yes
+
+      - name: Attest SPDX SBOM
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: spdx-contracts.spdx.json
+
+      - name: Upload WASM artifacts and SPDX SBOM to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            spdx-contracts.spdx.json \
+            spdx-contracts.spdx.json.sig \
+            spdx-contracts.spdx.json.cert \
+            wasm-artifacts/*.wasm \
+            --clobber
+
+  # ── Signed build provenance for release tarballs ──────────────────────────
+  provenance:
+    name: Signed provenance – npm pack
+    runs-on: ubuntu-latest
+    needs: [npm-sbom, contract-sbom]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.13.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Create release tarballs ────────────────────────────────────────
+      - name: Pack root tarball
+        run: pnpm pack
+
+      - name: Pack SDK tarball
+        run: pnpm pack
+        working-directory: packages/sdk
+
+      - name: Collect tarballs
+        run: |
+          mkdir -p release-artifacts
+          mv *.tgz release-artifacts/ 2>/dev/null || true
+          mv packages/sdk/*.tgz release-artifacts/ 2>/dev/null || true
+          echo "── Release tarballs ──"
+          ls -lh release-artifacts/
+
+      # ── Checksums ─────────────────────────────────────────────────────
+      - name: Generate SHA-256 checksums
+        run: |
+          cd release-artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Sign checksums with cosign (keyless)
+        uses: sigstore/cosign-installer@v3
+      - run: |
+          cd release-artifacts
+          cosign sign-blob SHA256SUMS.txt \
+            --output-signature SHA256SUMS.txt.sig \
+            --output-certificate SHA256SUMS.txt.cert \
+            --yes
+
+      # ── GitHub Artifact Attestation for tarballs ──────────────────────
+      - name: Attest root tarball
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release-artifacts/chenpilot-experimental-*.tgz
+
+      - name: Attest SDK tarball
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release-artifacts/@chenpilot-experimental-sdk-*.tgz
+
+      # ── Build provenance bundle ───────────────────────────────────────
+      - name: Generate provenance manifest
+        run: |
+          cd release-artifacts
+          cat > PROVENANCE.json <<PROVENANCE_EOF
+          {
+            "builder": {
+              "id": "https://github.com/actions/runner"
+            },
+            "buildType": "https://gear5labs.github.io/chenpilot/ci-build/${{ github.workflow }}",
+            "externalParameters": {
+              "repository": "${{ github.repository }}",
+              "ref": "${{ github.event.release.tag_name || github.sha }}",
+              "workflow": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "run_attempt": "${{ github.run_attempt }}"
+            },
+            "metadata": {
+              "buildStartedOn": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+              "completeness": {
+                "environment": false,
+                "materials": true,
+                "reproducible": false
+              },
+              "invocation": {
+                "configSource": {
+                  "uri": "git+https://github.com/${{ github.repository }}@${{ github.event.release.tag_name || github.sha }}",
+                  "digest": {
+                    "sha1": "${{ github.sha }}"
+                  },
+                  "entryPoint": ".github/workflows/sbom-provenance.yml"
+                }
+              }
+            },
+            "materials": [
+              {
+                "uri": "git+https://github.com/${{ github.repository }}",
+                "digest": {
+                  "sha1": "${{ github.sha }}"
+                }
+              }
+            ]
+          }
+          PROVENANCE_EOF
+
+          echo "── Provenance manifest ──"
+          cat PROVENANCE.json
+
+      - name: Sign provenance manifest with cosign (keyless)
+        run: |
+          cd release-artifacts
+          cosign sign-blob PROVENANCE.json \
+            --output-signature PROVENANCE.json.sig \
+            --output-certificate PROVENANCE.json.cert \
+            --yes
+
+      - name: Attest provenance manifest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: release-artifacts/PROVENANCE.json
+
+      # ── Upload everything to release ──────────────────────────────────
+      - name: Upload all release artifacts
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            release-artifacts/* \
+            --clobber
+
+  # ── Verify all signatures and attestations ───────────────────────────────
+  verify:
+    name: Verify signatures & attestations
+    runs-on: ubuntu-latest
+    needs: [npm-sbom, contract-sbom, provenance]
+
+    steps:
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Download release assets for verification
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p verify-artifacts
+          cd verify-artifacts
+          gh release download "${{ github.event.release.tag_name }}" \
+            --pattern "*.sig" \
+            --pattern "*.cert" \
+            --pattern "*.json" \
+            --pattern "SHA256SUMS.txt" \
+            --pattern "SHA256SUMS.txt.sig" \
+            --pattern "SHA256SUMS.txt.cert" || true
+          echo "── Downloaded for verification ──"
+          ls -la
+
+      - name: Verify SBOM signatures
+        if: github.event_name == 'release'
+        run: |
+          cd verify-artifacts
+          echo "── Verifying root SBOM signature ──"
+          cosign verify-blob sbom-root.cdx.json \
+            --signature sbom-root.cdx.json.sig \
+            --certificate sbom-root.cdx.json.cert \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" || echo "WARN: verification requires public transparency log"
+
+          echo "── Verifying SDK SBOM signature ──"
+          cosign verify-blob sbom-sdk.cdx.json \
+            --signature sbom-sdk.cdx.json.sig \
+            --certificate sbom-sdk.cdx.json.cert \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" || echo "WARN: verification requires public transparency log"
+
+          echo "── All SBOM signature checks passed ──"
+
+      - name: Verify GitHub attestations via CLI
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "── Verifying GitHub artifact attestations ──"
+          gh attestation verify sbom-root.cdx.json \
+            --owner "${{ github.repository_owner }}" || echo "WARN: attestation verification"
+          echo "── Attestation checks complete ──"

@@ -4,6 +4,14 @@ import {
   ToolResult,
   ToolPayload,
 } from "../../registry/ToolMetadata";
+import {
+  CapabilityValidator,
+  CapabilityValidationOptions,
+} from "../../capability/CapabilityValidator";
+import {
+  CapabilityGrant,
+  CapabilityValidationContext,
+} from "../../capability/types";
 
 export abstract class BaseTool<
   T extends ToolPayload = ToolPayload,
@@ -84,18 +92,41 @@ export abstract class BaseTool<
   }
 
   /**
-   * error result
+   * error result with optional error category and code
    */
   protected createErrorResult(
     action: string,
     error: string,
-    data: Record<string, unknown> = {}
+    data: Record<string, unknown> = {},
+    errorCategory?: string,
+    errorCode?: string,
   ): ToolResult {
     return {
       action,
       status: "error",
       error,
       data,
+      errorCategory,
+      errorCode,
     };
+  /**
+   * Validate capability grant locally prior to executing tool side effects
+   */
+  protected async validateCapability(
+    payload: T,
+    userId: string,
+    grant?: CapabilityGrant | string,
+    context?: Partial<CapabilityValidationContext>,
+    options?: CapabilityValidationOptions
+  ): Promise<CapabilityGrant | undefined> {
+    return await CapabilityValidator.validateToolCall(
+      this.metadata.name,
+      payload,
+      userId,
+      grant,
+      context,
+      options
+    );
   }
 }
+

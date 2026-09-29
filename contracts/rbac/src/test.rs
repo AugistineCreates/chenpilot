@@ -1,10 +1,8 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{
-    testutils::{Address as _, Events},
-    symbol_short, vec, Env, Address, IntoVal, FromVal,
-};
+use soroban_sdk::testutils::{Address as _, Events};
+use soroban_sdk::{symbol_short, vec, Env, Address, IntoVal, FromVal};
 
 fn setup(env: &Env) -> (Address, RbacContractClient<'_>) {
     let admin = Address::generate(env);
@@ -56,11 +54,14 @@ fn test_grant_emits_event() {
     let last = events.last().unwrap();
     assert_eq!(
         last.1,
-        vec![&env, symbol_short!("role_grnt").into_val(&env), contract_id.into_val(&env)]
+        vec![&env, symbol_short!("rbac").into_val(&env), symbol_short!("role_grant").into_val(&env), contract_id.into_val(&env)]
     );
     let data = EvtRoleGranted::from_val(&env, &last.2);
+    assert_eq!(data.version, 1);
     assert_eq!(data.to, user);
+    assert_eq!(data.role, Role::EmergencyAdmin);
     assert_eq!(data.by, admin);
+    assert_eq!(data.actor, admin);
 }
 
 #[test]
@@ -78,11 +79,14 @@ fn test_revoke_emits_event() {
     let last = events.last().unwrap();
     assert_eq!(
         last.1,
-        vec![&env, symbol_short!("role_rvk").into_val(&env), contract_id.into_val(&env)]
+        vec![&env, symbol_short!("rbac").into_val(&env), symbol_short!("role_revoke").into_val(&env), contract_id.into_val(&env)]
     );
     let data = EvtRoleRevoked::from_val(&env, &last.2);
+    assert_eq!(data.version, 1);
     assert_eq!(data.from, user);
+    assert_eq!(data.role, Role::OracleProvider);
     assert_eq!(data.by, admin);
+    assert_eq!(data.actor, admin);
 }
 
 #[test]
@@ -99,11 +103,13 @@ fn test_transfer_admin_emits_event() {
     let last = events.last().unwrap();
     assert_eq!(
         last.1,
-        vec![&env, symbol_short!("adm_xfer").into_val(&env), contract_id.into_val(&env)]
+        vec![&env, symbol_short!("rbac").into_val(&env), symbol_short!("adm_xfer").into_val(&env), contract_id.into_val(&env)]
     );
     let data = EvtAdminTransferred::from_val(&env, &last.2);
+    assert_eq!(data.version, 1);
     assert_eq!(data.old_admin, old_admin);
     assert_eq!(data.new_admin, new_admin);
+    assert_eq!(data.actor, old_admin);
 }
 
 #[test]

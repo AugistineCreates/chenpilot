@@ -9,7 +9,22 @@ dotenv.config();
 import { generateDeFiAdapterConfigs, getEnabledAdapters } from "./defiAdapters";
 
 type StellarNetwork = "testnet" | "public";
-//console.log(process.env.DB_PASSWORD,  process.env.DB_NAME)
+
+function requireEnv(name: string, minLength = 1): string {
+  const value = process.env[name]?.trim();
+  if (!value || value.length < minLength) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
+function parsePositiveInt(name: string, fallback: string): number {
+  const parsed = Number.parseInt(process.env[name] || fallback, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return parsed;
+}
 
 // Stellar network configurations
 const STELLAR_NETWORKS: Record<
@@ -40,10 +55,14 @@ if (jwtSecret.length < 32) {
   );
 }
 
-const encryptionKey = process.env.ENCRYPTION_KEY;
-if (!encryptionKey || !/^[0-9a-fA-F]{64}$/.test(encryptionKey)) {
+const encryptionKey = process.env.ENCRYPTION_KEY?.trim();
+const encryptionKeysJson = process.env.ENCRYPTION_KEYS_JSON?.trim();
+if (
+  !encryptionKeysJson &&
+  (!encryptionKey || !/^[0-9a-fA-F]{64}$/.test(encryptionKey))
+) {
   throw new Error(
-    "ENCRYPTION_KEY must be set and be a 64-character hex string"
+    "ENCRYPTION_KEY must be a 64-character hex string when ENCRYPTION_KEYS_JSON is not set"
   );
 }
 
@@ -63,10 +82,10 @@ const stellarConfig = STELLAR_NETWORKS[stellarNetwork];
 
 export default {
   env: process.env.NODE_ENV || "development",
-  port: 2333,
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-  node_url: process.env.NODE_URL!,
-  encryptionKey: process.env.ENCRYPTION_KEY!,
+  port: parsePositiveInt("PORT", "2333"),
+  apiKey: requireEnv("ANTHROPIC_API_KEY"),
+  node_url: requireEnv("NODE_URL"),
+  encryptionKey,
   stellar: {
     network: stellarNetwork,
     horizonUrl: process.env.STELLAR_HORIZON_URL || stellarConfig.horizonUrl,
@@ -76,9 +95,9 @@ export default {
   },
   redis: {
     host: process.env.REDIS_HOST || "localhost",
-    port: parseInt(process.env.REDIS_PORT || "6379"),
+    port: parsePositiveInt("REDIS_PORT", "6379"),
     password: process.env.REDIS_PASSWORD || undefined,
-    db: parseInt(process.env.REDIS_DB || "0"),
+    db: Number.parseInt(process.env.REDIS_DB || "0", 10),
   },
   kyc: {
     defaultProvider: process.env.KYC_PROVIDER || "mock",
@@ -89,7 +108,7 @@ export default {
   },
   email: {
     host: process.env.SMTP_HOST || "smtp.example.com",
-    port: parseInt(process.env.SMTP_PORT || "587", 10),
+    port: parsePositiveInt("SMTP_PORT", "587"),
     user: process.env.SMTP_USER || "",
     pass: process.env.SMTP_PASS || "",
     from: process.env.SMTP_FROM || "noreply@chenpilot.com",
@@ -97,11 +116,11 @@ export default {
   },
   db: {
     postgres: {
-      host: process.env.DB_HOST!,
-      port: parseInt(process.env.DB_PORT || "5432"),
-      username: process.env.DB_USERNAME!,
+      host: requireEnv("DB_HOST"),
+      port: parsePositiveInt("DB_PORT", "5432"),
+      username: requireEnv("DB_USERNAME"),
       password: process.env.DB_PASSWORD || undefined,
-      database: process.env.DB_NAME!,
+      database: requireEnv("DB_NAME"),
     },
   },
   defi: {
@@ -110,18 +129,48 @@ export default {
   },
   agent: {
     timeouts: {
-      llmCall: parseInt(process.env.AGENT_LLM_TIMEOUT || "30000", 10),
-      toolExecution: parseInt(process.env.AGENT_TOOL_TIMEOUT || "60000", 10),
-      agentExecution: parseInt(
-        process.env.AGENT_EXECUTION_TIMEOUT || "120000",
-        10
-      ),
-      planExecution: parseInt(process.env.AGENT_PLAN_TIMEOUT || "180000", 10),
+      llmCall: parsePositiveInt("AGENT_LLM_TIMEOUT", "30000"),
+      toolExecution: parsePositiveInt("AGENT_TOOL_TIMEOUT", "60000"),
+      agentExecution: parsePositiveInt("AGENT_EXECUTION_TIMEOUT", "120000"),
+      planExecution: parsePositiveInt("AGENT_PLAN_TIMEOUT", "180000"),
     },
   },
   admin: {
     allowedIps: process.env.ADMIN_ALLOWED_IPS
-      ? process.env.ADMIN_ALLOWED_IPS.split(",").map((ip) => ip.trim())
+      ? process.env.ADMIN_ALLOWED_IPS.split(",")
+          .map((ip) => ip.trim())
+          .filter(Boolean)
       : [],
+  },
+  externalRequest: {
+    defaultBudget: {
+      deadlineMs: parsePositiveInt("EXTERNAL_REQUEST_DEADLINE_MS", "10000"),
+      attempts: Number.parseInt(process.env.EXTERNAL_REQUEST_ATTEMPTS || "3", 10),
+      bytes: Number.parseInt(process.env.EXTERNAL_REQUEST_BYTES || "5242880", 10),
+      downstreamCalls: Number.parseInt(
+        process.env.EXTERNAL_REQUEST_DOWNSTREAM_CALLS || "10",
+        10
+      ),
+    },
+  },
+  inbound: {
+    jsonLimit: Number.parseInt(process.env.INBOUND_JSON_LIMIT_BYTES || "1048576", 10),
+    webhookLimit: Number.parseInt(process.env.INBOUND_WEBHOOK_LIMIT_BYTES || "1048576", 10),
+    attachmentLimit: Number.parseInt(process.env.INBOUND_ATTACHMENT_LIMIT_BYTES || "26214400", 10),
+  },
+  models: {
+    primary: process.env.MODEL_PRIMARY || "claude-3-5-haiku-20241022",
+    fallbacks: process.env.MODEL_FALLBACKS
+      ? process.env.MODEL_FALLBACKS.split(",").map((m) => m.trim()).filter(Boolean)
+      : ["claude-3-5-sonnet-20241022"],
+    selectionStrategy: (process.env.MODEL_SELECTION_STRATEGY || "quality_first") as
+      | "quality_first"
+      | "latency_first"
+      | "cost_first"
+      | "balanced",
+    verifyEquivalence: process.env.MODEL_VERIFY_EQUIVALENCE !== "false",
+    maxRetries: parsePositiveInt("MODEL_MAX_RETRIES", "2"),
+    differentialEvalOnStartup: process.env.MODEL_DIFFERENTIAL_EVAL_ON_STARTUP === "true",
+    minQualityScore: parseFloat(process.env.MODEL_MIN_QUALITY_SCORE || "0.7"),
   },
 };

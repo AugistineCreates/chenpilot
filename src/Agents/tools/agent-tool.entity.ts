@@ -8,6 +8,9 @@ import {
   Index,
 } from "typeorm";
 
+/**
+ * TypeORM entity representing a registered agent tool with configuration and activation state
+ */
 @Entity()
 export class AgentTool {
   @PrimaryGeneratedColumn("uuid")

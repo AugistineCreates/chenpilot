@@ -1,0 +1,22 @@
+{
+  "contract": "htlc",
+  "captured_at": "2026-08-30T00:00:00.000Z",
+  "wasm_version": "1.0.0",
+  "entries": [
+    {
+      "key_variant": "ContractState",
+      "storage_tier": "Instance",
+      "value_type": "HTLCState",
+      "sample_value": {
+        "sender": "GSENDER000000000000000000000000000000000000000000000000000",
+        "receiver": "GRECEIVER00000000000000000000000000000000000000000000000000",
+        "hash_lock": "0000000000000000000000000000000000000000000000000000000000000000",
+        "time_lock": 1700086400,
+        "amount": 100000000,
+        "token": "CTOKEN000000000000000000000000000000000000000000000000000",
+        "claimed": false,
+        "refunded": false
+      }
+    }
+  ]
+}

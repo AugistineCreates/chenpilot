@@ -443,7 +443,9 @@ describe("IPBlacklist Routes", () => {
         })
         .expect(500);
 
-      expect(response.body).not.toContain("Sensitive error details");
+      expect(response.body.error).toBe("Internal server error");
+      expect(response.body.message).toBe("Failed to add IP to blacklist");
+      expect(JSON.stringify(response.body)).not.toContain("Sensitive error details");
     });
   });
 });

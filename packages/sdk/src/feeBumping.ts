@@ -6,6 +6,8 @@ import {
   FeeBumpStrategy,
   TransactionResourceError,
 } from "./types";
+import { throwIfAborted } from "./abort";
+import type { AbortSignalLike } from "./types";
 
 /**
  * Default resource limits for Soroban transactions
@@ -129,8 +131,8 @@ function estimateResourceFee(limits: ResourceLimits): number {
  * ```
  */
 export class FeeBumpingEngine {
-  private config: Required<Omit<FeeBumpConfig, "onBump">> &
-    Pick<FeeBumpConfig, "onBump">;
+  private config: Required<Omit<FeeBumpConfig, "onBump" | "signal">> &
+    Pick<FeeBumpConfig, "onBump" | "signal">;
 
   constructor(config?: FeeBumpConfig) {
     this.config = {
@@ -138,6 +140,7 @@ export class FeeBumpingEngine {
       maxAttempts: config?.maxAttempts || MAX_BUMP_ATTEMPTS,
       initialLimits: config?.initialLimits || DEFAULT_RESOURCE_LIMITS,
       onBump: config?.onBump,
+      signal: config?.signal,
     };
   }
 
@@ -164,6 +167,9 @@ export class FeeBumpingEngine {
     }> = [];
 
     for (let attempt = 1; attempt <= this.config.maxAttempts; attempt++) {
+      // Cancellation interrupts the retry loop (never masked as a resource error).
+      throwIfAborted(this.config.signal);
+
       try {
         const result = await txExecutor(currentLimits);
 

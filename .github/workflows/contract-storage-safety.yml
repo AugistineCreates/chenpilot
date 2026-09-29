@@ -1,0 +1,203 @@
+name: Contract Storage Safety
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "contracts/**"
+      - "scripts/extract-storage-schema.ts"
+      - "scripts/check-storage-compat.ts"
+      - "scripts/simulate-upgrade.ts"
+      - "scripts/validate-release-manifest.ts"
+      - "scripts/migration-registry-loader.ts"
+      - ".github/workflows/contract-storage-safety.yml"
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "contracts/**"
+      - "scripts/extract-storage-schema.ts"
+      - "scripts/check-storage-compat.ts"
+      - "scripts/simulate-upgrade.ts"
+      - "scripts/validate-release-manifest.ts"
+      - "scripts/migration-registry-loader.ts"
+      - ".github/workflows/contract-storage-safety.yml"
+
+jobs:
+  storage-safety:
+    name: Storage schema safety gate
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch the base branch so we can diff schemas against the deployed baseline
+          fetch-depth: 0
+
+      # ── Node (scripts) ──────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Rust (contract compilation check) ───────────────────────────────────
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cargo check (compilation gate)
+        run: cargo check --manifest-path contracts/Cargo.toml --workspace
+
+      # ── Step 1: Extract proposed schemas from the current branch ────────────
+      - name: Extract proposed storage schemas
+        run: |
+          npx ts-node scripts/extract-storage-schema.ts \
+            --contracts-dir contracts \
+            --out-dir contracts/schemas-proposed
+
+      - name: Upload proposed schemas
+        uses: actions/upload-artifact@v4
+        with:
+          name: schemas-proposed
+          path: contracts/schemas-proposed/
+          retention-days: 7
+
+      # ── Step 2: Restore baseline schemas from main branch ───────────────────
+      #
+      # Strategy: checkout the target branch into a temp dir and run the
+      # extractor again so the baseline always reflects what is actually
+      # deployed, not a manually maintained snapshot.
+      - name: Extract baseline schemas from target branch
+        run: |
+          TARGET_BRANCH="${{ github.base_ref || 'main' }}"
+          echo "Checking out baseline from branch: $TARGET_BRANCH"
+          git fetch origin "$TARGET_BRANCH" --depth=1
+
+          # Extract baseline schemas from the target-branch contracts/ dir
+          # by checking out only that directory into a temp location
+          mkdir -p /tmp/baseline-contracts
+          git show "origin/${TARGET_BRANCH}:contracts" > /dev/null 2>&1 || true
+
+          # Use git archive to extract contracts at the target ref
+          git archive "origin/${TARGET_BRANCH}" contracts/ | tar -x -C /tmp/baseline-src
+
+          # Run extractor against the baseline source
+          npx ts-node scripts/extract-storage-schema.ts \
+            --contracts-dir /tmp/baseline-src/contracts \
+            --out-dir contracts/schemas-baseline || true
+          # "|| true" so a brand-new contract (no baseline) doesn't fail this step
+
+      - name: Upload baseline schemas
+        uses: actions/upload-artifact@v4
+        with:
+          name: schemas-baseline
+          path: contracts/schemas-baseline/
+          retention-days: 7
+
+      # ── Step 3: Compatibility check ─────────────────────────────────────────
+      - name: Check storage compatibility
+        id: compat
+        run: |
+          # Exit code 1 = breaking changes; 0 = all clear or migrations declared
+          npx ts-node scripts/check-storage-compat.ts \
+            --baseline contracts/schemas-baseline \
+            --proposed contracts/schemas-proposed \
+            --migrations contracts/migrations/registry.json \
+            --out contracts/compat-report.json
+        # We capture the exit code below; don't fail the workflow step here yet
+        # so we can upload the report first.
+        continue-on-error: true
+
+      - name: Upload compatibility report
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-report
+          path: contracts/compat-report.json
+          retention-days: 30
+
+      # ── Step 4: Upgrade simulation ──────────────────────────────────────────
+      - name: Run upgrade simulation
+        id: simulation
+        run: |
+          npx ts-node scripts/simulate-upgrade.ts \
+            --schemas contracts/schemas-proposed \
+            --snapshots contracts/snapshots \
+            --migrations contracts/migrations/registry.json \
+            --out contracts/simulation-report.json
+        continue-on-error: true
+
+      - name: Upload simulation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulation-report
+          path: contracts/simulation-report.json
+          retention-days: 30
+
+      # ── Step 5: Release manifest validation (only when manifest exists) ─────
+      - name: Validate release manifest
+        id: manifest
+        if: hashFiles('contracts/release-manifest.json') != ''
+        run: |
+          npx ts-node scripts/validate-release-manifest.ts \
+            --manifest contracts/release-manifest.json \
+            --compat-report contracts/compat-report.json \
+            --sim-report contracts/simulation-report.json \
+            --migrations contracts/migrations/registry.json \
+            --out contracts/manifest-validation.json
+        continue-on-error: true
+
+      - name: Upload manifest validation
+        if: hashFiles('contracts/release-manifest.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-validation
+          path: contracts/manifest-validation.json
+          retention-days: 30
+
+      # ── Step 6: Final gate — fail the job if any check found breaking changes─
+      - name: Enforce storage safety gate
+        run: |
+          FAILED=0
+
+          # Check compat report
+          if [ -f contracts/compat-report.json ]; then
+            STATUS=$(node -e "const r=require('./contracts/compat-report.json'); process.stdout.write(r.overall_status)")
+            echo "Compat report status: $STATUS"
+            if [ "$STATUS" = "fail" ]; then
+              echo "::error title=Breaking Storage Changes::One or more contracts have breaking storage changes without declared migrations. See the compat-report artifact."
+              FAILED=1
+            fi
+          fi
+
+          # Check simulation report
+          if [ -f contracts/simulation-report.json ]; then
+            PASSED=$(node -e "const r=require('./contracts/simulation-report.json'); process.stdout.write(String(r.overall_passed))")
+            echo "Simulation passed: $PASSED"
+            if [ "$PASSED" = "false" ]; then
+              echo "::error title=Upgrade Simulation Failed::One or more contracts failed upgrade simulation against representative state snapshots. See the simulation-report artifact."
+              FAILED=1
+            fi
+          fi
+
+          # Check manifest validation (if it ran)
+          if [ -f contracts/manifest-validation.json ]; then
+            MANIFEST_STATUS=$(node -e "const r=require('./contracts/manifest-validation.json'); process.stdout.write(r.overall_status)")
+            echo "Manifest validation status: $MANIFEST_STATUS"
+            if [ "$MANIFEST_STATUS" = "blocked" ]; then
+              echo "::error title=Release Manifest Blocked::The release manifest contains contracts that failed storage safety checks. See the manifest-validation artifact."
+              FAILED=1
+            fi
+          fi
+
+          exit $FAILED
+
+      # ── Step 7: Unit tests for the checker itself ────────────────────────────
+      - name: Run storage safety unit tests
+        run: |
+          npx jest tests/unit/storageCompatChecker.test.ts --runInBand --no-coverage

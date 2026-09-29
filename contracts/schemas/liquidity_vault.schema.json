@@ -1,0 +1,233 @@
+{
+  "contract": "liquidity_vault",
+  "source": "contracts/liquidity_vault/src/lib.rs",
+  "schema_version": "1.0.0",
+  "extracted_at": "2026-08-30T14:44:46.590Z",
+  "ttl_constants": {},
+  "data_key_variants": [
+    {
+      "key_variant": "Config",
+      "value_type": "unknown",
+      "storage_tier": "Instance"
+    },
+    {
+      "key_variant": "ExecutionContext",
+      "value_type": "unknown",
+      "storage_tier": "unknown"
+    }
+  ],
+  "contract_types": [
+    {
+      "kind": "struct",
+      "name": "PriceData",
+      "fields": [
+        {
+          "name": "price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "decimals",
+          "rust_type": "u32"
+        },
+        {
+          "name": "timestamp",
+          "rust_type": "u64"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "Config",
+      "fields": [
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "threshold_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "ExecutionContext",
+      "fields": [
+        {
+          "name": "caller",
+          "rust_type": "Address"
+        },
+        {
+          "name": "operation",
+          "rust_type": "Bytes"
+        },
+        {
+          "name": "intent_price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "min_amount_out",
+          "rust_type": "i128"
+        },
+        {
+          "name": "max_slippage_bps",
+          "rust_type": "u32"
+        },
+        {
+          "name": "deadline_ledger",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "ExecutionResult",
+      "fields": [
+        {
+          "name": "approved",
+          "rust_type": "bool"
+        },
+        {
+          "name": "market_price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "deviation_bps",
+          "rust_type": "u128"
+        },
+        {
+          "name": "reason",
+          "rust_type": "Bytes"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtInit",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "threshold_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtCfgUpd",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "admin",
+          "rust_type": "Address"
+        },
+        {
+          "name": "oracle",
+          "rust_type": "Address"
+        },
+        {
+          "name": "threshold_bps",
+          "rust_type": "u32"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtSwapOk",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "token_in",
+          "rust_type": "Address"
+        },
+        {
+          "name": "token_out",
+          "rust_type": "Address"
+        },
+        {
+          "name": "amount_in",
+          "rust_type": "i128"
+        },
+        {
+          "name": "market_price",
+          "rust_type": "i128"
+        }
+      ]
+    },
+    {
+      "kind": "struct",
+      "name": "EvtDevAlert",
+      "fields": [
+        {
+          "name": "version",
+          "rust_type": "u32"
+        },
+        {
+          "name": "ledger",
+          "rust_type": "u32"
+        },
+        {
+          "name": "actor",
+          "rust_type": "Address"
+        },
+        {
+          "name": "market_price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "intent_price",
+          "rust_type": "i128"
+        },
+        {
+          "name": "deviation_bps",
+          "rust_type": "i128"
+        }
+      ]
+    }
+  ]
+}

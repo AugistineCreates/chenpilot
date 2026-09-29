@@ -8,9 +8,7 @@ import { io, Socket } from "socket.io-client";
 
 interface ClientConfig {
   url: string;
-  auth?: {
-    userId: string;
-  };
+  accessToken?: string;
   reconnection?: boolean;
   reconnectionDelay?: number;
   reconnectionDelayMax?: number;
@@ -25,6 +23,7 @@ export class RealtimeClient {
   private socket: Socket | null = null;
   private config: ClientConfig;
   private isConnected = false;
+  private isAuthenticated = false;
   private eventHandlers: Map<string, Set<(...args: unknown[]) => void>> =
     new Map();
 
@@ -45,7 +44,6 @@ export class RealtimeClient {
     return new Promise((resolve, reject) => {
       try {
         this.socket = io(this.config.url, {
-          auth: this.config.auth,
           reconnection: this.config.reconnection,
           reconnectionDelay: this.config.reconnectionDelay,
           reconnectionDelayMax: this.config.reconnectionDelayMax,
@@ -57,11 +55,20 @@ export class RealtimeClient {
           console.log("Connected to real-time server:", this.socket?.id);
           this.isConnected = true;
 
-          // Authenticate if userId is provided
-          if (this.config.auth?.userId) {
-            this.socket?.emit("authenticate", this.config.auth.userId);
+          // Authenticate if access token is provided
+          if (this.config.accessToken) {
+            this.socket?.emit("authenticate", this.config.accessToken);
+          } else {
+            this.emit("connected");
+            resolve();
           }
+        });
 
+        // Authenticated event
+        this.socket.on("authenticated", (data) => {
+          console.log("Authenticated successfully:", data);
+          this.isAuthenticated = true;
+          this.emit("authenticated", data);
           this.emit("connected");
           resolve();
         });
@@ -70,6 +77,7 @@ export class RealtimeClient {
         this.socket.on("disconnect", (reason) => {
           console.log("Disconnected from real-time server:", reason);
           this.isConnected = false;
+          this.isAuthenticated = false;
           this.emit("disconnected", reason);
         });
 
@@ -139,17 +147,17 @@ export class RealtimeClient {
    * Subscribe to transaction updates
    */
   public subscribeToTransaction(transactionId: string): void {
-    if (this.socket?.connected) {
+    if (this.socket?.connected && this.isAuthenticated) {
       this.socket.emit("subscribe:transactions", transactionId);
       console.log(`Subscribed to transaction: ${transactionId}`);
     }
   }
 
   /**
-   * Subscribe to all bot alerts
+   * Subscribe to bot alerts
    */
   public subscribeToBotAlerts(botId?: string): void {
-    if (this.socket?.connected) {
+    if (this.socket?.connected && this.isAuthenticated) {
       this.socket.emit("subscribe:bot-alerts", botId);
       console.log(
         `Subscribed to bot alerts${botId ? ` for bot: ${botId}` : ""}`
@@ -191,12 +199,20 @@ export class RealtimeClient {
   }
 
   /**
+   * Check if authenticated
+   */
+  public isAuthenticatedWithServer(): boolean {
+    return this.isAuthenticated;
+  }
+
+  /**
    * Disconnect from server
    */
   public disconnect(): void {
     if (this.socket) {
       this.socket.disconnect();
       this.isConnected = false;
+      this.isAuthenticated = false;
     }
   }
 
@@ -213,11 +229,11 @@ export class RealtimeClient {
  */
 export function createRealtimeClient(
   serverUrl: string,
-  userId?: string
+  accessToken?: string
 ): RealtimeClient {
   return new RealtimeClient({
     url: serverUrl,
-    auth: userId ? { userId } : undefined,
+    accessToken,
   });
 }
 
